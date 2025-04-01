@@ -12,7 +12,7 @@ This project is forked from the excellent [Jawk project](https://jawk.sourceforg
 
 It's very simple:
 
-* Download [jawk-${project.version}-standalone.jar](https://github.com/sentrysoftware/Jawk/releases/download/v${project.version}/jawk-${project.version}-standalone.jar) from the [latest release](releases)
+* Download [jawk-${project.version}-standalone.jar](https://github.com/metricshub/Jawk/releases/download/v${project.version}/jawk-${project.version}-standalone.jar) from the [latest release](releases)
 * Make sure to have Java installed on your system ([download](https://adoptium.net/))
 * Execute `jawk-${project.version}-standalone.jar` just like the "traditional" AWK
 
@@ -68,7 +68,7 @@ There's a growing list of things that make our version diverge from the original
 * Improved performance in parsing inputs and printed output
 * Support for long integers
 * Support for octal and hexadecimal notation in strings (allowing `ESC` characters to do fancy terminal effects)
-* Artifact *groupId* and package is `org.sentrysoftware`
+* Artifact *groupId* and package is `org.metricshub`
 * Added gawk's suite of unit tests
 * Added bwk's suite of unit tests
 * License is LGPL for the Maven artifact

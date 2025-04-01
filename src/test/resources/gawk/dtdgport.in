@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>org.sentrysoftware</groupId>
+	<groupId>org.metricshub</groupId>
 	<artifactId>jawk</artifactId>
 	<version>4.0.00-SNAPSHOT</version>
 
@@ -9,12 +9,12 @@
 
 	<name>Jawk</name>
 	<description>Java AWK interpreter, allowing Java to call and execute AWK scripts in the JVM.</description>
-	<url>https://sentrysoftware.github.io/Jawk</url>
+	<url>https://metricshub.org/Jawk</url>
 	<inceptionYear>2006</inceptionYear>
 
 	<organization>
-		<name>Sentry Software</name>
-		<url>https://sentrysoftware.com</url>
+		<name>MetricsHub</name>
+		<url>https://metricshub.com</url>
 	</organization>
 
 	<distributionManagement>
@@ -43,12 +43,12 @@
 
 	<issueManagement>
 		<system>GitHub</system>
-		<url>https://github.com/sentrysoftware/Jawk/issues/</url>
+		<url>https://github.com/metricshub/Jawk/issues/</url>
 	</issueManagement>
 
 	<scm>
-		<connection>scm:git:https://github.com/sentrysoftware/Jawk.git</connection>
-		<url>https://github.com/sentrysoftware/Jawk</url>
+		<connection>scm:git:https://github.com/metricshub/Jawk.git</connection>
+		<url>https://github.com/metricshub/Jawk</url>
 		<tag>HEAD</tag>
 	</scm>
 
@@ -68,7 +68,7 @@
 		</developer>
 		<developer>
 			<name>Bertrand Martin (@bertysentry)</name>
-			<email>bertrand@sentrysoftware.com</email>
+			<email>bertrand@metricshub.com</email>
 			<roles>
 				<role>Maintainer</role>
 			</roles>
@@ -106,7 +106,7 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.sentrysoftware</groupId>
+			<groupId>org.metricshub</groupId>
 			<artifactId>printf4j</artifactId>
 			<version>0.9.05</version>
 		</dependency>
@@ -163,7 +163,7 @@
 				<version>2.3.0</version>
 				<configuration>
 					<licenseName>lgpl_v3</licenseName>
-					<copyrightOwners>Sentry Software</copyrightOwners>
+					<copyrightOwners>MetricsHub</copyrightOwners>
 					<copyrightStringFormat>Copyright %1$s %2$s</copyrightStringFormat>
 					<includes>
 						<include>main/java/**/*.java</include>
@@ -240,7 +240,7 @@
 					<archive>
 						<manifest>
 							<packageName>${project.groupId}</packageName>
-							<mainClass>org.sentrysoftware.jawk.Main</mainClass>
+							<mainClass>org.metricshub.jawk.Main</mainClass>
 						</manifest>
 					</archive>
 				</configuration>

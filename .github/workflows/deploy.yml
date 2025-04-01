@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    uses: sentrysoftware/workflows/.github/workflows/maven-central-deploy.yml@main
+    uses: metricshub/workflows/.github/workflows/maven-central-deploy.yml@v2
     with:
       jdkVersion: "17"
     secrets: inherit

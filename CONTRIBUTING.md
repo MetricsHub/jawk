@@ -18,7 +18,7 @@ mvn verify
 * `jawk-<VERSION>.jar`, to be used in downstream projects requiring Jawk
 * `jawk-<VERSION>-standalone.jar`, an executable JAR that behaves like `awk` or `gawk`
 
-The [documentation](sentrysoftware.github.io/Jawk) is generated with Maven too:
+The [documentation](metricshub.org/Jawk) is generated with Maven too:
 
 ```bash
 mvn site
@@ -43,7 +43,7 @@ In this repository, we prefer **merging** over **rebasing**, and **tabs** over *
 
 ## Release
 
-The release to [Maven Central](https://central.sonatype.com/) must be performed using the *Release to Maven Central* GitHub Action, which relies on the shared [Maven Central Release](https://github.com/sentrysoftware/workflows/blob/main/README.md#maven-central-release).
+The release to [Maven Central](https://central.sonatype.com/) must be performed using the *Release to Maven Central* GitHub Action, which relies on the shared [Maven Central Release](https://github.com/metricshub/workflows/blob/main/README.md#maven-central-release).
 
 ## Licenses
 

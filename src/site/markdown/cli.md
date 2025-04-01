@@ -4,7 +4,7 @@
 
 ## Getting Started
 
-* Download [jawk-${project.version}-standalone.jar](https://github.com/sentrysoftware/Jawk/releases/download/v${project.version}/jawk-${project.version}-standalone.jar) from the [latest release](releases)
+* Download [jawk-${project.version}-standalone.jar](https://github.com/metricshub/Jawk/releases/download/v${project.version}/jawk-${project.version}-standalone.jar) from the [latest release](releases)
 * Make sure to have Java installed on your system ([download](https://adoptium.net/))
 * Execute `jawk-${project.version}-standalone.jar` just like the "traditional" AWK:
 
@@ -116,6 +116,6 @@ If the parameter contains an `=`, **Jawk** treats it like a variable assignment.
 
 > **Note:** Parameters passed into the command-line which result in non-execution of the script (i.e., -S, -s, -h, -? and -z) cause **Jawk** to ignore filename and name=value parameters._
 
-**Jawk** employs the [org.sentrysoftware.jawk.util.AwkParameters](apidocs/org/sentrysoftware/jawk/util/AwkParameters.html) for command-line parameter management.
+**Jawk** employs the [org.metricshub.jawk.util.AwkParameters](apidocs/org/metricshub/jawk/util/AwkParameters.html) for command-line parameter management.
 
 If an invalid command-line parameter is provided, **Jawk** will throw an *IllegalArgumentException* and terminate execution.
