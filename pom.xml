@@ -93,7 +93,7 @@
 		<dependency>
 			<groupId>org.metricshub</groupId>
 			<artifactId>printf4j</artifactId>
-			<version>0.9.08-SNAPSHOT</version>
+			<version>0.9.08</version>
 		</dependency>
 
 		<dependency>
