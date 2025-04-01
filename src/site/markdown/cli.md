@@ -25,7 +25,7 @@ world, hello!
 Execute on Windows (beware of double-double quotes!):
 
 ```shell-session
-C:\> echo "hello world" | java -jar jawk-${project.version}-standalone.jar "{print $2 "", "" $1 ""!""}"
+C:\> echo hello world | java -jar jawk-${project.version}-standalone.jar "{print $2 "", "" $1 ""!""}"
 
 world, hello!
 ```
