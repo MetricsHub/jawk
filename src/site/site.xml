@@ -4,7 +4,7 @@
 	<skin>
 		<groupId>org.sentrysoftware.maven</groupId>
 		<artifactId>sentry-maven-skin</artifactId>
-		<version>6.2.00</version>
+		<version>6.4.01</version>
 	</skin>
 
 	<custom>
@@ -13,8 +13,8 @@
 	</custom>
 
 	<bannerLeft>
-		<src>images/sentry-logo-white.png</src>
-		<href>https://sentrysoftware.org</href>
+		<src>images/metricshub-logo.png</src>
+		<href>https://metricshub.org</href>
 	</bannerLeft>
 
 	<body>
@@ -22,6 +22,7 @@
 		<links>
 			<item name="Jawk on GitHub" href="${project.scm.url}" />
 			<item name="The GNU Awk User's Guide" href="https://www.gnu.org/software/gawk/manual/gawk.html" />
+			<item name="MetricsHub&reg;" href="https://metricshub.com" />
 		</links>
 
 		<menu name="User Documentation">

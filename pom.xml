@@ -2,23 +2,22 @@
 	<modelVersion>4.0.0</modelVersion>
 
 	<parent>
-		<groupId>org.sentrysoftware</groupId>
+		<groupId>org.metricshub</groupId>
 		<artifactId>oss-parent</artifactId>
 		<version>2</version>
 	</parent>
 
-	<groupId>org.sentrysoftware</groupId>
 	<artifactId>jawk</artifactId>
 	<version>3.3.05-SNAPSHOT</version>
 
 	<name>Jawk</name>
 	<description>Java AWK interpreter, allowing Java to call and execute AWK scripts in the JVM.</description>
-	<url>https://sentrysoftware.github.io/Jawk</url>
+	<url>https://metricshub.org/Jawk</url>
 	<inceptionYear>2006</inceptionYear>
 
 	<organization>
-		<name>Sentry Software</name>
-		<url>https://sentrysoftware.com</url>
+		<name>MetricsHub</name>
+		<url>https://metricshub.com</url>
 	</organization>
 
 	<licenses>
@@ -36,12 +35,12 @@
 
 	<issueManagement>
 		<system>GitHub</system>
-		<url>https://github.com/sentrysoftware/Jawk/issues/</url>
+		<url>https://github.com/metricshub/Jawk/issues/</url>
 	</issueManagement>
 
 	<scm>
-		<connection>scm:git:https://github.com/sentrysoftware/Jawk.git</connection>
-		<url>https://github.com/sentrysoftware/Jawk</url>
+		<connection>scm:git:https://github.com/metricshub/Jawk.git</connection>
+		<url>https://github.com/metricshub/Jawk</url>
 		<tag>HEAD</tag>
 	</scm>
 
@@ -61,7 +60,7 @@
 		</developer>
 		<developer>
 			<name>Bertrand Martin (@bertysentry)</name>
-			<email>bertrand@sentrysoftware.com</email>
+			<email>bertrand@metricshub.com</email>
 			<roles>
 				<role>Maintainer</role>
 			</roles>
@@ -92,9 +91,9 @@
 		</dependency>
 
 		<dependency>
-			<groupId>org.sentrysoftware</groupId>
+			<groupId>org.metricshub</groupId>
 			<artifactId>printf4j</artifactId>
-			<version>0.9.07</version>
+			<version>0.9.08</version>
 		</dependency>
 
 		<dependency>
@@ -152,7 +151,7 @@
 					<archive>
 						<manifest>
 							<packageName>${project.groupId}</packageName>
-							<mainClass>org.sentrysoftware.jawk.Main</mainClass>
+							<mainClass>org.metricshub.jawk.Main</mainClass>
 						</manifest>
 					</archive>
 				</configuration>
@@ -223,6 +222,20 @@
 						</reports>
 					</reportSet>
 				</reportSets>
+			</plugin>
+
+			<!-- checkstyle -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-checkstyle-plugin</artifactId>
+				<version>3.6.0</version>
+				<configuration>
+					<configLocation>checkstyle.xml</configLocation>
+					<!-- TEMPORARY: These files are excluded via suppressions and should be fixed to comply with checkstyle -->
+					<suppressionsLocation>checkstyle-suppressions.xml</suppressionsLocation>
+					<encoding>${project.build.sourceEncoding}</encoding>
+					<linkXref>true</linkXref>
+				</configuration>
 			</plugin>
 
 		</plugins>

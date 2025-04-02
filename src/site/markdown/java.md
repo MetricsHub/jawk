@@ -10,7 +10,7 @@ Add Jawk in the list of dependencies in your [Maven **pom.xml**](https://maven.a
 <dependencies>
   <!-- [...] -->
   <dependency>
-    <groupId>org.sentrysoftware</groupId>
+    <groupId>org.metricshub</groupId>
     <artifactId>jawk</artifactId>
     <version>${project.version}</version>
   </dependency>
@@ -97,8 +97,8 @@ private String runAwk(String script, String input) throws IOException, ExitExcep
 
 ## Javadoc
 
-* [AwkSettings](apidocs/org/sentrysoftware/jawk/util/AwkSettings.html)
-* [Awk](apidocs/org/sentrysoftware/jawk/Awk.html)
+* [AwkSettings](apidocs/org/metricshub/jawk/util/AwkSettings.html)
+* [Awk](apidocs/org/metricshub/jawk/Awk.html)
 
 ## Java Scripting API (JSR 223)
 

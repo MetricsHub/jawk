@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+	"-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+	"https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]Awk\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]Main\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]backend[\\/]AVM\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]ext[\\/]AbstractExtension\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]ext[\\/]CoreExtension\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]ext[\\/]JawkExtension\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]ext[\\/]StdinExtension\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]frontend[\\/]AwkParser\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]intermediate[\\/]AwkTuples\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]jrt[\\/]ConditionPair\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]jrt[\\/]JRT\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]jrt[\\/]VariableManager\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]util[\\/]AwkLogger\.java" checks=".*"/>
+	<suppress files=".*org[\\/]metricshub[\\/]jawk[\\/]util[\\/]AwkParameters\.java" checks=".*"/>
+</suppressions>

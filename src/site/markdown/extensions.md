@@ -31,11 +31,11 @@ The extension's FileCreationBlock will poll to check for the existence of a file
 The code for `FileExtension.java` is as follows:
 
 ```java
-package org.sentrysoftware.jawk.ext;
+package org.metricshub.jawk.ext;
 
-import org.sentrysoftware.jawk.ext.JawkExtension;
-import org.sentrysoftware.jawk.jrt.*;
-import org.sentrysoftware.jawk.NotImplementedError;
+import org.metricshub.jawk.ext.JawkExtension;
+import org.metricshub.jawk.jrt.*;
+import org.metricshub.jawk.NotImplementedError;
 
 import java.io.*;
 import java.util.*;
