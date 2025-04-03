@@ -8,7 +8,7 @@
 	</parent>
 
 	<artifactId>jawk</artifactId>
-	<version>3.0.06-SNAPSHOT</version>
+	<version>3.3.05-SNAPSHOT</version>
 
 	<name>Jawk</name>
 	<description>Java AWK interpreter, allowing Java to call and execute AWK scripts in the JVM.</description>
