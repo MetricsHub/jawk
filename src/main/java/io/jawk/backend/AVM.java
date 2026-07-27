@@ -3285,7 +3285,7 @@ public class AVM implements VariableManager, Closeable {
 		@Override
 		public Object get(Object key) {
 			String name = key == null ? "" : key.toString();
-			if (active && !isMetaTableName(name) && isManagedSpecialVariable(name)) {
+			if (active && !isMetaTableName(name) && isLiveSpecialVariable(name)) {
 				return getVariable(name);
 			}
 			Integer offset = globalVariableOffsets == null ? null : globalVariableOffsets.get(name);
@@ -3301,7 +3301,7 @@ public class AVM implements VariableManager, Closeable {
 			String name = key == null ? "" : key.toString();
 			return active
 					&& !isMetaTableName(name)
-					&& (isManagedSpecialVariable(name)
+					&& (isLiveSpecialVariable(name)
 							|| (globalVariableOffsets != null && globalVariableOffsets.containsKey(name)))
 					|| entries.containsKey(key);
 		}
@@ -3320,8 +3320,7 @@ public class AVM implements VariableManager, Closeable {
 			if (isMetaTableName(name)) {
 				return previous;
 			}
-			if (isManagedSpecialVariable(name)) {
-				jrt.applySpecialVariable(name, value);
+			if (applyLiveSpecialVariable(name, value)) {
 				return previous;
 			}
 			Integer offset = globalVariableOffsets == null ? null : globalVariableOffsets.get(name);
@@ -3329,6 +3328,31 @@ public class AVM implements VariableManager, Closeable {
 				runtimeStack.setVariable(offset.intValue(), value, true);
 			}
 			return previous;
+		}
+
+		private boolean applyLiveSpecialVariable(String name, Object value) {
+			if ("ARGC".equals(name)) {
+				if (argcOffset == NULL_OFFSET) {
+					throw new AwkRuntimeException("ARGC is read-only (not materialized).");
+				}
+				runtimeStack.setVariable(argcOffset, value, true);
+				return true;
+			}
+			if ("RSTART".equals(name)) {
+				jrt.setRSTART(value);
+				return true;
+			}
+			if ("RLENGTH".equals(name)) {
+				jrt.setRLENGTH(value);
+				return true;
+			}
+			return isManagedSpecialVariable(name) && jrt.applySpecialVariable(name, value);
+		}
+
+		private boolean isLiveSpecialVariable(String name) {
+			return isManagedSpecialVariable(name)
+					|| "RSTART".equals(name)
+					|| "RLENGTH".equals(name);
 		}
 
 		/** {@inheritDoc} */

@@ -420,6 +420,18 @@ public class GawkExtensionTest {
 								+ "print NR, SYMTAB[\"NR\"]; print 1, 2; print SYMTAB[\"OFS\"] }")
 				.expectLines("9:9", "1:2", ":")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB writes ARGC without recursive assignment")
+				.script("BEGIN { SYMTAB[\"ARGC\"] = 4; print ARGC, SYMTAB[\"ARGC\"] }")
+				.expectLines("4 4")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB writes match result variables")
+				.script(
+						"BEGIN { SYMTAB[\"RSTART\"] = 7; SYMTAB[\"RLENGTH\"] = 3; "
+								+ "print RSTART, SYMTAB[\"RSTART\"], RLENGTH, SYMTAB[\"RLENGTH\"] }")
+				.expectLines("7 7 3 3")
+				.runAndAssert();
 	}
 
 	@Test
