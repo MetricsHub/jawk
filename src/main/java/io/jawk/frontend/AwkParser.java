@@ -50,6 +50,7 @@ import io.jawk.intermediate.AwkTuples;
 import io.jawk.intermediate.BuiltinFunction;
 import io.jawk.jrt.JRT;
 import io.jawk.intermediate.Tuple;
+import io.jawk.util.ScriptFileSource;
 import io.jawk.util.ScriptSource;
 import io.jawk.frontend.ast.LexerException;
 import io.jawk.frontend.ast.ParserException;
@@ -430,7 +431,7 @@ public class AwkParser {
 		reader = new LineNumberReader(currentScriptSource.getReader());
 		currentNamespace = "awk";
 		includedSourceStack.clear();
-		includedSourcePaths.clear();
+		resetIncludedSourcePaths();
 		pendingIndirectIdentifier = null;
 		pendingColon = false;
 		read();
@@ -459,7 +460,7 @@ public class AwkParser {
 		reader = new LineNumberReader(currentScriptSource.getReader());
 		currentNamespace = "awk";
 		includedSourceStack.clear();
-		includedSourcePaths.clear();
+		resetIncludedSourcePaths();
 		pendingIndirectIdentifier = null;
 		pendingColon = false;
 
@@ -469,6 +470,16 @@ public class AwkParser {
 
 		// An expression is a TERNARY_EXPRESSION
 		return EXPRESSION_TO_EVALUATE();
+	}
+
+	private void resetIncludedSourcePaths() {
+		includedSourcePaths.clear();
+		for (ScriptSource source : scriptSources) {
+			if (source instanceof ScriptFileSource) {
+				String filePath = ((ScriptFileSource) source).getFilePath();
+				includedSourcePaths.add(Paths.get(filePath).toAbsolutePath().normalize());
+			}
+		}
 	}
 
 	private LexerException lexerException(String msg) {
@@ -4587,10 +4598,10 @@ public class AwkParser {
 		@Override
 		public int populateTuples(AwkTuples tuples) {
 			pushSourceLineNumber(tuples);
+			getAst1().populateTuples(tuples);
 			int actualParamCount = populateIndirectActualParameters(
 					tuples,
 					(FunctionCallParamListAst) getAst2());
-			getAst1().populateTuples(tuples);
 			tuples
 					.indirectCall(
 							symbolTable.indirectFunctionTargets(),

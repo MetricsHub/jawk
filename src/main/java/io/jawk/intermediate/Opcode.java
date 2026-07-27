@@ -1614,9 +1614,9 @@ public enum Opcode {
 	INDIRECT_CALL,
 
 	/**
-	 * Push a deferred variable reference for an indirect-call argument. The target
-	 * selected at runtime determines whether the variable is read as a scalar or
-	 * materialized as an array.
+	 * Push an indirect-call argument that snapshots its scalar value while retaining
+	 * its variable location. The target selected at runtime determines whether to
+	 * use the scalar snapshot or materialize/read an array at that location.
 	 */
 	PUSH_INDIRECT_ARGUMENT;
 

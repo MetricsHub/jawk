@@ -1694,10 +1694,13 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case PUSH_INDIRECT_ARGUMENT: {
 					VariableTuple variableTuple = (VariableTuple) tuple;
+					Object scalarValue = runtimeStack
+							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
 					push(
 							new IndirectArgumentReference(
 									variableTuple.getVariableOffset(),
-									variableTuple.isGlobal()));
+									variableTuple.isGlobal(),
+									scalarValue == null ? BLANK : scalarValue));
 					position.next();
 					break;
 				}
@@ -2210,8 +2213,8 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case INDIRECT_CALL: {
 					IndirectCallTuple callTuple = (IndirectCallTuple) tuple;
-					String requestedName = jrt.toAwkString(pop());
 					Object[] actualArguments = popArguments(callTuple.getNumActualParams());
+					String requestedName = jrt.toAwkString(pop());
 					String qualifiedName = normalizeIndirectFunctionName(requestedName);
 					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
 					if (target != null) {
@@ -2846,9 +2849,12 @@ public class AVM implements VariableManager, Closeable {
 			return argument;
 		}
 		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
+		if (!arrayArgument) {
+			return reference.scalarValue;
+		}
 		Object value = runtimeStack.getVariable(reference.offset, reference.global);
 		if (value == null) {
-			value = arrayArgument ? newAwkArray() : BLANK;
+			value = newAwkArray();
 			runtimeStack.setVariable(reference.offset, value, reference.global);
 		}
 		return value;
@@ -4094,10 +4100,12 @@ public class AVM implements VariableManager, Closeable {
 	private static final class IndirectArgumentReference {
 		private final long offset;
 		private final boolean global;
+		private final Object scalarValue;
 
-		private IndirectArgumentReference(long offsetParam, boolean globalParam) {
+		private IndirectArgumentReference(long offsetParam, boolean globalParam, Object scalarValueParam) {
 			offset = offsetParam;
 			global = globalParam;
+			scalarValue = scalarValueParam;
 		}
 	}
 

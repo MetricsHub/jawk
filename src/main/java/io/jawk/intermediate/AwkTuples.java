@@ -434,7 +434,8 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
-	 * Emits a deferred variable reference for an indirect-call argument.
+	 * Emits a variable reference whose scalar value is captured immediately while
+	 * retaining the variable location for a runtime-selected array parameter.
 	 *
 	 * @param offset variable offset
 	 * @param isGlobal whether the variable is global

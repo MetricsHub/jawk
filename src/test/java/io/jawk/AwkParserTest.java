@@ -247,6 +247,21 @@ public class AwkParserTest {
 								+ "BEGIN { callback = \"fill\"; print @callback(parts), parts[1] }")
 				.expectLines("42 42")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect selectors are evaluated before arguments")
+				.script(
+						"function f(a, b) { print \"f\", a, b }\n"
+								+ "function g(a, b) { print \"g\", a, b }\n"
+								+ "BEGIN { callback = \"f\"; @callback(1, callback = \"g\") }")
+				.expectLines("f 1 g")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect scalar arguments retain their evaluation-time values")
+				.script(
+						"function f(a, b) { print a, b }\n"
+								+ "BEGIN { x = 1; callback = \"f\"; @callback(x, x = 2) }")
+				.expectLines("1 2")
+				.runAndAssert();
 	}
 
 	@Test
@@ -331,6 +346,19 @@ public class AwkParserTest {
 				.file("empty.awk", "")
 				.argument("-f", "{{main.awk}}")
 				.expectLines("42 7")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("A top-level source cannot include itself twice")
+				.file("main.awk", "@include \"main.awk\"\nBEGIN { print 1 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("An include cycle cannot reparse its top-level source")
+				.file("main.awk", "@include \"lib.awk\"\nBEGIN { print 1 }\n")
+				.file("lib.awk", "@include \"main.awk\"\nBEGIN { print 2 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("2", "1")
 				.runAndAssert();
 	}
 
