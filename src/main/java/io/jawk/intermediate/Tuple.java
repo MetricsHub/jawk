@@ -25,8 +25,10 @@ package io.jawk.intermediate;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -747,6 +749,7 @@ public abstract class Tuple implements Serializable {
 		private transient Supplier<Address> addressSupplier;
 		private Address address;
 		private final long numFormalParams;
+		private final Set<Integer> arrayParameterIndexes;
 
 		/**
 		 * Creates target metadata whose address is resolved during tuple
@@ -754,12 +757,15 @@ public abstract class Tuple implements Serializable {
 		 *
 		 * @param addressSupplierParam function entry-point supplier
 		 * @param numFormalParamsParam formal parameter count
+		 * @param arrayParameterIndexesParam zero-based array parameter indexes
 		 */
 		public IndirectFunctionTarget(
 				Supplier<Address> addressSupplierParam,
-				long numFormalParamsParam) {
+				long numFormalParamsParam,
+				Set<Integer> arrayParameterIndexesParam) {
 			addressSupplier = addressSupplierParam;
 			numFormalParams = numFormalParamsParam;
+			arrayParameterIndexes = Collections.unmodifiableSet(new HashSet<Integer>(arrayParameterIndexesParam));
 		}
 
 		private void resolve() {
@@ -786,6 +792,16 @@ public abstract class Tuple implements Serializable {
 		 */
 		public long getNumFormalParams() {
 			return numFormalParams;
+		}
+
+		/**
+		 * Returns whether the parameter at the supplied index is an array.
+		 *
+		 * @param index zero-based formal parameter index
+		 * @return {@code true} when the formal parameter is an array
+		 */
+		public boolean isArrayParameter(int index) {
+			return arrayParameterIndexes.contains(Integer.valueOf(index));
 		}
 	}
 

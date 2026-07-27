@@ -1611,7 +1611,14 @@ public enum Opcode {
 	 * Call a user-defined, built-in, or extension function selected by name at
 	 * runtime. New opcodes are appended to preserve serialized numeric identifiers.
 	 */
-	INDIRECT_CALL;
+	INDIRECT_CALL,
+
+	/**
+	 * Push a deferred variable reference for an indirect-call argument. The target
+	 * selected at runtime determines whether the variable is read as a scalar or
+	 * materialized as an array.
+	 */
+	PUSH_INDIRECT_ARGUMENT;
 
 	private static final Opcode[] VALUES = values();
 

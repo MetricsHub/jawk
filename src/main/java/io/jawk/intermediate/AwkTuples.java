@@ -434,6 +434,16 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
+	 * Emits a deferred variable reference for an indirect-call argument.
+	 *
+	 * @param offset variable offset
+	 * @param isGlobal whether the variable is global
+	 */
+	public void pushIndirectArgument(int offset, boolean isGlobal) {
+		queue.add(new Tuple.VariableTuple(Opcode.PUSH_INDIRECT_ARGUMENT, offset, isGlobal));
+	}
+
+	/**
 	 * <p>
 	 * plusEq.
 	 * </p>
@@ -2950,6 +2960,7 @@ public class AwkTuples implements Serializable {
 		case ASSIGN_ARRAY:
 		case DEREFERENCE:
 		case PEEK_DEREFERENCE:
+		case PUSH_INDIRECT_ARGUMENT:
 		case PLUS_EQ:
 		case MINUS_EQ:
 		case MULT_EQ:

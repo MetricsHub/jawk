@@ -400,6 +400,26 @@ public class CliOptionTest {
 	}
 
 	@Test
+	public void persistOptionExcludesRuntimeMetaTables() throws Exception {
+		File memory = new File(tempFolder.getRoot(), "symtab-memory.bin");
+
+		AwkTestSupport
+				.cliTest("CLI persist excludes SYMTAB from its serialized snapshot")
+				.argument("--persist", memory.getAbsolutePath())
+				.script("BEGIN { value = 7; print SYMTAB[\"value\"] }")
+				.expectLines("7")
+				.expectExit(0)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("CLI persist restores user globals and rebuilds SYMTAB")
+				.argument("--persist", memory.getAbsolutePath())
+				.script("BEGIN { print value, SYMTAB[\"value\"] }")
+				.expectLines("7 7")
+				.expectExit(0)
+				.runAndAssert();
+	}
+
+	@Test
 	public void persistentMemoryEnvironmentVariablePersistsUserGlobalsAcrossCliRuns() throws Exception {
 		File memory = new File(tempFolder.getRoot(), "env-memory.bin");
 		Map<String, String> environment = Collections

@@ -417,6 +417,18 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void symtabIterationHonorsSortedArrayKeys() throws Exception {
+		AwkTestSupport
+				.cliTest("SYMTAB uses sorted iteration when -t is enabled")
+				.argument("-t")
+				.script(
+						"BEGIN { a = 1; aa = 2; "
+								+ "for (key in SYMTAB) if (key == \"a\" || key == \"aa\") print key }")
+				.expectLines("a", "aa")
+				.runAndAssert();
+	}
+
+	@Test
 	public void ignoreCaseAppliesToComparisonsAndIndex() throws Exception {
 		// gawk's IGNORECASE covers string relational operators and index(),
 		// not just regexp operations; numeric (strnum) comparisons stay numeric

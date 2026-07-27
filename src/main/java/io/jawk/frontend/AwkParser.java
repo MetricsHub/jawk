@@ -2592,6 +2592,25 @@ public class AwkParser {
 		valueAst.populateTuples(tuples);
 	}
 
+	private int populateIndirectActualParameters(
+			AwkTuples tuples,
+			FunctionCallParamListAst params) {
+		if (params == null) {
+			return 0;
+		}
+		AST argument = params.getAst1();
+		if (argument instanceof IDAst
+				&& !isJrtManagedSpecialName(((IDAst) argument).id)) {
+			IDAst idAst = (IDAst) argument;
+			tuples.pushIndirectArgument(idAst.offset, idAst.isGlobal);
+		} else {
+			argument.populateTuples(tuples);
+		}
+		return 1 + populateIndirectActualParameters(
+				tuples,
+				(FunctionCallParamListAst) params.getAst2());
+	}
+
 	private Set<Integer> collectArrayParameterIndexes(FunctionDefAst functionDefAst) {
 		Set<Integer> arrayIndexes = new HashSet<Integer>();
 		FunctionDefParamListAst fPtr = (FunctionDefParamListAst) functionDefAst.getAst1();
@@ -4568,7 +4587,9 @@ public class AwkParser {
 		@Override
 		public int populateTuples(AwkTuples tuples) {
 			pushSourceLineNumber(tuples);
-			int actualParamCount = getAst2() == null ? 0 : getAst2().populateTuples(tuples);
+			int actualParamCount = populateIndirectActualParameters(
+					tuples,
+					(FunctionCallParamListAst) getAst2());
 			getAst1().populateTuples(tuples);
 			tuples
 					.indirectCall(
@@ -6401,7 +6422,8 @@ public class AwkParser {
 									entry.getKey(),
 									new Tuple.IndirectFunctionTarget(
 											proxy,
-											proxy.getFunctionParamCount()));
+											proxy.getFunctionParamCount(),
+											collectArrayParameterIndexes(proxy.functionDefAst)));
 				}
 			}
 			cachedIndirectFunctionTargets = Collections.unmodifiableMap(targets);

@@ -233,6 +233,20 @@ public class AwkParserTest {
 				.script("BEGIN { print srand(0), srand(5), srand(0) }")
 				.expectLines("1 0 5")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect split materializes an untyped array destination")
+				.script(
+						"BEGIN { callback = \"split\"; count = @callback(\"a b\", parts); "
+								+ "print count, parts[1], parts[2] }")
+				.expectLines("2 a b")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect user calls preserve array parameters")
+				.script(
+						"function fill(values) { values[1] = 42; return values[1] }\n"
+								+ "BEGIN { callback = \"fill\"; print @callback(parts), parts[1] }")
+				.expectLines("42 42")
+				.runAndAssert();
 	}
 
 	@Test

@@ -81,7 +81,6 @@ import io.jawk.jrt.AwkSink;
 import io.jawk.jrt.BlockManager;
 import io.jawk.jrt.BlockObject;
 import io.jawk.jrt.ConditionPair;
-import io.jawk.jrt.HashAssocArray;
 import io.jawk.jrt.InputSource;
 import io.jawk.jrt.JRT;
 import io.jawk.jrt.VariableManager;
@@ -1691,6 +1690,15 @@ public class AVM implements VariableManager, Closeable {
 					position.next();
 					break;
 				}
+				case PUSH_INDIRECT_ARGUMENT: {
+					VariableTuple variableTuple = (VariableTuple) tuple;
+					push(
+							new IndirectArgumentReference(
+									variableTuple.getVariableOffset(),
+									variableTuple.isGlobal()));
+					position.next();
+					break;
+				}
 				case DEREF_ARRAY: {
 					// stack[0] = array index
 					Object idx = pop(); // idx
@@ -2203,6 +2211,7 @@ public class AVM implements VariableManager, Closeable {
 					String qualifiedName = normalizeIndirectFunctionName(requestedName);
 					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
 					if (target != null) {
+						resolveIndirectArguments(actualArguments, target);
 						long formalCount = target.getNumFormalParams();
 						if (actualArguments.length > formalCount) {
 							jrt
@@ -2228,12 +2237,14 @@ public class AVM implements VariableManager, Closeable {
 							requestedName.substring("awk::".length()) : requestedName;
 					BuiltinFunction builtin = BuiltinFunction.of(awkName);
 					if (builtin != null) {
+						resolveIndirectArguments(actualArguments, builtin);
 						push(invokeIndirectBuiltin(builtin, actualArguments, position.lineNumber()));
 						position.next();
 						break;
 					}
 					ExtensionFunction extensionFunction = callTuple.getExtensionFunctions().get(awkName);
 					if (extensionFunction != null) {
+						resolveIndirectArguments(actualArguments, extensionFunction);
 						push(
 								invokeExtension(
 										extensionFunction,
@@ -2793,6 +2804,52 @@ public class AVM implements VariableManager, Closeable {
 		return functionName.startsWith("awk::") ? functionName.substring("awk::".length()) : functionName;
 	}
 
+	private void resolveIndirectArguments(
+			Object[] actualArgumentsParam,
+			IndirectFunctionTarget target) {
+		for (int index = 0; index < actualArgumentsParam.length; index++) {
+			actualArgumentsParam[index] = resolveIndirectArgument(
+					actualArgumentsParam[index],
+					target.isArrayParameter(index));
+		}
+	}
+
+	private void resolveIndirectArguments(
+			Object[] actualArgumentsParam,
+			BuiltinFunction builtin) {
+		for (int index = 0; index < actualArgumentsParam.length; index++) {
+			boolean arrayArgument = builtin == BuiltinFunction.SPLIT && index == 1;
+			actualArgumentsParam[index] = resolveIndirectArgument(actualArgumentsParam[index], arrayArgument);
+		}
+	}
+
+	private void resolveIndirectArguments(
+			Object[] actualArgumentsParam,
+			ExtensionFunction function) {
+		boolean[] arrayArguments = new boolean[actualArgumentsParam.length];
+		for (int index : function.collectAssocArrayIndexes(actualArgumentsParam.length)) {
+			arrayArguments[index] = true;
+		}
+		for (int index = 0; index < actualArgumentsParam.length; index++) {
+			actualArgumentsParam[index] = resolveIndirectArgument(
+					actualArgumentsParam[index],
+					arrayArguments[index]);
+		}
+	}
+
+	private Object resolveIndirectArgument(Object argument, boolean arrayArgument) {
+		if (!(argument instanceof IndirectArgumentReference)) {
+			return argument;
+		}
+		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
+		Object value = runtimeStack.getVariable(reference.offset, reference.global);
+		if (value == null) {
+			value = arrayArgument ? newAwkArray() : BLANK;
+			runtimeStack.setVariable(reference.offset, value, reference.global);
+		}
+		return value;
+	}
+
 	private Object invokeIndirectBuiltin(
 			BuiltinFunction builtin,
 			Object[] args,
@@ -3166,8 +3223,8 @@ public class AVM implements VariableManager, Closeable {
 		runtimeStack.setVariable(offset, symtab, true);
 	}
 
-	private final class SymtabArray extends HashAssocArray {
-		private static final long serialVersionUID = 1L;
+	private final class SymtabArray extends java.util.AbstractMap<Object, Object> implements AssocArray {
+		private final Map<Object, Object> entries = newAwkArray();
 		private boolean active;
 
 		private void activate() {
@@ -3185,7 +3242,7 @@ public class AVM implements VariableManager, Closeable {
 			if (active && !isMetaTableName(name) && offset != null) {
 				return runtimeStack.getVariable(offset.intValue(), true);
 			}
-			return super.get(key);
+			return entries.get(key);
 		}
 
 		/** {@inheritDoc} */
@@ -3196,13 +3253,13 @@ public class AVM implements VariableManager, Closeable {
 					&& !isMetaTableName(name)
 					&& (isManagedSpecialVariable(name)
 							|| (globalVariableOffsets != null && globalVariableOffsets.containsKey(name)))
-					|| super.containsKey(key);
+					|| entries.containsKey(key);
 		}
 
 		/** {@inheritDoc} */
 		@Override
 		public Object put(Object key, Object value) {
-			Object previous = super.put(key, value);
+			Object previous = entries.put(key, value);
 			if (!active || key == null) {
 				return previous;
 			}
@@ -3219,6 +3276,12 @@ public class AVM implements VariableManager, Closeable {
 				runtimeStack.setVariable(offset.intValue(), value, true);
 			}
 			return previous;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Set<Map.Entry<Object, Object>> entrySet() {
+			return entries.entrySet();
 		}
 
 		private boolean isMetaTableName(String name) {
@@ -3956,12 +4019,31 @@ public class AVM implements VariableManager, Closeable {
 
 	private static final UninitializedObject BLANK = new UninitializedObject();
 
+	private static final class IndirectArgumentReference {
+		private final long offset;
+		private final boolean global;
+
+		private IndirectArgumentReference(long offsetParam, boolean globalParam) {
+			offset = offsetParam;
+			global = globalParam;
+		}
+	}
+
 	/**
 	 * Global names that must not participate in persistent memory even though they
 	 * are technically user-visible variables.
 	 */
 	private static final Set<String> NON_PERSISTENT_GLOBALS = new HashSet<>(
-			Arrays.asList("ARGV", "ARGC", "ENVIRON", "RSTART", "RLENGTH", "IGNORECASE"));
+			Arrays
+					.asList(
+							"ARGV",
+							"ARGC",
+							"ENVIRON",
+							"RSTART",
+							"RLENGTH",
+							"IGNORECASE",
+							"SYMTAB",
+							"FUNCTAB"));
 
 	private static final class SingleRecordInputSource implements InputSource {
 
