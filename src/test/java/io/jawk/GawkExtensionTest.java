@@ -383,6 +383,40 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void symtabReadsAndWritesRuntimeValuesLive() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB reads globals live and writes through to them")
+				.script(
+						"BEGIN { x = 1; before = SYMTAB[\"x\"]; x = 2; "
+								+ "after = SYMTAB[\"x\"]; SYMTAB[\"x\"] = 7; print before, after, x }")
+				.expectLines("1 2 7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabRoundTripsSpecialVariables() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB reads and writes managed special variables")
+				.script(
+						"BEGIN { SYMTAB[\"NR\"] = 9; SYMTAB[\"OFS\"] = \":\"; "
+								+ "print NR, SYMTAB[\"NR\"]; print 1, 2; print SYMTAB[\"OFS\"] }")
+				.expectLines("9:9", "1:2", ":")
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabIterationUsesItsMaterializedKeysAndLiveValues() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB iteration exposes declared globals with live values")
+				.script(
+						"BEGIN { x = 1; x = 7; "
+								+ "for (key in SYMTAB) if (key == \"x\") { seen++; value = SYMTAB[key] } "
+								+ "print seen, value }")
+				.expectLines("1 7")
+				.runAndAssert();
+	}
+
+	@Test
 	public void ignoreCaseAppliesToComparisonsAndIndex() throws Exception {
 		// gawk's IGNORECASE covers string relational operators and index(),
 		// not just regexp operations; numeric (strnum) comparisons stay numeric
@@ -516,6 +550,18 @@ public class GawkExtensionTest {
 		assertTrue(
 				"extra-argument warning should be printed to the error stream",
 				result.errorOutput().contains("called with more arguments than declared"));
+
+		AwkTestSupport.TestResult indirectResult = AwkTestSupport
+				.cliTest("indirect extra-argument warning includes source and line")
+				.script("function f(a) { return a } BEGIN { name = \"f\"; print @name(1, 2) }")
+				.expect("1\n")
+				.run();
+		indirectResult.assertExpected();
+		assertTrue(
+				"indirect warning should include a source line: " + indirectResult.errorOutput(),
+				indirectResult
+						.errorOutput()
+						.matches("(?s).*gawk: .+:\\d+: warning: function `f'.*"));
 	}
 
 	@Test

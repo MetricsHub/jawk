@@ -376,7 +376,9 @@ public final class Cli {
 		}
 	}
 
-	private static final Pattern INITIAL_VAR_PATTERN = Pattern.compile("([_a-zA-Z][_0-9a-zA-Z]*)=(.*)");
+	private static final Pattern INITIAL_VAR_PATTERN = Pattern
+			.compile(
+					"((?:[_a-zA-Z][_0-9a-zA-Z]*::)?[_a-zA-Z][_0-9a-zA-Z]*)=(.*)");
 
 	/**
 	 * Parses a variable assignment passed via <code>-v</code> and stores it in the
@@ -392,6 +394,9 @@ public final class Cli {
 					"keyValue \"" + keyValue + "\" must be of the form \"name=value\"");
 		}
 		String name = m.group(1);
+		if (name.startsWith("awk::")) {
+			name = name.substring("awk::".length());
+		}
 		String valueString = m.group(2);
 		settings.putVariable(name, valueString);
 	}

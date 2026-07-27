@@ -1605,7 +1605,13 @@ public enum Opcode {
 	 * Stack before: ...<br/>
 	 * Stack after: argind-value ...
 	 */
-	PUSH_ARGIND;
+	PUSH_ARGIND,
+
+	/**
+	 * Call a user-defined, built-in, or extension function selected by name at
+	 * runtime. New opcodes are appended to preserve serialized numeric identifiers.
+	 */
+	INDIRECT_CALL;
 
 	private static final Opcode[] VALUES = values();
 

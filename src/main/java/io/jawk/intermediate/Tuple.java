@@ -23,9 +23,13 @@ package io.jawk.intermediate;
  */
 
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.jawk.ext.ExtensionFunction;
 
 /**
@@ -66,20 +70,31 @@ public abstract class Tuple implements Serializable {
 	}
 
 	/**
+	 * Returns every jump/call address carried by this tuple.
+	 *
+	 * @return tuple addresses, or an empty list
+	 */
+	public List<Address> getAddresses() {
+		Address address = getAddress();
+		if (address == null) {
+			return Collections.emptyList();
+		}
+		return Collections.singletonList(address);
+	}
+
+	/**
 	 * Resolves deferred operands and validates resolved addresses.
 	 *
 	 * @param queue tuple queue used to validate address targets
 	 */
 	public void touch(List<Tuple> queue) {
-		Address address = getAddress();
-		if (address == null) {
-			return;
-		}
-		if (address.index() == -1) {
-			throw new Error("address " + address + " is unresolved");
-		}
-		if (address.index() >= queue.size()) {
-			throw new Error("address " + address + " doesn't resolve to an actual list element");
+		for (Address address : getAddresses()) {
+			if (address.index() == -1) {
+				throw new Error("address " + address + " is unresolved");
+			}
+			if (address.index() >= queue.size()) {
+				throw new Error("address " + address + " doesn't resolve to an actual list element");
+			}
 		}
 	}
 
@@ -721,6 +736,151 @@ public abstract class Tuple implements Serializable {
 					+ numFormalParams
 					+ ", "
 					+ numActualParams;
+		}
+	}
+
+	/**
+	 * Runtime target metadata for a user-defined indirect function call.
+	 */
+	public static final class IndirectFunctionTarget implements Serializable {
+		private static final long serialVersionUID = 1L;
+		private transient Supplier<Address> addressSupplier;
+		private Address address;
+		private final long numFormalParams;
+
+		/**
+		 * Creates target metadata whose address is resolved during tuple
+		 * post-processing.
+		 *
+		 * @param addressSupplierParam function entry-point supplier
+		 * @param numFormalParamsParam formal parameter count
+		 */
+		public IndirectFunctionTarget(
+				Supplier<Address> addressSupplierParam,
+				long numFormalParamsParam) {
+			addressSupplier = addressSupplierParam;
+			numFormalParams = numFormalParamsParam;
+		}
+
+		private void resolve() {
+			if (address == null && addressSupplier != null) {
+				address = addressSupplier.get();
+				addressSupplier = null;
+			}
+		}
+
+		/**
+		 * Returns the resolved function entry point.
+		 *
+		 * @return function address
+		 */
+		public Address getAddress() {
+			resolve();
+			return address;
+		}
+
+		/**
+		 * Returns the function's formal parameter count.
+		 *
+		 * @return formal parameter count
+		 */
+		public long getNumFormalParams() {
+			return numFormalParams;
+		}
+	}
+
+	/**
+	 * Tuple for a function call whose target name is evaluated at runtime.
+	 */
+	public static final class IndirectCallTuple extends Tuple {
+		private static final long serialVersionUID = 1L;
+		private final Map<String, IndirectFunctionTarget> userFunctions;
+		private final Map<String, ExtensionFunction> extensionFunctions;
+		private final long numActualParams;
+		private final String sourceName;
+		private final int sourceLine;
+
+		IndirectCallTuple(
+				Map<String, IndirectFunctionTarget> userFunctionsParam,
+				Map<String, ExtensionFunction> extensionFunctionsParam,
+				long numActualParamsParam,
+				String sourceNameParam,
+				int sourceLineParam) {
+			super(Opcode.INDIRECT_CALL);
+			userFunctions = userFunctionsParam;
+			extensionFunctions = extensionFunctionsParam;
+			numActualParams = numActualParamsParam;
+			sourceName = sourceNameParam;
+			sourceLine = sourceLineParam;
+		}
+
+		@Override
+		public void touch(List<Tuple> queue) {
+			for (IndirectFunctionTarget target : userFunctions.values()) {
+				target.resolve();
+			}
+			super.touch(queue);
+		}
+
+		@Override
+		public List<Address> getAddresses() {
+			List<Address> addresses = new ArrayList<Address>(userFunctions.size());
+			for (IndirectFunctionTarget target : userFunctions.values()) {
+				addresses.add(target.getAddress());
+			}
+			return addresses;
+		}
+
+		/**
+		 * Returns the user-defined functions available to the call site.
+		 *
+		 * @return function target map
+		 */
+		@SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "The map is an immutable metadata snapshot shared by every indirect call tuple")
+		public Map<String, IndirectFunctionTarget> getUserFunctions() {
+			return userFunctions;
+		}
+
+		/**
+		 * Returns the extension functions available to the call site.
+		 *
+		 * @return extension function map
+		 */
+		@SuppressFBWarnings(value = "EI_EXPOSE_REP", justification = "The map is an immutable metadata snapshot shared by every indirect call tuple")
+		public Map<String, ExtensionFunction> getExtensionFunctions() {
+			return extensionFunctions;
+		}
+
+		/**
+		 * Returns the number of actual parameters evaluated by the call site.
+		 *
+		 * @return actual parameter count
+		 */
+		public long getNumActualParams() {
+			return numActualParams;
+		}
+
+		/**
+		 * Returns the source name for runtime diagnostics.
+		 *
+		 * @return source name
+		 */
+		public String getSourceName() {
+			return sourceName;
+		}
+
+		/**
+		 * Returns the source line for runtime diagnostics.
+		 *
+		 * @return source line
+		 */
+		public int getSourceLine() {
+			return sourceLine;
+		}
+
+		@Override
+		public String toString() {
+			return getOpcode().name() + ", " + numActualParams;
 		}
 	}
 

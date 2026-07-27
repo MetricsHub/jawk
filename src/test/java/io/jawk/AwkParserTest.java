@@ -205,6 +205,132 @@ public class AwkParserTest {
 	}
 
 	@Test
+	public void testIndirectFunctionCalls() throws Exception {
+		AwkTestSupport
+				.awkTest("Indirect calls dispatch user functions and builtins")
+				.script(
+						"function twice(value) { return value * 2 }\n"
+								+ "BEGIN { user = \"twice\"; builtin = \"length\"; print @user(21), @builtin(\"jawk\") }")
+				.expectLines("42 4")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Qualified variables can select indirect functions")
+				.script(
+						"@namespace \"ns\"\n"
+								+ "function twice(value) { return value * 2 }\n"
+								+ "BEGIN { callback = \"ns::twice\"; print @ns::callback(5) }")
+				.expectLines("10")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect srand converts a fractional string like direct srand")
+				.script(
+						"BEGIN { callback = \"srand\"; @callback(\"3.5\"); a = rand(); "
+								+ "srand(\"3.5\"); b = rand(); print (a == b) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testNamespaces() throws Exception {
+		AwkTestSupport
+				.awkTest("Namespaces qualify functions and indirect call targets")
+				.script(
+						"@namespace \"lib\"\n"
+								+ "function value() { return 42 }\n"
+								+ "@namespace \"app\"\n"
+								+ "function value() { return 7 }\n"
+								+ "BEGIN { target = \"app::value\"; print lib::value(), @target() }")
+				.expectLines("42 7")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Unqualified indirect targets stay in the awk namespace")
+				.script(
+						"@namespace \"app\"\n"
+								+ "function value() { return 7 }\n"
+								+ "BEGIN { target = \"value\"; print @target() }")
+				.expectThrow(RuntimeException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Only identifiers made entirely of uppercase letters stay in awk")
+				.script(
+						"@namespace \"ns\"\n"
+								+ "BEGIN { MY_VAR = 1; F1 = 2; ABC = 3; "
+								+ "print ns::MY_VAR, ns::F1, awk::ABC, awk::MY_VAR == \"\" }")
+				.expectLines("1 2 3 1")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("The awk namespace is accepted in command-line assignments")
+				.argument("-v", "awk::VALUE=42")
+				.script("BEGIN { print awk::VALUE }")
+				.expectLines("42")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("Qualified command-line operand assignments are accepted")
+				.file("input.txt", "record\n")
+				.script("@namespace \"ns\"\n{ print value, $0 }")
+				.operand("ns::value=42", "{{input.txt}}")
+				.expectLines("42 record")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testTernaryIdentifiersAdjacentToColon() throws Exception {
+		AwkTestSupport
+				.awkTest("A tight ternary can end its true branch with an identifier")
+				.script("BEGIN { x = 1; y = 2; print (x < y?x:y) }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A qualified identifier can precede a ternary colon")
+				.script("@namespace \"ns\"\nBEGIN { cond = 1; x = 7; y = 9; print (cond?ns::x:y) }")
+				.expectLines("7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testIncludeDirective() throws Exception {
+		AwkTestSupport
+				.cliTest("Include resolves relative to the main source and restores its namespace")
+				.file(
+						"main.awk",
+						"@namespace \"main\"\n"
+								+ "@include \"empty.awk\"\n"
+								+ "@include \"lib.awk\"\n"
+								+ "function answer() { return 7 }\n"
+								+ "BEGIN { print lib::answer(), answer() }\n")
+				.file(
+						"lib.awk",
+						"@namespace \"lib\"\n"
+								+ "function answer() { return 42 }\n")
+				.file("empty.awk", "")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("42 7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testAtSyntaxCanBeDisabled() throws Exception {
+		AwkSettings settings = new AwkSettings();
+		settings.setPosix(true);
+
+		AwkTestSupport
+				.awkTest("gawk @ syntax is unavailable in POSIX mode")
+				.withAwk(new Awk(settings))
+				.script("@namespace \"example\"\nBEGIN { print 1 }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUnsupportedAtDirective() throws Exception {
+		AwkTestSupport
+				.awkTest("Unsupported gawk @ directives fail intentionally")
+				.script("@load \"example\"\nBEGIN { print 1 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testOperatorPrecedence() throws Exception {
 		AwkTestSupport
 				.awkTest("$a precedes a++")
