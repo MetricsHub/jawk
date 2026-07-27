@@ -1039,6 +1039,7 @@ public class AwkParser {
 			String sourceIdentifier = text.toString();
 			String lookupIdentifier = awkNamespaceComponent(sourceIdentifier);
 			boolean awkNamespaceIdentifier = isAwkNamespaceIdentifier(sourceIdentifier);
+			boolean unqualifiedIdentifier = sourceIdentifier.indexOf("::") < 0;
 			if (awkNamespaceIdentifier && extensions.get(lookupIdentifier) != null) {
 				text.setLength(0);
 				text.append(lookupIdentifier);
@@ -1050,7 +1051,8 @@ public class AwkParser {
 				token = kwToken;
 				return token;
 			}
-			if (awkNamespaceIdentifier && BuiltinFunction.of(lookupIdentifier) != null) {
+			if ((unqualifiedIdentifier || awkNamespaceIdentifier)
+					&& BuiltinFunction.of(lookupIdentifier) != null) {
 				text.setLength(0);
 				text.append(lookupIdentifier);
 				token = Token.BUILTIN_FUNC_NAME;

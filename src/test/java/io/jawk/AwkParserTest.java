@@ -293,6 +293,16 @@ public class AwkParserTest {
 				.expectLines("1 2 3 1")
 				.runAndAssert();
 		AwkTestSupport
+				.awkTest("Standard builtins remain unqualified inside namespaces")
+				.script("@namespace \"ns\"\nBEGIN { print length(\"abc\"), int(3.5) }")
+				.expectLines("3 3")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtin names cannot be redefined inside namespaces")
+				.script("@namespace \"ns\"\nfunction length(value) { return value }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
 				.cliTest("The awk namespace is accepted in command-line assignments")
 				.argument("-v", "awk::VALUE=42")
 				.script("BEGIN { print awk::VALUE }")
