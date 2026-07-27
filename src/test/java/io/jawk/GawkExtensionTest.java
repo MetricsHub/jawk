@@ -773,6 +773,15 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void indirectTypeofPreservesUntypedVariables() throws Exception {
+		AwkTestSupport
+				.awkTest("indirect typeof receives an untyped variable")
+				.script("BEGIN { callback = \"typeof\"; print @callback(unset), typeof(unset) }")
+				.expectLines("untyped untyped")
+				.runAndAssert();
+	}
+
+	@Test
 	public void typeofReportsStrnumForNumericInputFields() throws Exception {
 		AwkTestSupport
 				.awkTest("typeof reports strnum for numeric-looking input")

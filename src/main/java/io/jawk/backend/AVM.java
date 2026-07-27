@@ -1700,7 +1700,7 @@ public class AVM implements VariableManager, Closeable {
 							new IndirectArgumentReference(
 									variableTuple.getVariableOffset(),
 									variableTuple.isGlobal(),
-									scalarValue == null ? BLANK : scalarValue));
+									scalarValue));
 					position.next();
 					break;
 				}
@@ -2826,7 +2826,8 @@ public class AVM implements VariableManager, Closeable {
 		for (int index = 0; index < actualArgumentsParam.length; index++) {
 			actualArgumentsParam[index] = resolveIndirectArgument(
 					actualArgumentsParam[index],
-					target.isArrayParameter(index));
+					target.isArrayParameter(index),
+					false);
 		}
 	}
 
@@ -2835,7 +2836,10 @@ public class AVM implements VariableManager, Closeable {
 			BuiltinFunction builtin) {
 		for (int index = 0; index < actualArgumentsParam.length; index++) {
 			boolean arrayArgument = builtin == BuiltinFunction.SPLIT && index == 1;
-			actualArgumentsParam[index] = resolveIndirectArgument(actualArgumentsParam[index], arrayArgument);
+			actualArgumentsParam[index] = resolveIndirectArgument(
+					actualArgumentsParam[index],
+					arrayArgument,
+					false);
 		}
 	}
 
@@ -2843,17 +2847,25 @@ public class AVM implements VariableManager, Closeable {
 			Object[] actualArgumentsParam,
 			ExtensionFunction function) {
 		boolean[] arrayArguments = new boolean[actualArgumentsParam.length];
+		boolean[] rawValueArguments = new boolean[actualArgumentsParam.length];
 		for (int index : function.collectAssocArrayIndexes(actualArgumentsParam.length)) {
 			arrayArguments[index] = true;
+		}
+		for (int index : function.collectRawValueIndexes(actualArgumentsParam.length)) {
+			rawValueArguments[index] = true;
 		}
 		for (int index = 0; index < actualArgumentsParam.length; index++) {
 			actualArgumentsParam[index] = resolveIndirectArgument(
 					actualArgumentsParam[index],
-					arrayArguments[index]);
+					arrayArguments[index],
+					rawValueArguments[index]);
 		}
 	}
 
-	private Object resolveIndirectArgument(Object argument, boolean arrayArgument) {
+	private Object resolveIndirectArgument(
+			Object argument,
+			boolean arrayArgument,
+			boolean rawValueArgument) {
 		if (!(argument instanceof IndirectArgumentReference)) {
 			if (!(argument instanceof IndirectArrayArgumentReference)) {
 				return argument;
@@ -2864,7 +2876,7 @@ public class AVM implements VariableManager, Closeable {
 		}
 		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
 		if (!arrayArgument) {
-			return reference.scalarValue;
+			return reference.scalarValue == null && !rawValueArgument ? BLANK : reference.scalarValue;
 		}
 		Object value = runtimeStack.getVariable(reference.offset, reference.global);
 		if (value == null) {
