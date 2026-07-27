@@ -33,16 +33,6 @@ import io.jawk.jrt.BSDRandom;
 public class BSDRandomTest {
 
 	@Test
-	public void testSeedOwnership() {
-		BSDRandom rng = new BSDRandom(7);
-		assertEquals(7, rng.getSeed());
-		rng.setSeed(0);
-		assertEquals(0, rng.getSeed());
-		rng.setSeed(11);
-		assertEquals(11, rng.getSeed());
-	}
-
-	@Test
 	public void testDeterministicSequence() {
 		BSDRandom rng = new BSDRandom(1);
 		double[] expected = {

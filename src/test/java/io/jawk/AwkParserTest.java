@@ -248,6 +248,21 @@ public class AwkParserTest {
 				.expectLines("42 42")
 				.runAndAssert();
 		AwkTestSupport
+				.awkTest("Indirect user calls materialize subarray parameters")
+				.script(
+						"function fill(values) { values[1] = 42 }\n"
+								+ "BEGIN { callback = \"fill\"; @callback(parts[\"nested\"]); "
+								+ "print parts[\"nested\"][1] }")
+				.expectLines("42")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect split materializes subarray parameters")
+				.script(
+						"BEGIN { callback = \"split\"; count = @callback(\"a b\", parts[\"nested\"]); "
+								+ "print count, parts[\"nested\"][1], parts[\"nested\"][2] }")
+				.expectLines("2 a b")
+				.runAndAssert();
+		AwkTestSupport
 				.awkTest("Indirect selectors are evaluated before arguments")
 				.script(
 						"function f(a, b) { print \"f\", a, b }\n"

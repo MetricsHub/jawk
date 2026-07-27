@@ -1704,6 +1704,15 @@ public class AVM implements VariableManager, Closeable {
 					position.next();
 					break;
 				}
+				case PUSH_INDIRECT_ARRAY_ARGUMENT: {
+					Object idx = pop();
+					checkScalar(idx);
+					Map<Object, Object> map = toMap(pop());
+					Object scalarValue = JRT.getAssocArrayValue(map, idx);
+					push(new IndirectArrayArgumentReference(map, idx, scalarValue));
+					position.next();
+					break;
+				}
 				case DEREF_ARRAY: {
 					// stack[0] = array index
 					Object idx = pop(); // idx
@@ -2846,7 +2855,12 @@ public class AVM implements VariableManager, Closeable {
 
 	private Object resolveIndirectArgument(Object argument, boolean arrayArgument) {
 		if (!(argument instanceof IndirectArgumentReference)) {
-			return argument;
+			if (!(argument instanceof IndirectArrayArgumentReference)) {
+				return argument;
+			}
+			IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
+			return arrayArgument ?
+					ensureArrayInArray(reference.map, reference.key) : reference.scalarValue;
 		}
 		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
 		if (!arrayArgument) {
@@ -4105,6 +4119,21 @@ public class AVM implements VariableManager, Closeable {
 		private IndirectArgumentReference(long offsetParam, boolean globalParam, Object scalarValueParam) {
 			offset = offsetParam;
 			global = globalParam;
+			scalarValue = scalarValueParam;
+		}
+	}
+
+	private static final class IndirectArrayArgumentReference {
+		private final Map<Object, Object> map;
+		private final Object key;
+		private final Object scalarValue;
+
+		private IndirectArrayArgumentReference(
+				Map<Object, Object> mapParam,
+				Object keyParam,
+				Object scalarValueParam) {
+			map = mapParam;
+			key = keyParam;
 			scalarValue = scalarValueParam;
 		}
 	}

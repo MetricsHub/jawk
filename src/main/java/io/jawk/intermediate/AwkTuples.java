@@ -445,6 +445,13 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
+	 * Emits an indirect-call subarray argument after its containing map and key.
+	 */
+	public void pushIndirectArrayArgument() {
+		queue.add(new Tuple.NoOperandTuple(Opcode.PUSH_INDIRECT_ARRAY_ARGUMENT));
+	}
+
+	/**
 	 * <p>
 	 * plusEq.
 	 * </p>

@@ -2616,6 +2616,9 @@ public class AwkParser {
 				&& !isJrtManagedSpecialName(((IDAst) argument).id)) {
 			IDAst idAst = (IDAst) argument;
 			tuples.pushIndirectArgument(idAst.offset, idAst.isGlobal);
+		} else if (argument instanceof ArrayReferenceAst) {
+			((ArrayReferenceAst) argument).populateTargetReferenceTuples(tuples);
+			tuples.pushIndirectArrayArgument();
 		} else {
 			argument.populateTuples(tuples);
 		}
