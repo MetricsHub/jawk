@@ -328,6 +328,29 @@ public class AwkParserTest {
 				.expectThrow(LexerException.class)
 				.runAndAssert();
 		AwkTestSupport
+				.awkTest("A parameter may follow an unrelated function with the same name")
+				.script(
+						"function awk::f() { return 1 }\n"
+								+ "@namespace \"ns\"\n"
+								+ "function g(f) { return f }\n"
+								+ "BEGIN { print g(7), awk::f() }\n")
+				.expectLines("7 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parameter may precede an unrelated function with the same name")
+				.script(
+						"@namespace \"ns\"\n"
+								+ "function g(f) { return f }\n"
+								+ "function awk::f() { return 1 }\n"
+								+ "BEGIN { print g(7), awk::f() }\n")
+				.expectLines("7 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parameter cannot match its own function name")
+				.script("function f(f) { return f }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
 				.cliTest("The awk namespace is accepted in command-line assignments")
 				.argument("-v", "awk::VALUE=42")
 				.script("BEGIN { print awk::VALUE }")

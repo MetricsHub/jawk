@@ -6356,9 +6356,6 @@ public class AwkParser {
 
 		private IDAst getID(String id) {
 			id = resolveVariableIdentifier(id);
-			if (functionProxies.get(id) != null) {
-				throw parserException("cannot use " + id + " as a variable; it is a function");
-			}
 
 			Map<String, IDAst> map;
 			if (currentFunctionName == null) {
@@ -6382,6 +6379,9 @@ public class AwkParser {
 				// Only global variables share the namespace with function names.
 				// Formal parameters may legitimately have the same name as an
 				// unrelated function.
+				if (functionProxies.get(id) != null) {
+					throw parserException("cannot use " + id + " as a variable; it is a function");
+				}
 				ids.add(id);
 			}
 			IDAst idAst = map.get(id);
@@ -6422,6 +6422,12 @@ public class AwkParser {
 		}
 
 		int addFunctionParameter(String functionName, String id) {
+			int namespaceSeparator = functionName.indexOf("::");
+			String unqualifiedFunctionName = namespaceSeparator < 0 ?
+					functionName : functionName.substring(namespaceSeparator + 2);
+			if (unqualifiedFunctionName.equals(id)) {
+				throw parserException("cannot use " + id + " as a parameter; it is the function name");
+			}
 			Set<String> set = functionParameters.get(functionName);
 			if (set == null) {
 				set = new HashSet<String>();
