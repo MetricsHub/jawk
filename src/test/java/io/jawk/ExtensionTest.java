@@ -56,6 +56,18 @@ public class ExtensionTest {
 	}
 
 	@Test
+	public void testIndirectExtension() throws Exception {
+		AwkTestSupport
+				.awkTest("indirect extension invocation")
+				.script(
+						"BEGIN { ab[1] = \"a\"; ab[2] = \"b\"; "
+								+ "callback = \"myExtensionFunction\"; print @callback(2, ab) }")
+				.withExtensions(new TestExtension())
+				.expectLines("abab")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testAnnotatedExtensionArgumentValidation() throws Exception {
 		AwkTestSupport
 				.awkTest("annotated extension argument validation")

@@ -224,9 +224,14 @@ public class AwkParserTest {
 		AwkTestSupport
 				.awkTest("Indirect srand converts a fractional string like direct srand")
 				.script(
-						"BEGIN { callback = \"srand\"; @callback(\"3.5\"); a = rand(); "
-								+ "srand(\"3.5\"); b = rand(); print (a == b) }")
-				.expectLines("1")
+						"BEGIN { callback = \"srand\"; first = @callback(\"3.5\"); a = rand(); "
+								+ "second = srand(\"3.5\"); b = rand(); print first, second, (a == b) }")
+				.expectLines("1 3 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("srand returns the previously requested seed")
+				.script("BEGIN { print srand(0), srand(5), srand(0) }")
+				.expectLines("1 0 5")
 				.runAndAssert();
 	}
 

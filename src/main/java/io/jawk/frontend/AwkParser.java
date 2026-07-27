@@ -363,6 +363,15 @@ public class AwkParser {
 		advancePastEndOfSource();
 	}
 
+	/**
+	 * Advances to the next readable source whenever the current reader reaches
+	 * end-of-file. Included files are unwound first in LIFO order, restoring the
+	 * including reader, its unread character, and its namespace. Once the include
+	 * stack is empty, parsing continues with the next top-level script source,
+	 * whose namespace starts at {@code awk}.
+	 *
+	 * @throws IOException if a source cannot be closed or read
+	 */
 	private void advancePastEndOfSource() throws IOException {
 		while (c < 0) {
 			if (!includedSourceStack.isEmpty()) {

@@ -582,16 +582,6 @@ public class AVM implements VariableManager, Closeable {
 	private final BSDRandom randomNumberGenerator = new BSDRandom(1);
 
 	/**
-	 * Last seed value used with {@code srand()}.
-	 * <p>
-	 * The default seed for {@code rand()} in One True Awk is {@code 1}, so
-	 * we initialize {@code oldseed} with this value to mimic that
-	 * behaviour. This ensures deterministic sequences until the user
-	 * explicitly calls {@code srand()}.
-	 */
-	private int oldseed = 1;
-
-	/**
 	 * Address of the END blocks section, read from the compiled program;
 	 * {@code null} for expression streams.
 	 */
@@ -734,7 +724,6 @@ public class AVM implements VariableManager, Closeable {
 		mergedGlobalLayoutActive = false;
 		runtimeStack.resetTransientState();
 		randomNumberGenerator.setSeed(1);
-		oldseed = 1;
 
 		prepareExecutionInputs(runtimeArguments, variableOverrides);
 	}
@@ -1745,9 +1734,9 @@ public class AVM implements VariableManager, Closeable {
 						// use the time of day for the seed
 						seed = JRT.timeSeed();
 					} else {
-						seed = randomSeed(pop());
+						seed = (int) JRT.toDouble(pop());
 					}
-					push(reseedRandomNumberGenerator(seed));
+					push(randomNumberGenerator.setSeed(seed));
 					position.next();
 					break;
 				}
@@ -2245,7 +2234,12 @@ public class AVM implements VariableManager, Closeable {
 					}
 					ExtensionFunction extensionFunction = callTuple.getExtensionFunctions().get(awkName);
 					if (extensionFunction != null) {
-						push(invokeIndirectExtension(extensionFunction, actualArguments, position.lineNumber()));
+						push(
+								invokeExtension(
+										extensionFunction,
+										actualArguments,
+										position.lineNumber(),
+										true));
 						position.next();
 						break;
 					}
@@ -2449,55 +2443,12 @@ public class AVM implements VariableManager, Closeable {
 					ExtensionFunction function = extensionTuple.getFunction();
 					long numArgs = extensionTuple.getArgCount();
 					boolean isInitial = extensionTuple.isInitial();
-					// let extensions report diagnostics at the call location
-					currentLineNumber = position.lineNumber();
-
-					Object[] args = new Object[(int) numArgs];
-					for (int i = (int) numArgs - 1; i >= 0; i--) {
-						args[i] = pop();
-					}
-
-					String extensionClassName = function.getExtensionClassName();
-					JawkExtension extension = extensionInstances.get(extensionClassName);
-					if (extension == null) {
-						throw new AwkRuntimeException(
-								position.lineNumber(),
-								"Extension instance for class '" + extensionClassName
-										+ "' is not registered");
-					}
-					if (!(extension instanceof AbstractExtension)) {
-						throw new AwkRuntimeException(
-								position.lineNumber(),
-								"Extension instance for class '" + extensionClassName
-										+ "' does not extend "
-										+ AbstractExtension.class.getName());
-					}
-
-					Object retval = function.invoke((AbstractExtension) extension, args);
-
-					// block if necessary
-					// (convert retval into the return value
-					// from the block operation ...)
-					if (isInitial && retval != null && retval instanceof BlockObject) {
-						retval = new BlockManager().block((BlockObject) retval);
-					}
-					// (... and proceed)
-
-					if (retval == null) {
-						retval = "";
-					} else
-						if (!(retval instanceof Number
-								||
-								retval instanceof String
-								||
-								retval instanceof Map
-								||
-								retval instanceof BlockObject)) {
-									// all other extension results are converted
-									// to a string (via Object.toString())
-									retval = retval.toString();
-								}
-					push(retval);
+					push(
+							invokeExtension(
+									function,
+									popArguments(numArgs),
+									position.lineNumber(),
+									isInitial));
 
 					position.next();
 					break;
@@ -2906,8 +2857,8 @@ public class AVM implements VariableManager, Closeable {
 			return Math.sqrt(JRT.toDouble(args[0]));
 		case SRAND:
 			requireIndirectArgumentCount(builtin, args, 0, 1, lineNumber);
-			int seed = args.length == 0 ? JRT.timeSeed() : randomSeed(args[0]);
-			return Integer.valueOf(reseedRandomNumberGenerator(seed));
+			int seed = args.length == 0 ? JRT.timeSeed() : (int) JRT.toDouble(args[0]);
+			return Integer.valueOf(randomNumberGenerator.setSeed(seed));
 		case SUBSTR:
 			requireIndirectArgumentCount(builtin, args, 2, 3, lineNumber);
 			return substring(
@@ -2944,21 +2895,12 @@ public class AVM implements VariableManager, Closeable {
 		}
 	}
 
-	private int randomSeed(Object value) {
-		return (int) JRT.toDouble(value);
-	}
-
-	private int reseedRandomNumberGenerator(int seed) {
-		int previousSeed = oldseed;
-		randomNumberGenerator.setSeed(seed);
-		oldseed = seed;
-		return previousSeed;
-	}
-
-	private Object invokeIndirectExtension(
+	private Object invokeExtension(
 			ExtensionFunction function,
 			Object[] args,
-			int lineNumber) {
+			int lineNumber,
+			boolean blockResult) {
+		// Let extensions report diagnostics at the call location.
 		currentLineNumber = lineNumber;
 		String extensionClassName = function.getExtensionClassName();
 		JawkExtension extension = extensionInstances.get(extensionClassName);
@@ -2975,7 +2917,7 @@ public class AVM implements VariableManager, Closeable {
 							+ AbstractExtension.class.getName());
 		}
 		Object result = function.invoke((AbstractExtension) extension, args);
-		if (result instanceof BlockObject) {
+		if (blockResult && result instanceof BlockObject) {
 			result = new BlockManager().block((BlockObject) result);
 		}
 		if (result == null) {
@@ -2987,7 +2929,7 @@ public class AVM implements VariableManager, Closeable {
 				|| result instanceof BlockObject) {
 			return result;
 		}
-		return result.toString();
+		return jrt.toAwkString(result);
 	}
 
 	private void execMatch() {
