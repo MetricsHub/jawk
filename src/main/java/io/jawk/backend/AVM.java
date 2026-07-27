@@ -3297,6 +3297,9 @@ public class AVM implements VariableManager, Closeable {
 		/** {@inheritDoc} */
 		@Override
 		public Object put(Object key, Object value) {
+			if (active && key != null) {
+				validateGlobalType(key.toString(), value);
+			}
 			Object previous = entries.put(key, value);
 			if (!active || key == null) {
 				return previous;
@@ -3314,6 +3317,18 @@ public class AVM implements VariableManager, Closeable {
 				runtimeStack.setVariable(offset.intValue(), value, true);
 			}
 			return previous;
+		}
+
+		private void validateGlobalType(String name, Object value) {
+			Boolean array = globalVariableArrays == null ? null : globalVariableArrays.get(name);
+			if (Boolean.TRUE.equals(array) && !(value instanceof Map)) {
+				throw new AwkRuntimeException(
+						"Attempting to use array `" + name + "' in a scalar context.");
+			}
+			if (Boolean.FALSE.equals(array) && value instanceof Map) {
+				throw new AwkRuntimeException(
+						"Attempting to use scalar `" + name + "' as an array.");
+			}
 		}
 
 		/** {@inheritDoc} */

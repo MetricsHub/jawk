@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import io.jawk.AwkSandboxException;
 import io.jawk.NotImplementedError;
 import io.jawk.backend.AVM;
 import io.jawk.ext.ExtensionFunction;
@@ -257,6 +258,9 @@ public class AwkParser {
 	/** POSIX compile-time mode: rejects gawk syntax such as arrays of arrays and typed regexps. */
 	private final boolean posix;
 
+	/** Whether the compiling engine permits source inclusion from the filesystem. */
+	private final boolean sourceIncludeAllowed;
+
 	/**
 	 * <p>
 	 * Constructor for AwkParser.
@@ -266,9 +270,24 @@ public class AwkParser {
 	 * @param posix {@code true} to enforce POSIX compile-time behavior
 	 */
 	public AwkParser(Map<String, ExtensionFunction> extensions, boolean posix) {
+		this(extensions, posix, true);
+	}
+
+	/**
+	 * Creates a parser with an explicit source-inclusion policy.
+	 *
+	 * @param extensions extension functions available during parsing
+	 * @param posix {@code true} to enforce POSIX compile-time behavior
+	 * @param sourceIncludeAllowed {@code true} to permit {@code @include}
+	 */
+	public AwkParser(
+			Map<String, ExtensionFunction> extensions,
+			boolean posix,
+			boolean sourceIncludeAllowed) {
 		this.extensions = extensions == null ?
 				Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(extensions));
 		this.posix = posix;
+		this.sourceIncludeAllowed = sourceIncludeAllowed;
 	}
 
 	/**
@@ -1217,6 +1236,9 @@ public class AwkParser {
 		lexer();
 		if (token != Token.STRING) {
 			throw parserException("@include requires a quoted file name.");
+		}
+		if (!sourceIncludeAllowed) {
+			throw new AwkSandboxException("@include is disabled in sandbox mode");
 		}
 		String includeName = string.toString();
 		Path includePath = resolveIncludePath(includeName);

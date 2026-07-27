@@ -394,6 +394,24 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void symtabCannotReplaceArrayGlobalsWithScalars() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB preserves array global types")
+				.script("BEGIN { values[1] = 1; SYMTAB[\"values\"] = 3 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabCannotReplaceScalarGlobalsWithArrays() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB preserves scalar global types")
+				.script("BEGIN { if (0) value = 1; SYMTAB[\"value\"][1] = 3 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void symtabRoundTripsSpecialVariables() throws Exception {
 		AwkTestSupport
 				.awkTest("SYMTAB reads and writes managed special variables")

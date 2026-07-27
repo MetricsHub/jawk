@@ -100,6 +100,8 @@ awk.script(program)
         .execute(System.out);
 ```
 
+Sandboxed compilation rejects `@include` so an untrusted script cannot select and execute source files from the host filesystem. Pass every trusted source explicitly to the host API instead.
+
 ## JSR 223 ScriptEngine
 
 Jawk also exposes a JSR 223 `ScriptEngine`:
