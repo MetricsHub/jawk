@@ -1040,6 +1040,9 @@ public class AwkParser {
 					text.setLength(text.length() - 1);
 					pendingColon = true;
 				} else {
+					if (posix) {
+						throw lexerException("gawk namespace syntax is not supported in POSIX mode.");
+					}
 					read();
 					if (!Character.isJavaIdentifierStart(c)) {
 						throw lexerException("A namespace-qualified name requires an identifier after ::.");
@@ -1253,10 +1256,13 @@ public class AwkParser {
 			throw new AwkSandboxException("@include is disabled in sandbox mode");
 		}
 		String includeName = string.toString();
+		boolean includeTerminatedByEndOfSource = validateIncludeTerminator();
 		Path includePath = resolveIncludePath(includeName);
 		if (!includedSourcePaths.add(includePath)) {
 			lexer();
-			terminator();
+			if (!includeTerminatedByEndOfSource) {
+				terminator();
+			}
 			return;
 		}
 		includedSourceStack.push(new SourceState(currentScriptSource, reader, c, currentNamespace));
@@ -1271,6 +1277,21 @@ public class AwkParser {
 		}
 		advancePastEndOfSource();
 		lexer();
+	}
+
+	private boolean validateIncludeTerminator() throws IOException {
+		while (c == ' ' || c == '\t') {
+			read();
+		}
+		if (c == '#') {
+			while (c >= 0 && c != '\n') {
+				read();
+			}
+		}
+		if (c >= 0 && c != '\n' && c != ';') {
+			throw parserException("@include must be followed by a newline, semicolon, or end of file.");
+		}
+		return c < 0;
 	}
 
 	private void validateNamespace(String namespace) {

@@ -407,6 +407,20 @@ public class AwkParserTest {
 				.argument("-f", "{{main.awk}}")
 				.expectLines("2", "1")
 				.runAndAssert();
+		AwkTestSupport
+				.cliTest("An include directive requires a statement terminator")
+				.file("main.awk", "@include \"lib.awk\" BEGIN { print 1 }\n")
+				.file("lib.awk", "BEGIN { print 2 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("A semicolon terminates an include directive")
+				.file("main.awk", "@include \"lib.awk\"; BEGIN { print 1 }\n")
+				.file("lib.awk", "BEGIN { print 2 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("2", "1")
+				.runAndAssert();
 	}
 
 	@Test
@@ -434,6 +448,18 @@ public class AwkParserTest {
 				.withAwk(new Awk(settings))
 				.script("@namespace \"example\"\nBEGIN { print 1 }")
 				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("gawk namespace-qualified names are unavailable in POSIX mode")
+				.withAwk(new Awk(settings))
+				.script("BEGIN { example::value = 1 }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Ternary colons remain available in POSIX mode")
+				.withAwk(new Awk(settings))
+				.script("BEGIN { yes = 1; no = 2; print (1?yes:no) }")
+				.expectLines("1")
 				.runAndAssert();
 	}
 
