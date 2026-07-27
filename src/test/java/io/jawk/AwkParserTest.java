@@ -318,6 +318,16 @@ public class AwkParserTest {
 				.expectThrow(ParserException.class)
 				.runAndAssert();
 		AwkTestSupport
+				.awkTest("Builtin names cannot be used as namespaces")
+				.script("@namespace \"length\"\nBEGIN { print 1 }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Reserved words cannot follow namespace separators")
+				.script("BEGIN { ns::if = 3 }\n")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
 				.cliTest("The awk namespace is accepted in command-line assignments")
 				.argument("-v", "awk::VALUE=42")
 				.script("BEGIN { print awk::VALUE }")
@@ -396,6 +406,21 @@ public class AwkParserTest {
 				.file("lib.awk", "@include \"main.awk\"\nBEGIN { print 2 }\n")
 				.argument("-f", "{{main.awk}}")
 				.expectLines("2", "1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testIncludeCanonicalizesSymlinkAliases() throws Exception {
+		AwkTestSupport
+				.cliTest("Symlink aliases include the underlying file only once")
+				.file(
+						"main.awk",
+						"@include \"lib.awk\"\n"
+								+ "@include \"alias.awk\"\n")
+				.file("lib.awk", "BEGIN { print \"included\" }\n")
+				.symlink("alias.awk", "lib.awk")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("included")
 				.runAndAssert();
 	}
 

@@ -492,12 +492,12 @@ public class AwkParser {
 		return EXPRESSION_TO_EVALUATE();
 	}
 
-	private void resetIncludedSourcePaths() {
+	private void resetIncludedSourcePaths() throws IOException {
 		includedSourcePaths.clear();
 		for (ScriptSource source : scriptSources) {
 			if (source instanceof ScriptFileSource) {
 				String filePath = ((ScriptFileSource) source).getFilePath();
-				includedSourcePaths.add(Paths.get(filePath).toAbsolutePath().normalize());
+				includedSourcePaths.add(Paths.get(filePath).toRealPath());
 			}
 		}
 	}
@@ -1061,9 +1061,16 @@ public class AwkParser {
 			// check for certain keywords
 			// extensions override built-in stuff
 			String sourceIdentifier = text.toString();
+			int namespaceSeparator = sourceIdentifier.indexOf("::");
+			if (namespaceSeparator >= 0
+					&& KEYWORDS.containsKey(sourceIdentifier.substring(namespaceSeparator + 2))) {
+				throw lexerException(
+						"Reserved word cannot be used after a namespace separator: "
+								+ sourceIdentifier);
+			}
 			String lookupIdentifier = awkNamespaceComponent(sourceIdentifier);
 			boolean awkNamespaceIdentifier = isAwkNamespaceIdentifier(sourceIdentifier);
-			boolean unqualifiedIdentifier = sourceIdentifier.indexOf("::") < 0;
+			boolean unqualifiedIdentifier = namespaceSeparator < 0;
 			if (awkNamespaceIdentifier && extensions.get(lookupIdentifier) != null) {
 				text.setLength(0);
 				text.append(lookupIdentifier);
@@ -1277,8 +1284,8 @@ public class AwkParser {
 				throw parserException("Invalid gawk namespace name: " + namespace);
 			}
 		}
-		if (KEYWORDS.containsKey(namespace)) {
-			throw parserException("Reserved word cannot be used as a gawk namespace: " + namespace);
+		if (KEYWORDS.containsKey(namespace) || BuiltinFunction.of(namespace) != null) {
+			throw parserException("Reserved identifier cannot be used as a gawk namespace: " + namespace);
 		}
 	}
 
@@ -1311,7 +1318,12 @@ public class AwkParser {
 		for (Path candidate : candidates) {
 			Path normalized = candidate.toAbsolutePath().normalize();
 			if (Files.isRegularFile(normalized)) {
-				return normalized;
+				try {
+					return normalized.toRealPath();
+				} catch (IOException ignored) {
+					// The candidate may have disappeared between the existence
+					// check and canonicalization; continue searching AWKPATH.
+				}
 			}
 		}
 		throw parserException("Cannot find @include file: " + includeName);
