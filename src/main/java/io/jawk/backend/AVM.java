@@ -25,6 +25,8 @@ package io.jawk.backend;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.AbstractSet;
+import java.util.Iterator;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -1744,7 +1746,9 @@ public class AVM implements VariableManager, Closeable {
 					} else {
 						seed = (int) JRT.toDouble(pop());
 					}
-					push(randomNumberGenerator.setSeed(seed));
+					int previousSeed = randomNumberGenerator.getSeed();
+					randomNumberGenerator.setSeed(seed);
+					push(previousSeed);
 					position.next();
 					break;
 				}
@@ -2915,7 +2919,9 @@ public class AVM implements VariableManager, Closeable {
 		case SRAND:
 			requireIndirectArgumentCount(builtin, args, 0, 1, lineNumber);
 			int seed = args.length == 0 ? JRT.timeSeed() : (int) JRT.toDouble(args[0]);
-			return Integer.valueOf(randomNumberGenerator.setSeed(seed));
+			int previousSeed = randomNumberGenerator.getSeed();
+			randomNumberGenerator.setSeed(seed);
+			return Integer.valueOf(previousSeed);
 		case SUBSTR:
 			requireIndirectArgumentCount(builtin, args, 2, 3, lineNumber);
 			return substring(
@@ -3281,11 +3287,77 @@ public class AVM implements VariableManager, Closeable {
 		/** {@inheritDoc} */
 		@Override
 		public Set<Map.Entry<Object, Object>> entrySet() {
-			return entries.entrySet();
+			return new AbstractSet<Map.Entry<Object, Object>>() {
+
+				@Override
+				public Iterator<Map.Entry<Object, Object>> iterator() {
+					final Iterator<Map.Entry<Object, Object>> iterator = entries.entrySet().iterator();
+					return new Iterator<Map.Entry<Object, Object>>() {
+
+						@Override
+						public boolean hasNext() {
+							return iterator.hasNext();
+						}
+
+						@Override
+						public Map.Entry<Object, Object> next() {
+							return new LiveSymtabEntry(iterator.next().getKey());
+						}
+
+						@Override
+						public void remove() {
+							iterator.remove();
+						}
+					};
+				}
+
+				@Override
+				public int size() {
+					return entries.size();
+				}
+			};
 		}
 
 		private boolean isMetaTableName(String name) {
 			return "SYMTAB".equals(name) || "FUNCTAB".equals(name);
+		}
+
+		private final class LiveSymtabEntry implements Map.Entry<Object, Object> {
+
+			private final Object key;
+
+			private LiveSymtabEntry(Object key) {
+				this.key = key;
+			}
+
+			@Override
+			public Object getKey() {
+				return key;
+			}
+
+			@Override
+			public Object getValue() {
+				return SymtabArray.this.get(key);
+			}
+
+			@Override
+			public Object setValue(Object value) {
+				return SymtabArray.this.put(key, value);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (!(obj instanceof Map.Entry)) {
+					return false;
+				}
+				Map.Entry<?, ?> other = (Map.Entry<?, ?>) obj;
+				return Objects.equals(key, other.getKey()) && Objects.equals(getValue(), other.getValue());
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(key) ^ Objects.hashCode(getValue());
+			}
 		}
 	}
 

@@ -49,10 +49,8 @@ public class BSDRandom {
 	 * as in the original implementation.
 	 *
 	 * @param newSeed New pseudo-random seed
-	 * @return Previous pseudo-random seed
 	 */
-	public final int setSeed(int newSeed) {
-		int previousSeed = seed;
+	public final void setSeed(int newSeed) {
 		seed = newSeed;
 		int effectiveSeed = newSeed;
 		if (effectiveSeed == 0) {
@@ -68,7 +66,6 @@ public class BSDRandom {
 		for (int i = 0; i < 10 * RAND_DEG; i++) {
 			nextInt();
 		}
-		return previousSeed;
 	}
 
 	/**

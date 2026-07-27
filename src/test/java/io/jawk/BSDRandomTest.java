@@ -36,9 +36,9 @@ public class BSDRandomTest {
 	public void testSeedOwnership() {
 		BSDRandom rng = new BSDRandom(7);
 		assertEquals(7, rng.getSeed());
-		assertEquals(7, rng.setSeed(0));
+		rng.setSeed(0);
 		assertEquals(0, rng.getSeed());
-		assertEquals(0, rng.setSeed(11));
+		rng.setSeed(11);
 		assertEquals(11, rng.getSeed());
 	}
 

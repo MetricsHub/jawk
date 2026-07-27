@@ -290,6 +290,13 @@ public class AwkParserTest {
 				.operand("ns::value=42", "{{input.txt}}")
 				.expectLines("42 record")
 				.runAndAssert();
+		AwkTestSupport
+				.cliTest("The awk namespace is accepted in operand assignments")
+				.file("input.txt", "record\n")
+				.script("@namespace \"ns\"\n{ print awk::value, $0 }")
+				.operand("awk::value=42", "{{input.txt}}")
+				.expectLines("42 record")
+				.runAndAssert();
 	}
 
 	@Test

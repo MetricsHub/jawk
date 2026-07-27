@@ -621,6 +621,9 @@ public class StreamInputSource implements InputSource, Closeable {
 					"Must have a non-blank variable name in a name=value variable assignment argument.");
 		}
 		String name = nameValue.substring(0, eqIdx);
+		if (name.startsWith("awk::")) {
+			name = name.substring("awk::".length());
+		}
 		String value = nameValue.substring(eqIdx + 1);
 		vm.assignVariable(name, jrt.toInputScalar(value));
 	}

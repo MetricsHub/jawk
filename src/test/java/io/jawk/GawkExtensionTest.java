@@ -429,6 +429,17 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void symtabEntrySetExposesLiveValues() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB value sorting uses live global values")
+				.script(
+						"BEGIN { a = 2; z = 1; PROCINFO[\"sorted_in\"] = \"@val_num_asc\"; "
+								+ "for (key in SYMTAB) if (key == \"a\" || key == \"z\") print key }")
+				.expectLines("z", "a")
+				.runAndAssert();
+	}
+
+	@Test
 	public void ignoreCaseAppliesToComparisonsAndIndex() throws Exception {
 		// gawk's IGNORECASE covers string relational operators and index(),
 		// not just regexp operations; numeric (strnum) comparisons stay numeric
