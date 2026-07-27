@@ -2240,6 +2240,9 @@ public class AVM implements VariableManager, Closeable {
 													+ qualifiedName
 													+ "' called with more arguments than declared");
 						}
+						if (profiling) {
+							activeProfilingFunctions.push(new ActiveFunction(qualifiedName, tupleStartNanos));
+						}
 						runtimeStack.pushFrame(formalCount, position.currentIndex());
 						int copiedArgumentCount = Math.min(actualArguments.length, (int) formalCount);
 						for (int i = 0; i < copiedArgumentCount; i++) {
@@ -2261,12 +2264,21 @@ public class AVM implements VariableManager, Closeable {
 					ExtensionFunction extensionFunction = callTuple.getExtensionFunctions().get(awkName);
 					if (extensionFunction != null) {
 						resolveIndirectArguments(actualArguments, extensionFunction);
-						push(
-								invokeExtension(
-										extensionFunction,
-										actualArguments,
-										position.lineNumber(),
-										true));
+						if (profiling) {
+							activeProfilingFunctions.push(new ActiveFunction(awkName, tupleStartNanos));
+						}
+						try {
+							push(
+									invokeExtension(
+											extensionFunction,
+											actualArguments,
+											position.lineNumber(),
+											true));
+						} finally {
+							if (profiling) {
+								recordFunctionExit(System.nanoTime());
+							}
+						}
 						position.next();
 						break;
 					}
@@ -3319,6 +3331,24 @@ public class AVM implements VariableManager, Closeable {
 			return previous;
 		}
 
+		/** {@inheritDoc} */
+		@Override
+		public Object remove(Object key) {
+			if (active) {
+				throw new AwkRuntimeException("Cannot delete an element from SYMTAB.");
+			}
+			return entries.remove(key);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void clear() {
+			if (active) {
+				throw new AwkRuntimeException("Cannot delete SYMTAB.");
+			}
+			entries.clear();
+		}
+
 		private void validateGlobalType(String name, Object value) {
 			Boolean array = globalVariableArrays == null ? null : globalVariableArrays.get(name);
 			if (Boolean.TRUE.equals(array) && !(value instanceof Map)) {
@@ -3353,6 +3383,9 @@ public class AVM implements VariableManager, Closeable {
 
 						@Override
 						public void remove() {
+							if (active) {
+								throw new AwkRuntimeException("Cannot delete an element from SYMTAB.");
+							}
 							iterator.remove();
 						}
 					};
@@ -3433,7 +3466,57 @@ public class AVM implements VariableManager, Closeable {
 				}
 			}
 		}
-		runtimeStack.setVariable(offset, functab, true);
+		runtimeStack.setVariable(offset, new ReadOnlyArray("FUNCTAB", functab), true);
+	}
+
+	private static final class ReadOnlyArray extends java.util.AbstractMap<Object, Object> implements AssocArray {
+		private final String name;
+		private final Map<Object, Object> entries;
+
+		private ReadOnlyArray(String nameParam, Map<Object, Object> entriesParam) {
+			name = nameParam;
+			entries = entriesParam;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object get(Object key) {
+			return JRT.containsAwkKey(entries, key) ? entries.get(key) : BLANK;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean containsKey(Object key) {
+			return JRT.containsAwkKey(entries, key);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Set<Map.Entry<Object, Object>> entrySet() {
+			return Collections.unmodifiableMap(entries).entrySet();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object put(Object key, Object value) {
+			throw readOnlyError();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object remove(Object key) {
+			throw readOnlyError();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void clear() {
+			throw readOnlyError();
+		}
+
+		private AwkRuntimeException readOnlyError() {
+			return new AwkRuntimeException(name + " is read-only.");
+		}
 	}
 
 	/** Reflects a command-line variable assignment into a materialized SYMTAB. */

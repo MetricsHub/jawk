@@ -495,6 +495,34 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void symtabCannotBeDeleted() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB elements cannot be deleted")
+				.script("BEGIN { value = 1; delete SYMTAB[\"value\"] }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB cannot be cleared")
+				.script("BEGIN { delete SYMTAB }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void functabIsReadOnly() throws Exception {
+		AwkTestSupport
+				.awkTest("FUNCTAB elements cannot be assigned")
+				.script("BEGIN { FUNCTAB[\"length\"] = \"replacement\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("FUNCTAB elements cannot be deleted")
+				.script("BEGIN { delete FUNCTAB[\"length\"] }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void perRunVariablesAreVisibleToSymtabAndExtensions() throws Exception {
 		// Per-run overrides without a compiled slot must be observable through
 		// SYMTAB and by-name lookups from extensions.

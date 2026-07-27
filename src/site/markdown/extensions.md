@@ -104,7 +104,7 @@ BEGIN {
 
 All gawk `@` forms are rejected when POSIX mode is enabled.
 
-Scripts that reference `SYMTAB` or `FUNCTAB` get honest, Jawk-shaped content, populated by the runtime itself (outside POSIX mode): `SYMTAB` holds the names of the program's globals, Jawk's special variables, and `-v`/host-supplied variables; `FUNCTAB` holds the names of the standard built-in functions (`split`, `substr`, ...), the program's user-defined functions, and the loaded extensions' function keywords. Reads and writes through `SYMTAB` reflect declared globals and managed special variables live. As in gawk, assigning a scalar to `SYMTAB` or `FUNCTAB` is a runtime error.
+Scripts that reference `SYMTAB` or `FUNCTAB` get honest, Jawk-shaped content, populated by the runtime itself (outside POSIX mode): `SYMTAB` holds the names of the program's globals, Jawk's special variables, and `-v`/host-supplied variables; `FUNCTAB` holds the names of the standard built-in functions (`split`, `substr`, ...), the program's user-defined functions, and the loaded extensions' function keywords. Reads and writes through `SYMTAB` reflect declared globals and managed special variables live, but entries cannot be deleted and writes must preserve each global's scalar or array type. `FUNCTAB` is read-only. As in gawk, assigning a scalar to `SYMTAB` or `FUNCTAB` is a runtime error.
 
 > [!NOTE]
 > Because these functions are registered by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` become reserved function names. A script that uses them as variable or function identifiers must be run with an explicit extension list that omits `GawkExtension`.
