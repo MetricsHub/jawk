@@ -373,6 +373,18 @@ public class AwkParserTest {
 				.expectLines("42 7")
 				.runAndAssert();
 		AwkTestSupport
+				.cliTest("An include without a final newline restores its parent's namespace")
+				.file(
+						"main.awk",
+						"@namespace \"main\"\n"
+								+ "@include \"lib.awk\"\n"
+								+ "function answer() { return 7 }\n"
+								+ "BEGIN { print main::answer() }\n")
+				.file("lib.awk", "@namespace \"lib\"")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("7")
+				.runAndAssert();
+		AwkTestSupport
 				.cliTest("A top-level source cannot include itself twice")
 				.file("main.awk", "@include \"main.awk\"\nBEGIN { print 1 }\n")
 				.argument("-f", "{{main.awk}}")

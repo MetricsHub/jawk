@@ -380,12 +380,13 @@ public class AwkParser {
 		while (c == '\r') {
 			c = reader.read();
 		}
-		advancePastEndOfSource();
 	}
 
 	/**
-	 * Advances to the next readable source whenever the current reader reaches
-	 * end-of-file. Included files are unwound first in LIFO order, restoring the
+	 * Advances to the next readable source at a token boundary when the current
+	 * reader has reached end-of-file. Deferring this transition until the current
+	 * token is complete preserves the source and namespace used to classify its
+	 * final token. Included files are unwound first in LIFO order, restoring the
 	 * including reader, its unread character, and its namespace. Once the include
 	 * stack is empty, parsing continues with the next top-level script source,
 	 * whose namespace starts at {@code awk}.
@@ -697,7 +698,11 @@ public class AwkParser {
 
 	private Token lexer() throws IOException {
 		// clear whitespace
-		while (c >= 0 && (c == ' ' || c == '\t' || c == '#' || c == '\\')) {
+		while (true) {
+			advancePastEndOfSource();
+			if (c < 0 || c != ' ' && c != '\t' && c != '#' && c != '\\') {
+				break;
+			}
 			if (c == '\\') {
 				read();
 				if (c == '\n') {
@@ -1227,8 +1232,8 @@ public class AwkParser {
 		}
 		String namespace = string.toString();
 		validateNamespace(namespace);
-		lexer();
 		currentNamespace = namespace;
+		lexer();
 		terminator();
 	}
 
