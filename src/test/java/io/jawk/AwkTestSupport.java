@@ -24,6 +24,7 @@ package io.jawk;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assume.assumeNoException;
 import static org.junit.Assume.assumeTrue;
 
 import java.io.BufferedReader;
@@ -500,6 +501,7 @@ public final class AwkTestSupport {
 		protected AwkTestCase buildTestCase(
 				TestLayout layout,
 				Map<String, String> files,
+				Map<String, String> symlinks,
 				List<String> operands,
 				List<String> placeholders) {
 			if (useTempDir && !preAssignments.containsKey("TEMPDIR")) {
@@ -508,6 +510,7 @@ public final class AwkTestSupport {
 			return new AwkTestCase(
 					layout,
 					files,
+					symlinks,
 					operands,
 					placeholders,
 					requiresPosix,
@@ -620,6 +623,7 @@ public final class AwkTestSupport {
 		protected CliTestCase buildTestCase(
 				TestLayout layout,
 				Map<String, String> files,
+				Map<String, String> symlinks,
 				List<String> operands,
 				List<String> placeholders) {
 			if (useTempDir && !assignments.containsKey("TEMPDIR")) {
@@ -628,6 +632,7 @@ public final class AwkTestSupport {
 			return new CliTestCase(
 					layout,
 					files,
+					symlinks,
 					operands,
 					placeholders,
 					requiresPosix,
@@ -651,6 +656,7 @@ public final class AwkTestSupport {
 		protected String script;
 		protected String stdin;
 		protected final Map<String, String> fileContents = new LinkedHashMap<>();
+		protected final Map<String, String> symbolicLinks = new LinkedHashMap<>();
 		protected final List<String> operandSpecs = new ArrayList<>();
 		protected final List<String> pathPlaceholders = new ArrayList<>();
 		protected String expectedOutput;
@@ -703,6 +709,22 @@ public final class AwkTestSupport {
 		@SuppressWarnings("unchecked")
 		public B file(String name, String contents) {
 			fileContents.put(name, contents);
+			return (B) this;
+		}
+
+		/**
+		 * Adds a symbolic link inside the per-test temporary directory. The target
+		 * is resolved relative to that directory and should normally name a file
+		 * configured through {@link #file(String, String)}. The test is skipped
+		 * when the platform does not permit symbolic-link creation.
+		 *
+		 * @param name relative path of the symbolic link
+		 * @param target relative path of its target
+		 * @return this builder for method chaining
+		 */
+		@SuppressWarnings("unchecked")
+		public B symlink(String name, String target) {
+			symbolicLinks.put(name, target);
 			return (B) this;
 		}
 
@@ -876,9 +898,10 @@ public final class AwkTestSupport {
 					expectedExitCode,
 					expectedException);
 			Map<String, String> files = new LinkedHashMap<>(fileContents);
+			Map<String, String> symlinks = new LinkedHashMap<>(symbolicLinks);
 			List<String> operands = new ArrayList<>(operandSpecs);
 			List<String> placeholders = new ArrayList<>(pathPlaceholders);
-			return buildTestCase(layout, files, operands, placeholders);
+			return buildTestCase(layout, files, symlinks, operands, placeholders);
 		}
 
 		/**
@@ -905,6 +928,7 @@ public final class AwkTestSupport {
 		protected abstract BaseTestCase buildTestCase(
 				TestLayout layout,
 				Map<String, String> fileContents,
+				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders);
 	}
@@ -912,6 +936,7 @@ public final class AwkTestSupport {
 	private abstract static class BaseTestCase implements ConfiguredTest {
 		private final TestLayout layout;
 		private final Map<String, String> fileContents;
+		private final Map<String, String> symbolicLinks;
 		private final List<String> operandSpecs;
 		private final List<String> pathPlaceholders;
 		private final boolean requiresPosix;
@@ -919,11 +944,13 @@ public final class AwkTestSupport {
 		BaseTestCase(
 				TestLayout layout,
 				Map<String, String> fileContents,
+				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders,
 				boolean requiresPosix) {
 			this.layout = layout;
 			this.fileContents = fileContents;
+			this.symbolicLinks = symbolicLinks;
 			this.operandSpecs = operandSpecs;
 			this.pathPlaceholders = pathPlaceholders;
 			this.requiresPosix = requiresPosix;
@@ -1024,6 +1051,20 @@ public final class AwkTestSupport {
 				}
 				placeholders.put(entry.getKey(), path);
 			}
+			for (Map.Entry<String, String> entry : symbolicLinks.entrySet()) {
+				Path link = tempDir.resolve(entry.getKey());
+				Path parent = link.getParent();
+				if (parent != null) {
+					Files.createDirectories(parent);
+				}
+				try {
+					Files.createSymbolicLink(link, tempDir.resolve(entry.getValue()));
+				} catch (IOException | UnsupportedOperationException | SecurityException ex) {
+					deleteRecursively(tempDir);
+					assumeNoException("Symbolic links are unavailable for " + layout.description, ex);
+				}
+				placeholders.put(entry.getKey(), link);
+			}
 			for (String placeholder : pathPlaceholders) {
 				Path path = tempDir.resolve(placeholder);
 				Path parent = path.getParent();
@@ -1062,6 +1103,7 @@ public final class AwkTestSupport {
 		AwkTestCase(
 				TestLayout layout,
 				Map<String, String> fileContents,
+				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders,
 				boolean requiresPosix,
@@ -1071,7 +1113,7 @@ public final class AwkTestSupport {
 				InputSource inputSource,
 				Reader scriptReader,
 				Path scriptPath) {
-			super(layout, fileContents, operandSpecs, pathPlaceholders, requiresPosix);
+			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, requiresPosix);
 			this.preAssignments = new LinkedHashMap<>(preAssignments);
 			this.customAwk = customAwk;
 			this.extensions = new ArrayList<>(extensions);
@@ -1137,6 +1179,7 @@ public final class AwkTestSupport {
 		CliTestCase(
 				TestLayout layout,
 				Map<String, String> fileContents,
+				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders,
 				boolean requiresPosix,
@@ -1145,7 +1188,7 @@ public final class AwkTestSupport {
 				Map<String, String> environment,
 				boolean redirectErrorStream,
 				InputStream stdinStream) {
-			super(layout, fileContents, operandSpecs, pathPlaceholders, requiresPosix);
+			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, requiresPosix);
 			this.argumentSpecs = new ArrayList<>(argumentSpecs);
 			this.assignments = new LinkedHashMap<>(assignments);
 			this.environment = new LinkedHashMap<>(environment);

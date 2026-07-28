@@ -86,7 +86,25 @@ That keeps extension availability explicit and local to the embedding code.
 
 Beyond the extension functions, the interpreter itself implements gawk's `BEGINFILE` / `ENDFILE` special patterns, the `nextfile` statement, and the `ERRNO` and `ARGIND` special variables (see the [CLI guide](cli.html#BEGINFILE_and_ENDFILE_Rules)). Like the other gawk-specific syntax, `BEGINFILE` and `ENDFILE` are not special in POSIX mode.
 
-Scripts that reference `SYMTAB` or `FUNCTAB` get honest, Jawk-shaped content, populated by the runtime itself (outside POSIX mode): `SYMTAB` holds the names of the program's globals, Jawk's special variables, and `-v`/host-supplied variables; `FUNCTAB` holds the names of the standard built-in functions (`split`, `substr`, ...), the program's user-defined functions, and the loaded extensions' function keywords. Command-line `name=value` operand assignments update `SYMTAB` live, as in gawk; ordinary in-script assignments are not reflected (the array is a startup snapshot, not gawk's live view). As in gawk, assigning a scalar to `SYMTAB` or `FUNCTAB` is a runtime error.
+Jawk also supports gawk's source-level `@` syntax:
+
+```awk
+@include "library.awk"
+@namespace "report"
+
+function render(value) { return value }
+
+BEGIN {
+    callback = "report::render"
+    print @callback(42)
+}
+```
+
+`@include` resolves relative paths from the including source, then searches `AWKPATH`, and includes each resolved file at most once. An included file cannot include a top-level program source. An included source begins in the `awk` namespace; the including source's namespace is restored afterward. `@namespace` qualifies variables and functions except identifiers made entirely of uppercase letters, while `awk::name` refers to the default namespace. Namespaced indirect calls require a fully qualified function name in the selector variable; an unqualified value refers to the default `awk` namespace. Indirect calls can dispatch user-defined, built-in, or loaded extension functions. Typed regexp literals use the related `@/re/` form. `@load` is recognized but intentionally reported as unsupported; load Java extensions with the CLI `-l` option or the Java API instead.
+
+All gawk `@` forms are rejected when POSIX mode is enabled.
+
+Scripts that reference `SYMTAB` or `FUNCTAB` get honest, Jawk-shaped content, populated by the runtime itself (outside POSIX mode): `SYMTAB` holds the names of the program's globals, Jawk's special variables, and `-v`/host-supplied variables; `FUNCTAB` holds the names of the standard built-in functions (`split`, `substr`, ...), the program's user-defined functions, and the loaded extensions' function keywords. Reads and writes through `SYMTAB` reflect declared globals and managed special variables live, but arbitrary elements cannot be added or deleted and writes must preserve each global's scalar or array type. `FUNCTAB` is read-only. As in gawk, assigning a scalar to `SYMTAB` or `FUNCTAB` is a runtime error.
 
 > [!NOTE]
 > Because these functions are registered by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` become reserved function names. A script that uses them as variable or function identifiers must be run with an explicit extension list that omits `GawkExtension`.

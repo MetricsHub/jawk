@@ -25,6 +25,8 @@ package io.jawk.backend;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.AbstractSet;
+import java.util.Iterator;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -63,6 +65,8 @@ import io.jawk.intermediate.Tuple.CountAndAppendTuple;
 import io.jawk.intermediate.Tuple.CountTuple;
 import io.jawk.intermediate.Tuple.DereferenceTuple;
 import io.jawk.intermediate.Tuple.ExtensionTuple;
+import io.jawk.intermediate.Tuple.IndirectCallTuple;
+import io.jawk.intermediate.Tuple.IndirectFunctionTarget;
 import io.jawk.intermediate.Tuple.InputFieldTuple;
 import io.jawk.intermediate.Tuple.LongTuple;
 import io.jawk.intermediate.Tuple.PushDoubleTuple;
@@ -579,16 +583,6 @@ public class AVM implements VariableManager, Closeable {
 	private final BSDRandom randomNumberGenerator = new BSDRandom(1);
 
 	/**
-	 * Last seed value used with {@code srand()}.
-	 * <p>
-	 * The default seed for {@code rand()} in One True Awk is {@code 1}, so
-	 * we initialize {@code oldseed} with this value to mimic that
-	 * behaviour. This ensures deterministic sequences until the user
-	 * explicitly calls {@code srand()}.
-	 */
-	private int oldseed = 1;
-
-	/**
 	 * Address of the END blocks section, read from the compiled program;
 	 * {@code null} for expression streams.
 	 */
@@ -731,7 +725,6 @@ public class AVM implements VariableManager, Closeable {
 		mergedGlobalLayoutActive = false;
 		runtimeStack.resetTransientState();
 		randomNumberGenerator.setSeed(1);
-		oldseed = 1;
 
 		prepareExecutionInputs(runtimeArguments, variableOverrides);
 	}
@@ -1699,6 +1692,27 @@ public class AVM implements VariableManager, Closeable {
 					position.next();
 					break;
 				}
+				case PUSH_INDIRECT_ARGUMENT: {
+					VariableTuple variableTuple = (VariableTuple) tuple;
+					Object scalarValue = runtimeStack
+							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
+					push(
+							new IndirectArgumentReference(
+									variableTuple.getVariableOffset(),
+									variableTuple.isGlobal(),
+									scalarValue));
+					position.next();
+					break;
+				}
+				case PUSH_INDIRECT_ARRAY_ARGUMENT: {
+					Object idx = pop();
+					checkScalar(idx);
+					Map<Object, Object> map = toMap(pop());
+					Object scalarValue = JRT.getAssocArrayValue(map, idx);
+					push(new IndirectArrayArgumentReference(map, idx, scalarValue));
+					position.next();
+					break;
+				}
 				case DEREF_ARRAY: {
 					// stack[0] = array index
 					Object idx = pop(); // idx
@@ -1742,24 +1756,11 @@ public class AVM implements VariableManager, Closeable {
 						// use the time of day for the seed
 						seed = JRT.timeSeed();
 					} else {
-						Object o = pop();
-						if (o instanceof Double) {
-							seed = ((Double) o).intValue();
-						} else if (o instanceof Long) {
-							seed = ((Long) o).intValue();
-						} else if (o instanceof Integer) {
-							seed = ((Integer) o).intValue();
-						} else {
-							try {
-								seed = Integer.parseInt(o.toString());
-							} catch (NumberFormatException nfe) {
-								seed = 0;
-							}
-						}
+						seed = (int) JRT.toDouble(pop());
 					}
+					int previousSeed = randomNumberGenerator.getSeed();
 					randomNumberGenerator.setSeed(seed);
-					push(oldseed);
-					oldseed = seed;
+					push(previousSeed);
 					position.next();
 					break;
 				}
@@ -2219,6 +2220,72 @@ public class AVM implements VariableManager, Closeable {
 					// position.next();
 					break;
 				}
+				case INDIRECT_CALL: {
+					IndirectCallTuple callTuple = (IndirectCallTuple) tuple;
+					Object[] actualArguments = popArguments(callTuple.getNumActualParams());
+					String requestedName = jrt.toAwkString(pop());
+					String qualifiedName = normalizeIndirectFunctionName(requestedName);
+					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
+					if (target != null) {
+						resolveIndirectArguments(actualArguments, target);
+						long formalCount = target.getNumFormalParams();
+						if (actualArguments.length > formalCount) {
+							jrt
+									.printWarning(
+											"gawk: "
+													+ callTuple.getSourceName()
+													+ ":"
+													+ callTuple.getSourceLine()
+													+ ": warning: function `"
+													+ qualifiedName
+													+ "' called with more arguments than declared");
+						}
+						if (profiling) {
+							activeProfilingFunctions.push(new ActiveFunction(qualifiedName, tupleStartNanos));
+						}
+						runtimeStack.pushFrame(formalCount, position.currentIndex());
+						int copiedArgumentCount = Math.min(actualArguments.length, (int) formalCount);
+						for (int i = 0; i < copiedArgumentCount; i++) {
+							runtimeStack.setVariable(i, actualArguments[i], false);
+						}
+						position.jump(target.getAddress());
+						break;
+					}
+
+					String awkName = requestedName.startsWith("awk::") ?
+							requestedName.substring("awk::".length()) : requestedName;
+					BuiltinFunction builtin = BuiltinFunction.of(awkName);
+					if (builtin != null) {
+						resolveIndirectArguments(actualArguments, builtin);
+						push(invokeIndirectBuiltin(builtin, actualArguments, position.lineNumber()));
+						position.next();
+						break;
+					}
+					ExtensionFunction extensionFunction = callTuple.getExtensionFunctions().get(awkName);
+					if (extensionFunction != null) {
+						resolveIndirectArguments(actualArguments, extensionFunction);
+						if (profiling) {
+							activeProfilingFunctions.push(new ActiveFunction(awkName, tupleStartNanos));
+						}
+						try {
+							push(
+									invokeExtension(
+											extensionFunction,
+											actualArguments,
+											position.lineNumber(),
+											true));
+						} finally {
+							if (profiling) {
+								recordFunctionExit(System.nanoTime());
+							}
+						}
+						position.next();
+						break;
+					}
+					throw new AwkRuntimeException(
+							position.lineNumber(),
+							"function `" + qualifiedName + "' is not defined");
+				}
 				case FUNCTION: {
 					// important for compilation,
 					// not needed for interpretation
@@ -2415,55 +2482,12 @@ public class AVM implements VariableManager, Closeable {
 					ExtensionFunction function = extensionTuple.getFunction();
 					long numArgs = extensionTuple.getArgCount();
 					boolean isInitial = extensionTuple.isInitial();
-					// let extensions report diagnostics at the call location
-					currentLineNumber = position.lineNumber();
-
-					Object[] args = new Object[(int) numArgs];
-					for (int i = (int) numArgs - 1; i >= 0; i--) {
-						args[i] = pop();
-					}
-
-					String extensionClassName = function.getExtensionClassName();
-					JawkExtension extension = extensionInstances.get(extensionClassName);
-					if (extension == null) {
-						throw new AwkRuntimeException(
-								position.lineNumber(),
-								"Extension instance for class '" + extensionClassName
-										+ "' is not registered");
-					}
-					if (!(extension instanceof AbstractExtension)) {
-						throw new AwkRuntimeException(
-								position.lineNumber(),
-								"Extension instance for class '" + extensionClassName
-										+ "' does not extend "
-										+ AbstractExtension.class.getName());
-					}
-
-					Object retval = function.invoke((AbstractExtension) extension, args);
-
-					// block if necessary
-					// (convert retval into the return value
-					// from the block operation ...)
-					if (isInitial && retval != null && retval instanceof BlockObject) {
-						retval = new BlockManager().block((BlockObject) retval);
-					}
-					// (... and proceed)
-
-					if (retval == null) {
-						retval = "";
-					} else
-						if (!(retval instanceof Number
-								||
-								retval instanceof String
-								||
-								retval instanceof Map
-								||
-								retval instanceof BlockObject)) {
-									// all other extension results are converted
-									// to a string (via Object.toString())
-									retval = retval.toString();
-								}
-					push(retval);
+					push(
+							invokeExtension(
+									function,
+									popArguments(numArgs),
+									position.lineNumber(),
+									isInitial));
 
 					position.next();
 					break;
@@ -2796,12 +2820,223 @@ public class AVM implements VariableManager, Closeable {
 			push(jrt.jrtGetInputField(0).toString().length());
 			return;
 		}
-		Object value = pop();
-		if (value instanceof Map) {
-			push((long) ((Map<?, ?>) value).size());
-		} else {
-			push(jrt.toAwkString(value).length());
+		push(lengthOf(pop()));
+	}
+
+	private Object lengthOf(Object value) {
+		return value instanceof Map ?
+				Long.valueOf(((Map<?, ?>) value).size()) : Integer.valueOf(jrt.toAwkString(value).length());
+	}
+
+	private String normalizeIndirectFunctionName(String functionName) {
+		return functionName.startsWith("awk::") ? functionName.substring("awk::".length()) : functionName;
+	}
+
+	private void resolveIndirectArguments(
+			Object[] actualArgumentsParam,
+			IndirectFunctionTarget target) {
+		for (int index = 0; index < actualArgumentsParam.length; index++) {
+			actualArgumentsParam[index] = resolveIndirectArgument(
+					actualArgumentsParam[index],
+					target.isArrayParameter(index),
+					false);
 		}
+	}
+
+	private void resolveIndirectArguments(
+			Object[] actualArgumentsParam,
+			BuiltinFunction builtin) {
+		for (int index = 0; index < actualArgumentsParam.length; index++) {
+			boolean arrayArgument = builtin == BuiltinFunction.SPLIT && index == 1;
+			actualArgumentsParam[index] = resolveIndirectArgument(
+					actualArgumentsParam[index],
+					arrayArgument,
+					false);
+		}
+	}
+
+	private void resolveIndirectArguments(
+			Object[] actualArgumentsParam,
+			ExtensionFunction function) {
+		boolean[] arrayArguments = new boolean[actualArgumentsParam.length];
+		boolean[] rawValueArguments = new boolean[actualArgumentsParam.length];
+		for (int index : function.collectAssocArrayIndexes(actualArgumentsParam.length)) {
+			arrayArguments[index] = true;
+		}
+		for (int index : function.collectRawValueIndexes(actualArgumentsParam.length)) {
+			rawValueArguments[index] = true;
+		}
+		for (int index = 0; index < actualArgumentsParam.length; index++) {
+			actualArgumentsParam[index] = resolveIndirectArgument(
+					actualArgumentsParam[index],
+					arrayArguments[index],
+					rawValueArguments[index]);
+		}
+	}
+
+	private Object resolveIndirectArgument(
+			Object argument,
+			boolean arrayArgument,
+			boolean rawValueArgument) {
+		if (!(argument instanceof IndirectArgumentReference)) {
+			if (!(argument instanceof IndirectArrayArgumentReference)) {
+				return argument;
+			}
+			IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
+			return arrayArgument ?
+					ensureArrayInArray(reference.map, reference.key) : reference.scalarValue;
+		}
+		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
+		if (!arrayArgument) {
+			return reference.scalarValue == null && !rawValueArgument ? BLANK : reference.scalarValue;
+		}
+		Object value = runtimeStack.getVariable(reference.offset, reference.global);
+		if (value == null) {
+			value = newAwkArray();
+			runtimeStack.setVariable(reference.offset, value, reference.global);
+		}
+		return value;
+	}
+
+	private Object invokeIndirectBuiltin(
+			BuiltinFunction builtin,
+			Object[] args,
+			int lineNumber) {
+		switch (builtin) {
+		case ATAN2:
+			requireIndirectArgumentCount(builtin, args, 2, 2, lineNumber);
+			return Math.atan2(JRT.toDouble(args[0]), JRT.toDouble(args[1]));
+		case CLOSE:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return jrt.jrtClose(jrt.toAwkString(args[0]));
+		case COS:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return Math.cos(JRT.toDouble(args[0]));
+		case EXP:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return Math.exp(JRT.toDouble(args[0]));
+		case GSUB:
+		case SUB:
+			requireIndirectArgumentCount(builtin, args, 2, 2, lineNumber);
+			return substituteInputLine(
+					builtin == BuiltinFunction.GSUB,
+					args[0],
+					args[1]);
+		case INDEX:
+			requireIndirectArgumentCount(builtin, args, 2, 2, lineNumber);
+			return jrt.index(jrt.toAwkString(args[0]), jrt.toAwkString(args[1]));
+		case INT:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return Long.valueOf((long) JRT.toDouble(args[0]));
+		case LENGTH:
+			requireIndirectArgumentCount(builtin, args, 0, 1, lineNumber);
+			return args.length == 0 ? Integer.valueOf(jrt.jrtGetInputField(0).toString().length()) : lengthOf(args[0]);
+		case LOG:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return Math.log(JRT.toDouble(args[0]));
+		case MATCH:
+			requireIndirectArgumentCount(builtin, args, 2, 2, lineNumber);
+			return jrt.matchPosition(jrt.toAwkString(args[0]), jrt.toAwkString(args[1]));
+		case RAND:
+			requireIndirectArgumentCount(builtin, args, 0, 0, lineNumber);
+			return randomNumberGenerator.nextDouble();
+		case SIN:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return Math.sin(JRT.toDouble(args[0]));
+		case SPLIT:
+			requireIndirectArgumentCount(builtin, args, 2, 3, lineNumber);
+			return splitIntoArray(
+					args[0],
+					args[1],
+					args.length == 3 ? args[2] : jrt.getFSVar(),
+					lineNumber);
+		case SPRINTF:
+			requireIndirectArgumentCount(builtin, args, 1, Integer.MAX_VALUE, lineNumber);
+			return jrt
+					.getAwkSink()
+					.sprintf(
+							jrt.toAwkString(args[0]),
+							Arrays.copyOfRange(args, 1, args.length));
+		case SQRT:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return Math.sqrt(JRT.toDouble(args[0]));
+		case SRAND:
+			requireIndirectArgumentCount(builtin, args, 0, 1, lineNumber);
+			int seed = args.length == 0 ? JRT.timeSeed() : (int) JRT.toDouble(args[0]);
+			int previousSeed = randomNumberGenerator.getSeed();
+			randomNumberGenerator.setSeed(seed);
+			return Integer.valueOf(previousSeed);
+		case SUBSTR:
+			requireIndirectArgumentCount(builtin, args, 2, 3, lineNumber);
+			return substring(
+					args[0],
+					args[1],
+					args.length == 3 ? args[2] : null);
+		case SYSTEM:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return jrt.jrtSystem(jrt.toAwkString(args[0]));
+		case TOLOWER:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return jrt.toAwkString(args[0]).toLowerCase();
+		case TOUPPER:
+			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
+			return jrt.toAwkString(args[0]).toUpperCase();
+		default:
+			throw new AwkRuntimeException(
+					lineNumber,
+					"indirect calls are not implemented for builtin `" + builtin.getAwkName() + "'");
+		}
+	}
+
+	private void requireIndirectArgumentCount(
+			BuiltinFunction builtin,
+			Object[] args,
+			int minimum,
+			int maximum,
+			int lineNumber) {
+		if (args.length < minimum || args.length > maximum) {
+			String expected = minimum == maximum ? Integer.toString(minimum) : minimum + " to " + maximum;
+			throw new AwkRuntimeException(
+					lineNumber,
+					builtin.getAwkName() + " requires " + expected + " argument(s), not " + args.length);
+		}
+	}
+
+	private Object invokeExtension(
+			ExtensionFunction function,
+			Object[] args,
+			int lineNumber,
+			boolean blockResult) {
+		// Let extensions report diagnostics at the call location.
+		currentLineNumber = lineNumber;
+		String extensionClassName = function.getExtensionClassName();
+		JawkExtension extension = extensionInstances.get(extensionClassName);
+		if (extension == null) {
+			throw new AwkRuntimeException(
+					lineNumber,
+					"Extension instance for class '" + extensionClassName + "' is not registered");
+		}
+		if (!(extension instanceof AbstractExtension)) {
+			throw new AwkRuntimeException(
+					lineNumber,
+					"Extension instance for class '" + extensionClassName
+							+ "' does not extend "
+							+ AbstractExtension.class.getName());
+		}
+		Object result = function.invoke((AbstractExtension) extension, args);
+		if (blockResult && result instanceof BlockObject) {
+			result = new BlockManager().block((BlockObject) result);
+		}
+		if (result == null) {
+			return "";
+		}
+		if (result instanceof Number
+				|| result instanceof String
+				|| result instanceof Map
+				|| result instanceof BlockObject) {
+			return result;
+		}
+		return jrt.toAwkString(result);
 	}
 
 	private void execMatch() {
@@ -2811,13 +3046,19 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private void execSubForDollar0(BooleanTuple tuple) {
-		boolean isGsub = tuple.getValue();
-		String repl = jrt.toAwkString(pop());
-		String ere = jrt.toAwkString(pop());
+		Object replacement = pop();
+		Object ere = pop();
+		push(substituteInputLine(tuple.getValue(), ere, replacement));
+	}
+
+	private Object substituteInputLine(boolean global, Object ere, Object replacement) {
 		String orig = jrt.toAwkString(jrt.jrtGetInputField(0));
-		push(isGsub ? jrt.replaceAll(orig, repl, ere) : jrt.replaceFirst(orig, repl, ere));
+		Object replacements = global ?
+				jrt.replaceAll(orig, jrt.toAwkString(replacement), jrt.toAwkString(ere)) :
+				jrt.replaceFirst(orig, jrt.toAwkString(replacement), jrt.toAwkString(ere));
 		jrt.setInputLine(jrt.getReplaceResult());
 		jrt.jrtParseFields();
+		return replacements;
 	}
 
 	private void execSubForDollarReference(BooleanTuple tuple) {
@@ -2868,49 +3109,53 @@ public class AVM implements VariableManager, Closeable {
 		} else {
 			throw new Error("Invalid # of args. split() requires 2 or 3. Got: " + numArgs);
 		}
-		Object o = pop();
-		if (!(o instanceof Map)) {
-			throw new AwkRuntimeException(position.lineNumber(), o + " is not an array.");
-		}
-		String s = jrt.toAwkString(pop());
-		Enumeration<Object> tokenizer = jrt.splitTokenizer(s, fs);
+		Object target = pop();
+		Object source = pop();
+		push(splitIntoArray(source, target, fs, position.lineNumber()));
+	}
 
+	private Object splitIntoArray(Object source, Object target, Object separator, int lineNumber) {
+		if (!(target instanceof Map)) {
+			throw new AwkRuntimeException(lineNumber, target + " is not an array.");
+		}
+		Enumeration<Object> tokenizer = jrt.splitTokenizer(jrt.toAwkString(source), separator);
 		@SuppressWarnings("unchecked")
-		Map<Object, Object> assocArray = (Map<Object, Object>) o;
+		Map<Object, Object> assocArray = (Map<Object, Object>) target;
 		assocArray.clear();
 		long cnt = 0;
 		while (tokenizer.hasMoreElements()) {
 			Object value = tokenizer.nextElement();
 			assocArray.put(++cnt, jrt.toInputScalar(value));
 		}
-		push(cnt);
+		return Long.valueOf(cnt);
 	}
 
 	private void execSubstr(CountTuple tuple) {
 		long numArgs = tuple.getCount();
-		int startPos, length;
-		String s;
+		Object length = null;
 		if (numArgs == 3) {
-			length = (int) JRT.toLong(pop());
-			startPos = (int) JRT.toDouble(pop());
-			s = jrt.toAwkString(pop());
-		} else if (numArgs == 2) {
-			startPos = (int) JRT.toDouble(pop());
-			s = jrt.toAwkString(pop());
-			length = s.length() - startPos + 1;
-		} else {
+			length = pop();
+		} else if (numArgs != 2) {
 			throw new Error("numArgs for SUBSTR must be 2 or 3. It is " + numArgs);
 		}
+		Object start = pop();
+		Object value = pop();
+		push(substring(value, start, length));
+	}
+
+	private Object substring(Object value, Object start, Object requestedLength) {
+		String s = jrt.toAwkString(value);
+		int startPos = (int) JRT.toDouble(start);
+		int length = requestedLength == null ?
+				s.length() - startPos + 1 : (int) JRT.toLong(requestedLength);
 		if (startPos <= 0) {
 			startPos = 1;
 		}
 		if (length <= 0 || startPos > s.length()) {
-			push(BLANK);
-		} else if (startPos + length > s.length()) {
-			push(s.substring(startPos - 1));
-		} else {
-			push(s.substring(startPos - 1, startPos + length - 1));
+			return BLANK;
 		}
+		return startPos + length > s.length() ?
+				s.substring(startPos - 1) : s.substring(startPos - 1, startPos + length - 1);
 	}
 
 	private void execSetNumGlobals(CountTuple tuple) {
@@ -2999,9 +3244,8 @@ public class AVM implements VariableManager, Closeable {
 	 * SYMTAB is a gawk extension mirroring the symbol table: the script's
 	 * globals, the JRT-managed specials, and host-supplied variables that have
 	 * no compiled slot. The parser emits UPDATE_SYMTAB only when the script
-	 * references SYMTAB outside POSIX mode. Values are a snapshot taken before
-	 * execution; command-line name=value operand assignments update the array
-	 * live, as in gawk.
+	 * references SYMTAB outside POSIX mode. Declared globals and managed special
+	 * variables remain linked to their runtime values.
 	 */
 	private void execUpdateSymtab(long offset) {
 		symtabOffset = offset;
@@ -3009,7 +3253,7 @@ public class AVM implements VariableManager, Closeable {
 			// a host-supplied SYMTAB value wins
 			return;
 		}
-		Map<Object, Object> symtab = newAwkArray();
+		SymtabArray symtab = new SymtabArray();
 		for (String name : executionInitialVariables.keySet()) {
 			symtab.put(name, getVariable(name));
 		}
@@ -3025,7 +3269,210 @@ public class AVM implements VariableManager, Closeable {
 		for (String name : getSpecialVariableNames()) {
 			symtab.put(name, getVariable(name));
 		}
+		symtab.activate();
 		runtimeStack.setVariable(offset, symtab, true);
+	}
+
+	private final class SymtabArray extends java.util.AbstractMap<Object, Object> implements AssocArray {
+		private final Map<Object, Object> entries = newAwkArray();
+		private final Set<String> assignableNames = new HashSet<String>();
+		private boolean active;
+
+		private void activate() {
+			active = true;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object get(Object key) {
+			String name = key == null ? "" : key.toString();
+			if (active && !isMetaTableName(name) && isLiveSpecialVariable(name)) {
+				return getVariable(name);
+			}
+			Integer offset = globalVariableOffsets == null ? null : globalVariableOffsets.get(name);
+			if (active && !isMetaTableName(name) && offset != null) {
+				return runtimeStack.getVariable(offset.intValue(), true);
+			}
+			return entries.get(key);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean containsKey(Object key) {
+			String name = key == null ? "" : key.toString();
+			return active
+					&& !isMetaTableName(name)
+					&& (isLiveSpecialVariable(name)
+							|| (globalVariableOffsets != null && globalVariableOffsets.containsKey(name)))
+					|| entries.containsKey(key);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object put(Object key, Object value) {
+			String name = key == null ? "" : key.toString();
+			if (!active) {
+				if (key != null) {
+					assignableNames.add(name);
+				}
+				return entries.put(key, value);
+			}
+			if (!assignableNames.contains(name)) {
+				throw new AwkRuntimeException("Cannot assign to an arbitrary element of SYMTAB.");
+			}
+			validateGlobalType(name, value);
+			Object previous = entries.put(key, value);
+			if (isMetaTableName(name)) {
+				return previous;
+			}
+			if (applyLiveSpecialVariable(name, value)) {
+				return previous;
+			}
+			Integer offset = globalVariableOffsets == null ? null : globalVariableOffsets.get(name);
+			if (offset != null) {
+				runtimeStack.setVariable(offset.intValue(), value, true);
+			}
+			return previous;
+		}
+
+		private Object putRuntimeVariable(String name, Object value) {
+			assignableNames.add(name);
+			return put(name, value);
+		}
+
+		private boolean applyLiveSpecialVariable(String name, Object value) {
+			if ("ARGC".equals(name)) {
+				if (argcOffset == NULL_OFFSET) {
+					throw new AwkRuntimeException("ARGC is read-only (not materialized).");
+				}
+				runtimeStack.setVariable(argcOffset, value, true);
+				return true;
+			}
+			if ("RSTART".equals(name)) {
+				jrt.setRSTART(value);
+				return true;
+			}
+			if ("RLENGTH".equals(name)) {
+				jrt.setRLENGTH(value);
+				return true;
+			}
+			return isManagedSpecialVariable(name) && jrt.applySpecialVariable(name, value);
+		}
+
+		private boolean isLiveSpecialVariable(String name) {
+			return isManagedSpecialVariable(name)
+					|| "RSTART".equals(name)
+					|| "RLENGTH".equals(name);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object remove(Object key) {
+			if (active) {
+				throw new AwkRuntimeException("Cannot delete an element from SYMTAB.");
+			}
+			return entries.remove(key);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void clear() {
+			if (active) {
+				throw new AwkRuntimeException("Cannot delete SYMTAB.");
+			}
+			entries.clear();
+		}
+
+		private void validateGlobalType(String name, Object value) {
+			Boolean array = globalVariableArrays == null ? null : globalVariableArrays.get(name);
+			if (Boolean.TRUE.equals(array) && !(value instanceof Map)) {
+				throw new AwkRuntimeException(
+						"Attempting to use array `" + name + "' in a scalar context.");
+			}
+			if (Boolean.FALSE.equals(array) && value instanceof Map) {
+				throw new AwkRuntimeException(
+						"Attempting to use scalar `" + name + "' as an array.");
+			}
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Set<Map.Entry<Object, Object>> entrySet() {
+			return new AbstractSet<Map.Entry<Object, Object>>() {
+
+				@Override
+				public Iterator<Map.Entry<Object, Object>> iterator() {
+					final Iterator<Map.Entry<Object, Object>> iterator = entries.entrySet().iterator();
+					return new Iterator<Map.Entry<Object, Object>>() {
+
+						@Override
+						public boolean hasNext() {
+							return iterator.hasNext();
+						}
+
+						@Override
+						public Map.Entry<Object, Object> next() {
+							return new LiveSymtabEntry(iterator.next().getKey());
+						}
+
+						@Override
+						public void remove() {
+							if (active) {
+								throw new AwkRuntimeException("Cannot delete an element from SYMTAB.");
+							}
+							iterator.remove();
+						}
+					};
+				}
+
+				@Override
+				public int size() {
+					return entries.size();
+				}
+			};
+		}
+
+		private boolean isMetaTableName(String name) {
+			return "SYMTAB".equals(name) || "FUNCTAB".equals(name);
+		}
+
+		private final class LiveSymtabEntry implements Map.Entry<Object, Object> {
+
+			private final Object key;
+
+			private LiveSymtabEntry(Object key) {
+				this.key = key;
+			}
+
+			@Override
+			public Object getKey() {
+				return key;
+			}
+
+			@Override
+			public Object getValue() {
+				return SymtabArray.this.get(key);
+			}
+
+			@Override
+			public Object setValue(Object value) {
+				return SymtabArray.this.put(key, value);
+			}
+
+			@Override
+			public boolean equals(Object obj) {
+				if (!(obj instanceof Map.Entry)) {
+					return false;
+				}
+				Map.Entry<?, ?> other = (Map.Entry<?, ?>) obj;
+				return Objects.equals(key, other.getKey()) && Objects.equals(getValue(), other.getValue());
+			}
+
+			@Override
+			public int hashCode() {
+				return Objects.hashCode(key) ^ Objects.hashCode(getValue());
+			}
+		}
 	}
 
 	/*
@@ -3053,7 +3500,57 @@ public class AVM implements VariableManager, Closeable {
 				}
 			}
 		}
-		runtimeStack.setVariable(offset, functab, true);
+		runtimeStack.setVariable(offset, new ReadOnlyArray("FUNCTAB", functab), true);
+	}
+
+	private static final class ReadOnlyArray extends java.util.AbstractMap<Object, Object> implements AssocArray {
+		private final String name;
+		private final Map<Object, Object> entries;
+
+		private ReadOnlyArray(String nameParam, Map<Object, Object> entriesParam) {
+			name = nameParam;
+			entries = entriesParam;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object get(Object key) {
+			return JRT.containsAwkKey(entries, key) ? entries.get(key) : BLANK;
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public boolean containsKey(Object key) {
+			return JRT.containsAwkKey(entries, key);
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Set<Map.Entry<Object, Object>> entrySet() {
+			return Collections.unmodifiableMap(entries).entrySet();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object put(Object key, Object value) {
+			throw readOnlyError();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public Object remove(Object key) {
+			throw readOnlyError();
+		}
+
+		/** {@inheritDoc} */
+		@Override
+		public void clear() {
+			throw readOnlyError();
+		}
+
+		private AwkRuntimeException readOnlyError() {
+			return new AwkRuntimeException(name + " is read-only.");
+		}
 	}
 
 	/** Reflects a command-line variable assignment into a materialized SYMTAB. */
@@ -3062,7 +3559,9 @@ public class AVM implements VariableManager, Closeable {
 			return;
 		}
 		Object symtab = runtimeStack.getVariable(symtabOffset, true);
-		if (symtab instanceof Map) {
+		if (symtab instanceof SymtabArray) {
+			((SymtabArray) symtab).putRuntimeVariable(name, value);
+		} else if (symtab instanceof Map) {
 			@SuppressWarnings("unchecked")
 			Map<Object, Object> symtabMap = (Map<Object, Object>) symtab;
 			symtabMap.put(name, value);
@@ -3758,12 +4257,48 @@ public class AVM implements VariableManager, Closeable {
 
 	private static final UninitializedObject BLANK = new UninitializedObject();
 
+	private static final class IndirectArgumentReference {
+		private final long offset;
+		private final boolean global;
+		private final Object scalarValue;
+
+		private IndirectArgumentReference(long offsetParam, boolean globalParam, Object scalarValueParam) {
+			offset = offsetParam;
+			global = globalParam;
+			scalarValue = scalarValueParam;
+		}
+	}
+
+	private static final class IndirectArrayArgumentReference {
+		private final Map<Object, Object> map;
+		private final Object key;
+		private final Object scalarValue;
+
+		private IndirectArrayArgumentReference(
+				Map<Object, Object> mapParam,
+				Object keyParam,
+				Object scalarValueParam) {
+			map = mapParam;
+			key = keyParam;
+			scalarValue = scalarValueParam;
+		}
+	}
+
 	/**
 	 * Global names that must not participate in persistent memory even though they
 	 * are technically user-visible variables.
 	 */
 	private static final Set<String> NON_PERSISTENT_GLOBALS = new HashSet<>(
-			Arrays.asList("ARGV", "ARGC", "ENVIRON", "RSTART", "RLENGTH", "IGNORECASE"));
+			Arrays
+					.asList(
+							"ARGV",
+							"ARGC",
+							"ENVIRON",
+							"RSTART",
+							"RLENGTH",
+							"IGNORECASE",
+							"SYMTAB",
+							"FUNCTAB"));
 
 	private static final class SingleRecordInputSource implements InputSource {
 

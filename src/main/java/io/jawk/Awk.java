@@ -496,7 +496,10 @@ public class Awk {
 		lastAst = null;
 		if (!scripts.isEmpty()) {
 			// Parse all script sources into a single AST
-			AwkParser parser = new AwkParser(this.extensionFunctions, settings.isPosix());
+			AwkParser parser = new AwkParser(
+					this.extensionFunctions,
+					settings.isPosix(),
+					isSourceIncludeAllowed());
 			AstNode ast = parser.parse(scripts);
 			lastAst = ast;
 			if (ast != null) {
@@ -519,6 +522,15 @@ public class Awk {
 		tuples.freezeMetadata();
 
 		return tuples;
+	}
+
+	/**
+	 * Returns whether scripts compiled by this engine may use {@code @include}.
+	 *
+	 * @return {@code true} for the standard engine
+	 */
+	protected boolean isSourceIncludeAllowed() {
+		return true;
 	}
 
 	/**

@@ -26,8 +26,15 @@ import java.io.File;
 import java.io.IOException;
 import java.io.LineNumberReader;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
+import io.jawk.AwkSandboxException;
 import io.jawk.NotImplementedError;
 import io.jawk.backend.AVM;
 import io.jawk.ext.ExtensionFunction;
@@ -42,6 +50,8 @@ import io.jawk.intermediate.Address;
 import io.jawk.intermediate.AwkTuples;
 import io.jawk.intermediate.BuiltinFunction;
 import io.jawk.jrt.JRT;
+import io.jawk.intermediate.Tuple;
+import io.jawk.util.ScriptFileSource;
 import io.jawk.util.ScriptSource;
 import io.jawk.frontend.ast.LexerException;
 import io.jawk.frontend.ast.ParserException;
@@ -129,6 +139,10 @@ public class AwkParser {
 
 		EXTENSION,
 		TYPED_REGEXP,
+		INDIRECT,
+		DIRECTIVE_INCLUDE,
+		DIRECTIVE_NAMESPACE,
+		DIRECTIVE_UNSUPPORTED,
 
 		KW_FUNCTION,
 		KW_BEGIN,
@@ -244,6 +258,9 @@ public class AwkParser {
 	/** POSIX compile-time mode: rejects gawk syntax such as arrays of arrays and typed regexps. */
 	private final boolean posix;
 
+	/** Whether the compiling engine permits source inclusion from the filesystem. */
+	private final boolean sourceIncludeAllowed;
+
 	/**
 	 * <p>
 	 * Constructor for AwkParser.
@@ -253,8 +270,24 @@ public class AwkParser {
 	 * @param posix {@code true} to enforce POSIX compile-time behavior
 	 */
 	public AwkParser(Map<String, ExtensionFunction> extensions, boolean posix) {
-		this.extensions = extensions == null ? Collections.emptyMap() : new HashMap<>(extensions);
+		this(extensions, posix, true);
+	}
+
+	/**
+	 * Creates a parser with an explicit source-inclusion policy.
+	 *
+	 * @param extensions extension functions available during parsing
+	 * @param posix {@code true} to enforce POSIX compile-time behavior
+	 * @param sourceIncludeAllowed {@code true} to permit {@code @include}
+	 */
+	public AwkParser(
+			Map<String, ExtensionFunction> extensions,
+			boolean posix,
+			boolean sourceIncludeAllowed) {
+		this.extensions = extensions == null ?
+				Collections.emptyMap() : Collections.unmodifiableMap(new HashMap<>(extensions));
 		this.posix = posix;
+		this.sourceIncludeAllowed = sourceIncludeAllowed;
 	}
 
 	/**
@@ -270,15 +303,76 @@ public class AwkParser {
 		return posix && (keywordToken == Token.KW_BEGINFILE || keywordToken == Token.KW_ENDFILE);
 	}
 
+	private boolean isAwkNamespaceIdentifier(String identifier) {
+		int separator = identifier.indexOf("::");
+		if (separator >= 0) {
+			return "awk".equals(identifier.substring(0, separator));
+		}
+		return "awk".equals(currentNamespace);
+	}
+
+	private String awkNamespaceComponent(String identifier) {
+		return identifier.startsWith("awk::") ? identifier.substring("awk::".length()) : identifier;
+	}
+
+	private String qualifyGlobalIdentifier(String identifier) {
+		int separator = identifier.indexOf("::");
+		if (separator >= 0) {
+			return "awk".equals(identifier.substring(0, separator)) ? identifier.substring(separator + 2) : identifier;
+		}
+		if ("awk".equals(currentNamespace) || isAllUppercaseIdentifier(identifier)) {
+			return identifier;
+		}
+		return currentNamespace + "::" + identifier;
+	}
+
+	private boolean isAllUppercaseIdentifier(String identifier) {
+		if (identifier.isEmpty()) {
+			return false;
+		}
+		for (int i = 0; i < identifier.length(); i++) {
+			char ch = identifier.charAt(i);
+			if (ch < 'A' || ch > 'Z') {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	private List<ScriptSource> scriptSources;
 	private int scriptSourcesCurrentIndex;
+	private ScriptSource currentScriptSource;
 	private LineNumberReader reader;
 	private int c;
 	private Token token;
+	private String pendingIndirectIdentifier;
+	private boolean pendingColon;
+	private String currentNamespace = "awk";
+	private final Deque<SourceState> includedSourceStack = new ArrayDeque<SourceState>();
+	private final Set<Path> includedSourcePaths = new HashSet<Path>();
+	private final Set<Path> topLevelSourcePaths = new HashSet<Path>();
 
 	private StringBuffer text = new StringBuffer();
 	private StringBuffer string = new StringBuffer();
 	private StringBuffer regexp = new StringBuffer();
+
+	private static final class SourceState {
+		private final ScriptSource scriptSource;
+		private final LineNumberReader reader;
+		private final int currentCharacter;
+		private final String namespace;
+
+		private SourceState(
+				ScriptSource scriptSourceParam,
+				LineNumberReader readerParam,
+				int currentCharacterParam,
+				String namespaceParam) {
+			scriptSource = scriptSourceParam;
+			reader = readerParam;
+			currentCharacter = currentCharacterParam;
+			namespace = namespaceParam;
+		}
+	}
 
 	private void read() throws IOException {
 		text.append((char) c);
@@ -287,10 +381,40 @@ public class AwkParser {
 		while (c == '\r') {
 			c = reader.read();
 		}
-		if (c < 0 && (scriptSourcesCurrentIndex + 1) < scriptSources.size()) {
-			scriptSourcesCurrentIndex++;
-			reader = new LineNumberReader(scriptSources.get(scriptSourcesCurrentIndex).getReader());
-			read();
+	}
+
+	/**
+	 * Advances to the next readable source at a token boundary when the current
+	 * reader has reached end-of-file. Deferring this transition until the current
+	 * token is complete preserves the source and namespace used to classify its
+	 * final token. Included files are unwound first in LIFO order, restoring the
+	 * including reader, its unread character, and its namespace. Once the include
+	 * stack is empty, parsing continues with the next top-level script source,
+	 * whose namespace starts at {@code awk}.
+	 *
+	 * @throws IOException if a source cannot be closed or read
+	 */
+	private void advancePastEndOfSource() throws IOException {
+		while (c < 0) {
+			if (!includedSourceStack.isEmpty()) {
+				reader.close();
+				SourceState previous = includedSourceStack.pop();
+				currentScriptSource = previous.scriptSource;
+				reader = previous.reader;
+				c = previous.currentCharacter;
+				currentNamespace = previous.namespace;
+			} else if ((scriptSourcesCurrentIndex + 1) < scriptSources.size()) {
+				scriptSourcesCurrentIndex++;
+				currentScriptSource = scriptSources.get(scriptSourcesCurrentIndex);
+				reader = new LineNumberReader(currentScriptSource.getReader());
+				currentNamespace = "awk";
+				c = reader.read();
+				while (c == '\r') {
+					c = reader.read();
+				}
+			} else {
+				return;
+			}
 		}
 	}
 
@@ -324,7 +448,13 @@ public class AwkParser {
 		}
 		this.scriptSources = Collections.unmodifiableList(new ArrayList<>(localScriptSources));
 		scriptSourcesCurrentIndex = 0;
-		reader = new LineNumberReader(this.scriptSources.get(scriptSourcesCurrentIndex).getReader());
+		currentScriptSource = this.scriptSources.get(scriptSourcesCurrentIndex);
+		reader = new LineNumberReader(currentScriptSource.getReader());
+		currentNamespace = "awk";
+		includedSourceStack.clear();
+		resetIncludedSourcePaths();
+		pendingIndirectIdentifier = null;
+		pendingColon = false;
 		read();
 		lexer();
 		return SCRIPT();
@@ -347,7 +477,13 @@ public class AwkParser {
 		// Reader of the expression
 		this.scriptSources = Collections.singletonList(expressionSource);
 		scriptSourcesCurrentIndex = 0;
-		reader = new LineNumberReader(this.scriptSources.get(scriptSourcesCurrentIndex).getReader());
+		currentScriptSource = expressionSource;
+		reader = new LineNumberReader(currentScriptSource.getReader());
+		currentNamespace = "awk";
+		includedSourceStack.clear();
+		resetIncludedSourcePaths();
+		pendingIndirectIdentifier = null;
+		pendingColon = false;
 
 		// Initialize the lexer
 		read();
@@ -357,10 +493,23 @@ public class AwkParser {
 		return EXPRESSION_TO_EVALUATE();
 	}
 
+	private void resetIncludedSourcePaths() throws IOException {
+		includedSourcePaths.clear();
+		topLevelSourcePaths.clear();
+		for (ScriptSource source : scriptSources) {
+			if (source instanceof ScriptFileSource) {
+				String filePath = ((ScriptFileSource) source).getFilePath();
+				Path sourcePath = Paths.get(filePath).toRealPath();
+				includedSourcePaths.add(sourcePath);
+				topLevelSourcePaths.add(sourcePath);
+			}
+		}
+	}
+
 	private LexerException lexerException(String msg) {
 		return new LexerException(
 				msg,
-				scriptSources.get(scriptSourcesCurrentIndex).getDescription(),
+				currentScriptSource.getDescription(),
 				reader.getLineNumber());
 	}
 
@@ -553,7 +702,11 @@ public class AwkParser {
 
 	private Token lexer() throws IOException {
 		// clear whitespace
-		while (c >= 0 && (c == ' ' || c == '\t' || c == '#' || c == '\\')) {
+		while (true) {
+			advancePastEndOfSource();
+			if (c < 0 || c != ' ' && c != '\t' && c != '#' && c != '\\') {
+				break;
+			}
 			if (c == '\\') {
 				read();
 				if (c == '\n') {
@@ -571,6 +724,17 @@ public class AwkParser {
 			}
 		}
 		text.setLength(0);
+		if (pendingColon) {
+			pendingColon = false;
+			token = Token.COLON;
+			return token;
+		}
+		if (pendingIndirectIdentifier != null) {
+			text.append(pendingIndirectIdentifier);
+			pendingIndirectIdentifier = null;
+			token = Token.ID;
+			return token;
+		}
 		if (c < 0) {
 			token = Token.EOF;
 			return token;
@@ -619,15 +783,52 @@ public class AwkParser {
 		}
 		if (c == '@') {
 			if (posix) {
-				throw lexerException("Typed regular expressions are not supported in POSIX mode.");
+				throw lexerException("gawk @ syntax is not supported in POSIX mode.");
 			}
 			read();
-			if (c != '/') {
-				throw lexerException("Invalid character (64): @");
+			if (c == '/') {
+				read();
+				readRegexp();
+				token = Token.TYPED_REGEXP;
+				return token;
 			}
-			read();
-			readRegexp();
-			token = Token.TYPED_REGEXP;
+			if (Character.isJavaIdentifierStart(c)) {
+				while (Character.isJavaIdentifierPart(c)) {
+					read();
+				}
+				if (c == ':') {
+					read();
+					if (c != ':') {
+						throw lexerException("Namespace separator must be two colons (::).");
+					}
+					read();
+					if (!Character.isJavaIdentifierStart(c)) {
+						throw lexerException("A namespace-qualified name requires an identifier after ::.");
+					}
+					read();
+					while (Character.isJavaIdentifierPart(c)) {
+						read();
+					}
+				}
+				String atWord = text.toString();
+				if ("@include".equals(atWord)) {
+					token = Token.DIRECTIVE_INCLUDE;
+					return token;
+				}
+				if ("@namespace".equals(atWord)) {
+					token = Token.DIRECTIVE_NAMESPACE;
+					return token;
+				}
+				if ("@load".equals(atWord)) {
+					token = Token.DIRECTIVE_UNSUPPORTED;
+					return token;
+				}
+				pendingIndirectIdentifier = atWord.substring(1);
+				validateIndirectIdentifier(pendingIndirectIdentifier);
+				token = Token.INDIRECT;
+				return token;
+			}
+			token = Token.INDIRECT;
 			return token;
 		}
 		if (c == '~') {
@@ -838,22 +1039,68 @@ public class AwkParser {
 			while (Character.isJavaIdentifierPart(c)) {
 				read();
 			}
+			if (c == ':') {
+				read();
+				if (c != ':') {
+					text.setLength(text.length() - 1);
+					pendingColon = true;
+				} else {
+					if (posix) {
+						throw lexerException("gawk namespace syntax is not supported in POSIX mode.");
+					}
+					read();
+					if (!Character.isJavaIdentifierStart(c)) {
+						throw lexerException("A namespace-qualified name requires an identifier after ::.");
+					}
+					read();
+					while (Character.isJavaIdentifierPart(c)) {
+						read();
+					}
+					if (c == ':') {
+						read();
+						if (c == ':') {
+							throw lexerException("A namespace-qualified name may contain only one :: separator.");
+						}
+						text.setLength(text.length() - 1);
+						pendingColon = true;
+					}
+				}
+			}
 			// check for certain keywords
 			// extensions override built-in stuff
-			if (extensions.get(text.toString()) != null) {
+			String sourceIdentifier = text.toString();
+			int namespaceSeparator = sourceIdentifier.indexOf("::");
+			if (namespaceSeparator >= 0) {
+				String namespaceComponent = sourceIdentifier.substring(namespaceSeparator + 2);
+				if (KEYWORDS.containsKey(namespaceComponent)
+						|| BuiltinFunction.of(namespaceComponent) != null) {
+					throw lexerException(
+							"Reserved word cannot be used after a namespace separator: "
+									+ sourceIdentifier);
+				}
+			}
+			String lookupIdentifier = awkNamespaceComponent(sourceIdentifier);
+			boolean awkNamespaceIdentifier = isAwkNamespaceIdentifier(sourceIdentifier);
+			boolean unqualifiedIdentifier = namespaceSeparator < 0;
+			if (awkNamespaceIdentifier && extensions.get(lookupIdentifier) != null) {
+				text.setLength(0);
+				text.append(lookupIdentifier);
 				token = Token.EXTENSION;
 				return token;
 			}
-			Token kwToken = KEYWORDS.get(text.toString());
+			Token kwToken = KEYWORDS.get(sourceIdentifier);
 			if (kwToken != null && !isDisabledKeyword(kwToken)) {
 				token = kwToken;
 				return token;
 			}
-			if (BuiltinFunction.of(text.toString()) != null) {
+			if ((unqualifiedIdentifier || awkNamespaceIdentifier)
+					&& BuiltinFunction.of(lookupIdentifier) != null) {
+				text.setLength(0);
+				text.append(lookupIdentifier);
 				token = Token.BUILTIN_FUNC_NAME;
 				return token;
 			}
-			if (c == '(') {
+			if (c == '(' && !pendingColon) {
 				token = Token.FUNC_ID;
 				return token;
 			} else {
@@ -977,7 +1224,15 @@ public class AwkParser {
 	AST RULE_LIST() throws IOException {
 		optNewline();
 		AST ruleOrFunction = null;
-		if (token == Token.KW_FUNCTION) {
+		if (token == Token.DIRECTIVE_INCLUDE) {
+			INCLUDE_DIRECTIVE();
+			return RULE_LIST();
+		} else if (token == Token.DIRECTIVE_NAMESPACE) {
+			NAMESPACE_DIRECTIVE();
+			return RULE_LIST();
+		} else if (token == Token.DIRECTIVE_UNSUPPORTED) {
+			throw parserException("Unsupported gawk directive: " + text);
+		} else if (token == Token.KW_FUNCTION) {
 			ruleOrFunction = FUNCTION();
 		} else if (token != Token.EOF) {
 			ruleOrFunction = RULE();
@@ -988,12 +1243,144 @@ public class AwkParser {
 		return new RuleListAst(ruleOrFunction, RULE_LIST());
 	}
 
+	private void NAMESPACE_DIRECTIVE() throws IOException {
+		lexer();
+		if (token != Token.STRING) {
+			throw parserException("@namespace requires a quoted namespace name.");
+		}
+		String namespace = string.toString();
+		validateNamespace(namespace);
+		currentNamespace = namespace;
+		lexer();
+		terminator();
+	}
+
+	private void INCLUDE_DIRECTIVE() throws IOException {
+		lexer();
+		if (token != Token.STRING) {
+			throw parserException("@include requires a quoted file name.");
+		}
+		if (!sourceIncludeAllowed) {
+			throw new AwkSandboxException("@include is disabled in sandbox mode");
+		}
+		String includeName = string.toString();
+		boolean includeTerminatedByEndOfSource = validateIncludeTerminator();
+		Path includePath = resolveIncludePath(includeName);
+		if (topLevelSourcePaths.contains(includePath)) {
+			throw parserException(
+					"Cannot include a top-level program source: " + includeName);
+		}
+		if (!includedSourcePaths.add(includePath)) {
+			lexer();
+			if (!includeTerminatedByEndOfSource) {
+				terminator();
+			}
+			return;
+		}
+		includedSourceStack.push(new SourceState(currentScriptSource, reader, c, currentNamespace));
+		currentScriptSource = new ScriptSource(
+				includePath.toString(),
+				Files.newBufferedReader(includePath, StandardCharsets.UTF_8));
+		reader = new LineNumberReader(currentScriptSource.getReader());
+		currentNamespace = "awk";
+		c = reader.read();
+		while (c == '\r') {
+			c = reader.read();
+		}
+		advancePastEndOfSource();
+		lexer();
+	}
+
+	private boolean validateIncludeTerminator() throws IOException {
+		while (c == ' ' || c == '\t') {
+			read();
+		}
+		if (c == '#') {
+			while (c >= 0 && c != '\n') {
+				read();
+			}
+		}
+		if (c >= 0 && c != '\n' && c != ';') {
+			throw parserException("@include must be followed by a newline, semicolon, or end of file.");
+		}
+		return c < 0;
+	}
+
+	private void validateNamespace(String namespace) {
+		if (namespace == null
+				|| namespace.isEmpty()
+				|| !Character.isJavaIdentifierStart(namespace.charAt(0))) {
+			throw parserException("Invalid gawk namespace name: " + namespace);
+		}
+		for (int i = 1; i < namespace.length(); i++) {
+			if (!Character.isJavaIdentifierPart(namespace.charAt(i))) {
+				throw parserException("Invalid gawk namespace name: " + namespace);
+			}
+		}
+		if (KEYWORDS.containsKey(namespace)
+				|| BuiltinFunction.of(namespace) != null
+				|| extensions.containsKey(namespace)) {
+			throw parserException("Reserved identifier cannot be used as a gawk namespace: " + namespace);
+		}
+	}
+
+	private void validateIndirectIdentifier(String identifier) throws LexerException {
+		int separator = identifier.indexOf("::");
+		String namespace = separator < 0 ? "awk" : identifier.substring(0, separator);
+		String component = separator < 0 ? identifier : identifier.substring(separator + 2);
+		if (KEYWORDS.containsKey(component)
+				|| BuiltinFunction.of(component) != null
+				|| ("awk".equals(namespace) && extensions.containsKey(component))) {
+			throw lexerException("Reserved identifier cannot be used as an indirect-call selector: " + identifier);
+		}
+	}
+
+	private Path resolveIncludePath(String includeName) {
+		Path requested = Paths.get(includeName);
+		List<Path> candidates = new ArrayList<Path>();
+		if (requested.isAbsolute()) {
+			candidates.add(requested);
+		} else {
+			if (!ScriptSource.DESCRIPTION_COMMAND_LINE_SCRIPT.equals(currentScriptSource.getDescription())) {
+				try {
+					Path sourcePath = Paths.get(currentScriptSource.getDescription());
+					Path parent = sourcePath.toAbsolutePath().normalize().getParent();
+					if (parent != null) {
+						candidates.add(parent.resolve(requested));
+					}
+				} catch (InvalidPathException ignored) {
+					// Reader-backed ScriptSource values may use a descriptive
+					// label rather than a file path.
+				}
+			}
+			String awkPath = System.getenv("AWKPATH");
+			if (awkPath != null) {
+				for (String entry : awkPath.split(java.util.regex.Pattern.quote(File.pathSeparator), -1)) {
+					candidates.add(Paths.get(entry.isEmpty() ? "." : entry).resolve(requested));
+				}
+			}
+			candidates.add(requested);
+		}
+		for (Path candidate : candidates) {
+			Path normalized = candidate.toAbsolutePath().normalize();
+			if (Files.isRegularFile(normalized)) {
+				try {
+					return normalized.toRealPath();
+				} catch (IOException ignored) {
+					// The candidate may have disappeared between the existence
+					// check and canonicalization; continue searching AWKPATH.
+				}
+			}
+		}
+		throw parserException("Cannot find @include file: " + includeName);
+	}
+
 	// FUNCTION: function functionName( [FORMAL_PARAM_LIST] ) STATEMENT_LIST
 	AST FUNCTION() throws IOException {
 		expectKeyword("function");
 		String functionName;
 		if (token == Token.FUNC_ID || token == Token.ID) {
-			functionName = text.toString();
+			functionName = qualifyGlobalIdentifier(text.toString());
 			lexer();
 		} else {
 			throw parserException("Expecting function name. Got " + token.name() + ": " + text);
@@ -1497,6 +1884,8 @@ public class AwkParser {
 			AST str = symbolTable.addSTRING(string.toString());
 			lexer();
 			return str;
+		} else if (token == Token.INDIRECT) {
+			return INDIRECT_FUNCTION_CALL(allowInKeyword);
 		} else if (token == Token.TYPED_REGEXP) {
 			AST regexpAst = symbolTable.addTYPED_REGEXP(regexp.toString());
 			lexer();
@@ -1525,6 +1914,19 @@ public class AwkParser {
 			}
 			return SYMBOL(allowComparison, allowInKeyword);
 		}
+	}
+
+	private AST INDIRECT_FUNCTION_CALL(boolean allowInKeyword) throws IOException {
+		lexer();
+		if (token != Token.ID) {
+			throw parserException("An indirect function call requires a variable name after @.");
+		}
+		AST functionNameAst = symbolTable.getID(text.toString());
+		lexer();
+		lexer(Token.OPEN_PAREN);
+		AST params = token == Token.CLOSE_PAREN ? null : EXPRESSION_LIST(true, allowInKeyword);
+		lexer(Token.CLOSE_PAREN);
+		return new IndirectFunctionCallAst(functionNameAst, params);
 	}
 
 	// SYMBOL : Token.ID [ '(' params ')' | '[' ASSIGNMENT_EXPRESSION ']' ]
@@ -2288,6 +2690,28 @@ public class AwkParser {
 		valueAst.populateTuples(tuples);
 	}
 
+	private int populateIndirectActualParameters(
+			AwkTuples tuples,
+			FunctionCallParamListAst params) {
+		if (params == null) {
+			return 0;
+		}
+		AST argument = params.getAst1();
+		if (argument instanceof IDAst
+				&& !isJrtManagedSpecialName(((IDAst) argument).id)) {
+			IDAst idAst = (IDAst) argument;
+			tuples.pushIndirectArgument(idAst.offset, idAst.isGlobal);
+		} else if (argument instanceof ArrayReferenceAst) {
+			((ArrayReferenceAst) argument).populateTargetReferenceTuples(tuples);
+			tuples.pushIndirectArrayArgument();
+		} else {
+			argument.populateTuples(tuples);
+		}
+		return 1 + populateIndirectActualParameters(
+				tuples,
+				(FunctionCallParamListAst) params.getAst2());
+	}
+
 	private Set<Integer> collectArrayParameterIndexes(FunctionDefAst functionDefAst) {
 		Set<Integer> arrayIndexes = new HashSet<Integer>();
 		FunctionDefParamListAst fPtr = (FunctionDefParamListAst) functionDefAst.getAst1();
@@ -2308,7 +2732,7 @@ public class AwkParser {
 	// AST class defs
 	private abstract class AST extends AstNode {
 
-		private final String sourceDescription = scriptSources.get(scriptSourcesCurrentIndex).getDescription();
+		private final String sourceDescription = currentScriptSource.getDescription();
 		// PositionTracker consumes these tuple-emitted source lines at runtime, but
 		// AST nodes have to capture them here during parsing before tuples exist.
 		private final int lineNo;
@@ -4255,6 +4679,31 @@ public class AwkParser {
 
 	}
 
+	private final class IndirectFunctionCallAst extends ScalarExpressionAst {
+
+		private IndirectFunctionCallAst(AST functionNameAst, AST params) {
+			super(functionNameAst, params);
+		}
+
+		@Override
+		public int populateTuples(AwkTuples tuples) {
+			pushSourceLineNumber(tuples);
+			getAst1().populateTuples(tuples);
+			int actualParamCount = populateIndirectActualParameters(
+					tuples,
+					(FunctionCallParamListAst) getAst2());
+			tuples
+					.indirectCall(
+							symbolTable.indirectFunctionTargets(),
+							extensions,
+							actualParamCount,
+							sourceBasename(),
+							getLineNo());
+			popSourceLineNumber(tuples);
+			return 1;
+		}
+	}
+
 	private final class BuiltinFunctionCallAst extends ScalarExpressionAst {
 
 		private final String id;
@@ -5873,6 +6322,7 @@ public class AwkParser {
 
 		// functions (proxies)
 		private Map<String, FunctionProxy> functionProxies = new HashMap<String, FunctionProxy>();
+		private Map<String, Tuple.IndirectFunctionTarget> cachedIndirectFunctionTargets;
 
 		// variable management
 		private Map<String, IDAst> globalIds = new HashMap<String, IDAst>();
@@ -5930,12 +6380,7 @@ public class AwkParser {
 		}
 
 		private IDAst getID(String id) {
-			if (functionProxies.get(id) != null) {
-				throw parserException("cannot use " + id + " as a variable; it is a function");
-			}
-
-			// put in the pool of ids to guard against using it as a function name
-			ids.add(id);
+			id = resolveVariableIdentifier(id);
 
 			Map<String, IDAst> map;
 			if (currentFunctionName == null) {
@@ -5955,6 +6400,15 @@ public class AwkParser {
 					map = globalIds;
 				}
 			}
+			if (map == globalIds) {
+				// Only global variables share the namespace with function names.
+				// Formal parameters may legitimately have the same name as an
+				// unrelated function.
+				if (functionProxies.get(id) != null) {
+					throw parserException("cannot use " + id + " as a variable; it is a function");
+				}
+				ids.add(id);
+			}
 			IDAst idAst = map.get(id);
 			if (idAst == null) {
 				idAst = new IDAst(id, map == globalIds);
@@ -5967,6 +6421,16 @@ public class AwkParser {
 				map.put(id, idAst);
 			}
 			return idAst;
+		}
+
+		private String resolveVariableIdentifier(String id) {
+			if (currentFunctionName != null) {
+				Set<String> parameters = functionParameters.get(currentFunctionName);
+				if (parameters != null && parameters.contains(id)) {
+					return id;
+				}
+			}
+			return qualifyGlobalIdentifier(id);
 		}
 
 		AST addID(String id) throws ParserException {
@@ -5983,6 +6447,12 @@ public class AwkParser {
 		}
 
 		int addFunctionParameter(String functionName, String id) {
+			int namespaceSeparator = functionName.indexOf("::");
+			String unqualifiedFunctionName = namespaceSeparator < 0 ?
+					functionName : functionName.substring(namespaceSeparator + 2);
+			if (unqualifiedFunctionName.equals(id)) {
+				throw parserException("cannot use " + id + " as a parameter; it is the function name");
+			}
 			Set<String> set = functionParameters.get(functionName);
 			if (set == null) {
 				set = new HashSet<String>();
@@ -6037,12 +6507,34 @@ public class AwkParser {
 		}
 
 		AST addFunctionCall(String id, AST paramList) {
+			id = qualifyGlobalIdentifier(id);
 			FunctionProxy functionProxy = functionProxies.get(id);
 			if (functionProxy == null) {
 				functionProxy = new FunctionProxy(id);
 				functionProxies.put(id, functionProxy);
 			}
 			return new FunctionCallAst(functionProxy, paramList);
+		}
+
+		Map<String, Tuple.IndirectFunctionTarget> indirectFunctionTargets() {
+			if (cachedIndirectFunctionTargets != null) {
+				return cachedIndirectFunctionTargets;
+			}
+			Map<String, Tuple.IndirectFunctionTarget> targets = new HashMap<String, Tuple.IndirectFunctionTarget>();
+			for (Map.Entry<String, FunctionProxy> entry : functionProxies.entrySet()) {
+				FunctionProxy proxy = entry.getValue();
+				if (proxy.isDefined()) {
+					targets
+							.put(
+									entry.getKey(),
+									new Tuple.IndirectFunctionTarget(
+											proxy,
+											proxy.getFunctionParamCount(),
+											collectArrayParameterIndexes(proxy.functionDefAst)));
+				}
+			}
+			cachedIndirectFunctionTargets = Collections.unmodifiableMap(targets);
+			return cachedIndirectFunctionTargets;
 		}
 
 		AST addArrayReference(String id, AST idxAst, int lineNo) throws ParserException {
@@ -6076,7 +6568,7 @@ public class AwkParser {
 	private ParserException parserException(String msg) {
 		return new ParserException(
 				msg,
-				scriptSources.get(scriptSourcesCurrentIndex).getDescription(),
+				currentScriptSource.getDescription(),
 				reader.getLineNumber());
 	}
 }

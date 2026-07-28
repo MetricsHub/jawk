@@ -1605,7 +1605,26 @@ public enum Opcode {
 	 * Stack before: ...<br/>
 	 * Stack after: argind-value ...
 	 */
-	PUSH_ARGIND;
+	PUSH_ARGIND,
+
+	/**
+	 * Call a user-defined, built-in, or extension function selected by name at
+	 * runtime. New opcodes are appended to preserve serialized numeric identifiers.
+	 */
+	INDIRECT_CALL,
+
+	/**
+	 * Push an indirect-call argument that snapshots its scalar value while retaining
+	 * its variable location. The target selected at runtime determines whether to
+	 * use the scalar snapshot or materialize/read an array at that location.
+	 */
+	PUSH_INDIRECT_ARGUMENT,
+
+	/**
+	 * Push an indirect-call subarray argument that snapshots its scalar value while
+	 * retaining its containing map and key for a runtime-selected array parameter.
+	 */
+	PUSH_INDIRECT_ARRAY_ARGUMENT;
 
 	private static final Opcode[] VALUES = values();
 

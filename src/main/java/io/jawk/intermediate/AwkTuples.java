@@ -434,6 +434,24 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
+	 * Emits a variable reference whose scalar value is captured immediately while
+	 * retaining the variable location for a runtime-selected array parameter.
+	 *
+	 * @param offset variable offset
+	 * @param isGlobal whether the variable is global
+	 */
+	public void pushIndirectArgument(int offset, boolean isGlobal) {
+		queue.add(new Tuple.VariableTuple(Opcode.PUSH_INDIRECT_ARGUMENT, offset, isGlobal));
+	}
+
+	/**
+	 * Emits an indirect-call subarray argument after its containing map and key.
+	 */
+	public void pushIndirectArrayArgument() {
+		queue.add(new Tuple.NoOperandTuple(Opcode.PUSH_INDIRECT_ARRAY_ARGUMENT));
+	}
+
+	/**
 	 * <p>
 	 * plusEq.
 	 * </p>
@@ -1682,6 +1700,31 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
+	 * Emits a call whose function name is evaluated at runtime.
+	 *
+	 * @param userFunctions available user-defined function targets
+	 * @param extensionFunctions available extension function targets
+	 * @param numActualParams number of evaluated actual parameters
+	 * @param sourceName source name for runtime diagnostics
+	 * @param lineNumber source line for runtime diagnostics
+	 */
+	public void indirectCall(
+			Map<String, Tuple.IndirectFunctionTarget> userFunctions,
+			Map<String, ExtensionFunction> extensionFunctions,
+			int numActualParams,
+			String sourceName,
+			int lineNumber) {
+		queue
+				.add(
+						new Tuple.IndirectCallTuple(
+								userFunctions,
+								extensionFunctions,
+								numActualParams,
+								sourceName,
+								lineNumber));
+	}
+
+	/**
 	 * Emits a tuple that prints a diagnostic message to the warning stream when
 	 * executed. Planted by the parser just before the instruction it describes,
 	 * so the warning appears in runtime order, exactly where gawk emits it.
@@ -2233,8 +2276,7 @@ public class AwkTuples implements Serializable {
 	private boolean[] addressTargets(List<Tuple> tuples, int tupleCount) {
 		boolean[] targets = new boolean[tupleCount];
 		for (Tuple tuple : tuples) {
-			Address address = tuple.getAddress();
-			if (address != null) {
+			for (Address address : tuple.getAddresses()) {
 				int index = address.index();
 				if (index >= 0 && index < tupleCount) {
 					targets[index] = true;
@@ -2454,7 +2496,9 @@ public class AwkTuples implements Serializable {
 		}
 		Set<Address> processedAddresses = Collections.newSetFromMap(new IdentityHashMap<Address, Boolean>());
 		for (Tuple tuple : queue) {
-			remapAddress(tuple.getAddress(), indexMapping, processedAddresses);
+			for (Address address : tuple.getAddresses()) {
+				remapAddress(address, indexMapping, processedAddresses);
+			}
 		}
 		// Property addresses may not be referenced by any tuple (e.g. after
 		// jump threading rewired the loop-back GOTO), so they must be
@@ -2696,8 +2740,7 @@ public class AwkTuples implements Serializable {
 				}
 			}
 
-			Address address = tuple.getAddress();
-			if (address != null) {
+			for (Address address : tuple.getAddresses()) {
 				int targetIndex = address.index();
 				if (targetIndex < 0 || targetIndex >= size) {
 					throw new Error("address " + address + " doesn't resolve to an actual list element");
@@ -2732,8 +2775,7 @@ public class AwkTuples implements Serializable {
 				}
 			}
 
-			Address address = tuple.getAddress();
-			if (address != null) {
+			for (Address address : tuple.getAddresses()) {
 				int targetIndex = address.index();
 				if (targetIndex < 0 || targetIndex >= size) {
 					throw new Error("address " + address + " doesn't resolve to an actual list element");
@@ -2926,6 +2968,7 @@ public class AwkTuples implements Serializable {
 		case ASSIGN_ARRAY:
 		case DEREFERENCE:
 		case PEEK_DEREFERENCE:
+		case PUSH_INDIRECT_ARGUMENT:
 		case PLUS_EQ:
 		case MINUS_EQ:
 		case MULT_EQ:
@@ -2939,6 +2982,7 @@ public class AwkTuples implements Serializable {
 		case MOD_EQ_ARRAY:
 		case POW_EQ_ARRAY:
 		case CALL_FUNCTION:
+		case INDIRECT_CALL:
 			// extension calls read globals (e.g. IGNORECASE) and their
 			// beforeStart hooks assign gawk-owned arrays
 		case EXTENSION:

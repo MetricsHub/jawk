@@ -1394,6 +1394,17 @@ public class AwkTest {
 	}
 
 	@Test
+	public void sandboxRejectsSourceInclusionDuringCompile() throws Exception {
+		AwkTestSupport
+				.awkTest("sandbox rejects source inclusion")
+				.withAwk(new SandboxedAwk())
+				.file("included.awk", "BEGIN { print \"included\" }\n")
+				.script("@include \"{{included.awk}}\"\nBEGIN { print \"main\" }")
+				.expectThrow(AwkSandboxException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void sandboxRejectsRedirectionAtRuntime() throws Exception {
 		AwkProgram program = AWK.compile("BEGIN { print \"hi\" > \"sandbox_out.txt\" } ");
 

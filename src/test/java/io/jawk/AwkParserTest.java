@@ -205,6 +205,343 @@ public class AwkParserTest {
 	}
 
 	@Test
+	public void testIndirectFunctionCalls() throws Exception {
+		AwkTestSupport
+				.awkTest("Indirect calls dispatch user functions and builtins")
+				.script(
+						"function twice(value) { return value * 2 }\n"
+								+ "BEGIN { user = \"twice\"; builtin = \"length\"; print @user(21), @builtin(\"jawk\") }")
+				.expectLines("42 4")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect length without arguments measures the current record")
+				.script("{ callback = \"length\"; print @callback() }")
+				.stdin("abcde\n")
+				.expectLines("5")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Qualified variables can select indirect functions")
+				.script(
+						"@namespace \"ns\"\n"
+								+ "function twice(value) { return value * 2 }\n"
+								+ "BEGIN { callback = \"ns::twice\"; print @ns::callback(5) }")
+				.expectLines("10")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect srand converts a fractional string like direct srand")
+				.script(
+						"BEGIN { callback = \"srand\"; first = @callback(\"3.5\"); a = rand(); "
+								+ "second = srand(\"3.5\"); b = rand(); print first, second, (a == b) }")
+				.expectLines("1 3 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("srand returns the previously requested seed")
+				.script("BEGIN { print srand(0), srand(5), srand(0) }")
+				.expectLines("1 0 5")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect split materializes an untyped array destination")
+				.script(
+						"BEGIN { callback = \"split\"; count = @callback(\"a b\", parts); "
+								+ "print count, parts[1], parts[2] }")
+				.expectLines("2 a b")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect user calls preserve array parameters")
+				.script(
+						"function fill(values) { values[1] = 42; return values[1] }\n"
+								+ "BEGIN { callback = \"fill\"; print @callback(parts), parts[1] }")
+				.expectLines("42 42")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect user calls materialize subarray parameters")
+				.script(
+						"function fill(values) { values[1] = 42 }\n"
+								+ "BEGIN { callback = \"fill\"; @callback(parts[\"nested\"]); "
+								+ "print parts[\"nested\"][1] }")
+				.expectLines("42")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect split materializes subarray parameters")
+				.script(
+						"BEGIN { callback = \"split\"; count = @callback(\"a b\", parts[\"nested\"]); "
+								+ "print count, parts[\"nested\"][1], parts[\"nested\"][2] }")
+				.expectLines("2 a b")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect selectors are evaluated before arguments")
+				.script(
+						"function f(a, b) { print \"f\", a, b }\n"
+								+ "function g(a, b) { print \"g\", a, b }\n"
+								+ "BEGIN { callback = \"f\"; @callback(1, callback = \"g\") }")
+				.expectLines("f 1 g")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Indirect scalar arguments retain their evaluation-time values")
+				.script(
+						"function f(a, b) { print a, b }\n"
+								+ "BEGIN { x = 1; callback = \"f\"; @callback(x, x = 2) }")
+				.expectLines("1 2")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Keywords cannot be literal indirect-call selectors")
+				.script("BEGIN { print @if(1) }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtins cannot be literal indirect-call selectors")
+				.script("BEGIN { print @length(1) }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Keywords cannot be qualified literal indirect-call selectors")
+				.script("BEGIN { print @ns::if(1) }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Extension names remain valid qualified selector variables")
+				.script("BEGIN { ns::typeof = \"length\"; print @ns::typeof(\"abc\") }")
+				.expectLines("3")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testNamespaces() throws Exception {
+		AwkTestSupport
+				.awkTest("Namespaces qualify functions and indirect call targets")
+				.script(
+						"@namespace \"lib\"\n"
+								+ "function value() { return 42 }\n"
+								+ "@namespace \"app\"\n"
+								+ "function value() { return 7 }\n"
+								+ "BEGIN { target = \"app::value\"; print lib::value(), @target() }")
+				.expectLines("42 7")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Unqualified indirect targets stay in the awk namespace")
+				.script(
+						"@namespace \"app\"\n"
+								+ "function value() { return 7 }\n"
+								+ "BEGIN { target = \"value\"; print @target() }")
+				.expectThrow(RuntimeException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Only identifiers made entirely of uppercase letters stay in awk")
+				.script(
+						"@namespace \"ns\"\n"
+								+ "BEGIN { MY_VAR = 1; F1 = 2; ABC = 3; "
+								+ "print ns::MY_VAR, ns::F1, awk::ABC, awk::MY_VAR == \"\" }")
+				.expectLines("1 2 3 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Standard builtins remain unqualified inside namespaces")
+				.script("@namespace \"ns\"\nBEGIN { print length(\"abc\"), int(3.5) }")
+				.expectLines("3 3")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtin names cannot be redefined inside namespaces")
+				.script("@namespace \"ns\"\nfunction length(value) { return value }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtin names cannot be used as namespaces")
+				.script("@namespace \"length\"\nBEGIN { print 1 }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Extension names cannot be used as namespaces")
+				.script("@namespace \"typeof\"\nBEGIN { print 1 }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Reserved words cannot follow namespace separators")
+				.script("BEGIN { ns::if = 3 }\n")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtin names cannot follow namespace separators")
+				.script("BEGIN { ns::length = 3 }\n")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parameter may follow an unrelated function with the same name")
+				.script(
+						"function awk::f() { return 1 }\n"
+								+ "@namespace \"ns\"\n"
+								+ "function g(f) { return f }\n"
+								+ "BEGIN { print g(7), awk::f() }\n")
+				.expectLines("7 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parameter may precede an unrelated function with the same name")
+				.script(
+						"@namespace \"ns\"\n"
+								+ "function g(f) { return f }\n"
+								+ "function awk::f() { return 1 }\n"
+								+ "BEGIN { print g(7), awk::f() }\n")
+				.expectLines("7 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parameter cannot match its own function name")
+				.script("function f(f) { return f }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("The awk namespace is accepted in command-line assignments")
+				.argument("-v", "awk::VALUE=42")
+				.script("BEGIN { print awk::VALUE }")
+				.expectLines("42")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("Qualified command-line operand assignments are accepted")
+				.file("input.txt", "record\n")
+				.script("@namespace \"ns\"\n{ print value, $0 }")
+				.operand("ns::value=42", "{{input.txt}}")
+				.expectLines("42 record")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("The awk namespace is accepted in operand assignments")
+				.file("input.txt", "record\n")
+				.script("@namespace \"ns\"\n{ print awk::value, $0 }")
+				.operand("awk::value=42", "{{input.txt}}")
+				.expectLines("42 record")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testTernaryIdentifiersAdjacentToColon() throws Exception {
+		AwkTestSupport
+				.awkTest("A tight ternary can end its true branch with an identifier")
+				.script("BEGIN { x = 1; y = 2; print (x < y?x:y) }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A qualified identifier can precede a ternary colon")
+				.script("@namespace \"ns\"\nBEGIN { cond = 1; x = 7; y = 9; print (cond?ns::x:y) }")
+				.expectLines("7")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A tight ternary false branch can start with a parenthesis")
+				.script("BEGIN { x = 5; print (1?x:(2)) }")
+				.expectLines("5")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A qualified tight ternary false branch can start with a parenthesis")
+				.script("@namespace \"ns\"\nBEGIN { x = 7; print (1?ns::x:(9)) }")
+				.expectLines("7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testIncludeDirective() throws Exception {
+		AwkTestSupport
+				.cliTest("Include resolves relative to the main source and restores its namespace")
+				.file(
+						"main.awk",
+						"@namespace \"main\"\n"
+								+ "@include \"empty.awk\"\n"
+								+ "@include \"lib.awk\"\n"
+								+ "function answer() { return 7 }\n"
+								+ "BEGIN { print lib::answer(), answer() }\n")
+				.file(
+						"lib.awk",
+						"@namespace \"lib\"\n"
+								+ "function answer() { return 42 }\n")
+				.file("empty.awk", "")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("42 7")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("An include without a final newline restores its parent's namespace")
+				.file(
+						"main.awk",
+						"@namespace \"main\"\n"
+								+ "@include \"lib.awk\"\n"
+								+ "function answer() { return 7 }\n"
+								+ "BEGIN { print main::answer() }\n")
+				.file("lib.awk", "@namespace \"lib\"")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("7")
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("A top-level source cannot include itself")
+				.file("main.awk", "@include \"main.awk\"\nBEGIN { print 1 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("An include cycle cannot include its top-level source")
+				.file("main.awk", "@include \"lib.awk\"\nBEGIN { print 1 }\n")
+				.file("lib.awk", "@include \"main.awk\"\nBEGIN { print 2 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("An include directive requires a statement terminator")
+				.file("main.awk", "@include \"lib.awk\" BEGIN { print 1 }\n")
+				.file("lib.awk", "BEGIN { print 2 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("A semicolon terminates an include directive")
+				.file("main.awk", "@include \"lib.awk\"; BEGIN { print 1 }\n")
+				.file("lib.awk", "BEGIN { print 2 }\n")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("2", "1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testIncludeCanonicalizesSymlinkAliases() throws Exception {
+		AwkTestSupport
+				.cliTest("Symlink aliases include the underlying file only once")
+				.file(
+						"main.awk",
+						"@include \"lib.awk\"\n"
+								+ "@include \"alias.awk\"\n")
+				.file("lib.awk", "BEGIN { print \"included\" }\n")
+				.symlink("alias.awk", "lib.awk")
+				.argument("-f", "{{main.awk}}")
+				.expectLines("included")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testAtSyntaxCanBeDisabled() throws Exception {
+		AwkSettings settings = new AwkSettings();
+		settings.setPosix(true);
+
+		AwkTestSupport
+				.awkTest("gawk @ syntax is unavailable in POSIX mode")
+				.withAwk(new Awk(settings))
+				.script("@namespace \"example\"\nBEGIN { print 1 }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("gawk namespace-qualified names are unavailable in POSIX mode")
+				.withAwk(new Awk(settings))
+				.script("BEGIN { example::value = 1 }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Ternary colons remain available in POSIX mode")
+				.withAwk(new Awk(settings))
+				.script("BEGIN { yes = 1; no = 2; print (1?yes:no) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUnsupportedAtDirective() throws Exception {
+		AwkTestSupport
+				.awkTest("Unsupported gawk @ directives fail intentionally")
+				.script("@load \"example\"\nBEGIN { print 1 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testOperatorPrecedence() throws Exception {
 		AwkTestSupport
 				.awkTest("$a precedes a++")

@@ -169,7 +169,7 @@ Use `-S` or `--sandbox` to switch to the sandboxed tuple compiler and runtime:
 $ java -jar jawk-${project.version}-standalone.jar -S -f script.awk input.txt
 ```
 
-Sandbox mode disables `system()`, input and output redirection, command pipelines, and related runtime features that are intentionally unsafe in a restricted host environment.
+Sandbox mode disables `system()`, input and output redirection, command pipelines, `@include` source inclusion, and related features that are intentionally unsafe in a restricted host environment.
 
 ## See Also
 

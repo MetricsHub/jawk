@@ -92,6 +92,11 @@ public final class SandboxedAwk extends Awk {
 	}
 
 	@Override
+	protected boolean isSourceIncludeAllowed() {
+		return false;
+	}
+
+	@Override
 	public AVM createAvm() {
 		return createAvm(getSettings());
 	}

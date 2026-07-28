@@ -383,6 +383,103 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void symtabReadsAndWritesRuntimeValuesLive() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB reads globals live and writes through to them")
+				.script(
+						"BEGIN { x = 1; before = SYMTAB[\"x\"]; x = 2; "
+								+ "after = SYMTAB[\"x\"]; SYMTAB[\"x\"] = 7; print before, after, x }")
+				.expectLines("1 2 7")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Reading an unknown SYMTAB element returns an empty value")
+				.script("BEGIN { print \"[\" SYMTAB[\"xyzzy\"] \"]\" }")
+				.expectLines("[]")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB rejects assignments to arbitrary elements")
+				.script("BEGIN { SYMTAB[\"xyzzy\"] = 5 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabCannotReplaceArrayGlobalsWithScalars() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB preserves array global types")
+				.script("BEGIN { values[1] = 1; SYMTAB[\"values\"] = 3 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabCannotReplaceScalarGlobalsWithArrays() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB preserves scalar global types")
+				.script("BEGIN { if (0) value = 1; SYMTAB[\"value\"][1] = 3 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabRoundTripsSpecialVariables() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB reads and writes managed special variables")
+				.script(
+						"BEGIN { SYMTAB[\"NR\"] = 9; SYMTAB[\"OFS\"] = \":\"; "
+								+ "print NR, SYMTAB[\"NR\"]; print 1, 2; print SYMTAB[\"OFS\"] }")
+				.expectLines("9:9", "1:2", ":")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB writes ARGC without recursive assignment")
+				.script("BEGIN { SYMTAB[\"ARGC\"] = 4; print ARGC, SYMTAB[\"ARGC\"] }")
+				.expectLines("4 4")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB writes match result variables")
+				.script(
+						"BEGIN { SYMTAB[\"RSTART\"] = 7; SYMTAB[\"RLENGTH\"] = 3; "
+								+ "print RSTART, SYMTAB[\"RSTART\"], RLENGTH, SYMTAB[\"RLENGTH\"] }")
+				.expectLines("7 7 3 3")
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabIterationUsesItsMaterializedKeysAndLiveValues() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB iteration exposes declared globals with live values")
+				.script(
+						"BEGIN { x = 1; x = 7; "
+								+ "for (key in SYMTAB) if (key == \"x\") { seen++; value = SYMTAB[key] } "
+								+ "print seen, value }")
+				.expectLines("1 7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabIterationHonorsSortedArrayKeys() throws Exception {
+		AwkTestSupport
+				.cliTest("SYMTAB uses sorted iteration when -t is enabled")
+				.argument("-t")
+				.script(
+						"BEGIN { a = 1; aa = 2; "
+								+ "for (key in SYMTAB) if (key == \"a\" || key == \"aa\") print key }")
+				.expectLines("a", "aa")
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabEntrySetExposesLiveValues() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB value sorting uses live global values")
+				.script(
+						"BEGIN { a = 2; z = 1; PROCINFO[\"sorted_in\"] = \"@val_num_asc\"; "
+								+ "for (key in SYMTAB) if (key == \"a\" || key == \"z\") print key }")
+				.expectLines("z", "a")
+				.runAndAssert();
+	}
+
+	@Test
 	public void ignoreCaseAppliesToComparisonsAndIndex() throws Exception {
 		// gawk's IGNORECASE covers string relational operators and index(),
 		// not just regexp operations; numeric (strnum) comparisons stay numeric
@@ -416,6 +513,34 @@ public class GawkExtensionTest {
 				.awkTest("assigning a scalar to FUNCTAB is a semantic error")
 				.script("BEGIN { FUNCTAB = 1 }")
 				.expectThrow(RuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void symtabCannotBeDeleted() throws Exception {
+		AwkTestSupport
+				.awkTest("SYMTAB elements cannot be deleted")
+				.script("BEGIN { value = 1; delete SYMTAB[\"value\"] }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB cannot be cleared")
+				.script("BEGIN { delete SYMTAB }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void functabIsReadOnly() throws Exception {
+		AwkTestSupport
+				.awkTest("FUNCTAB elements cannot be assigned")
+				.script("BEGIN { FUNCTAB[\"length\"] = \"replacement\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("FUNCTAB elements cannot be deleted")
+				.script("BEGIN { delete FUNCTAB[\"length\"] }")
+				.expectThrow(AwkRuntimeException.class)
 				.runAndAssert();
 	}
 
@@ -516,6 +641,18 @@ public class GawkExtensionTest {
 		assertTrue(
 				"extra-argument warning should be printed to the error stream",
 				result.errorOutput().contains("called with more arguments than declared"));
+
+		AwkTestSupport.TestResult indirectResult = AwkTestSupport
+				.cliTest("indirect extra-argument warning includes source and line")
+				.script("function f(a) { return a } BEGIN { name = \"f\"; print @name(1, 2) }")
+				.expect("1\n")
+				.run();
+		indirectResult.assertExpected();
+		assertTrue(
+				"indirect warning should include a source line: " + indirectResult.errorOutput(),
+				indirectResult
+						.errorOutput()
+						.matches("(?s).*gawk: .+:\\d+: warning: function `f'.*"));
 	}
 
 	@Test
@@ -700,6 +837,15 @@ public class GawkExtensionTest {
 								+ "print typeof(unset) "
 								+ "}")
 				.expectLines("number", "string", "array", "untyped")
+				.runAndAssert();
+	}
+
+	@Test
+	public void indirectTypeofPreservesUntypedVariables() throws Exception {
+		AwkTestSupport
+				.awkTest("indirect typeof receives an untyped variable")
+				.script("BEGIN { callback = \"typeof\"; print @callback(unset), typeof(unset) }")
+				.expectLines("untyped untyped")
 				.runAndAssert();
 	}
 

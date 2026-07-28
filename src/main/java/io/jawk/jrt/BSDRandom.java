@@ -33,6 +33,7 @@ public class BSDRandom {
 	private final int[] state = new int[RAND_DEG];
 	private int fptr;
 	private int rptr;
+	private int seed;
 
 	/**
 	 * Creates a new generator with the specified seed.
@@ -47,13 +48,15 @@ public class BSDRandom {
 	 * Seed the generator. A seed of {@code 0} is transformed to {@code 1}
 	 * as in the original implementation.
 	 *
-	 * @param seed New pseudo-random seed
+	 * @param newSeed New pseudo-random seed
 	 */
-	public final void setSeed(int seed) {
-		if (seed == 0) {
-			seed = 1;
+	public final void setSeed(int newSeed) {
+		seed = newSeed;
+		int effectiveSeed = newSeed;
+		if (effectiveSeed == 0) {
+			effectiveSeed = 1;
 		}
-		state[0] = seed;
+		state[0] = effectiveSeed;
 		for (int i = 1; i < RAND_DEG; i++) {
 			long val = 16807L * state[i - 1] % 2147483647L;
 			state[i] = (int) val;
@@ -63,6 +66,15 @@ public class BSDRandom {
 		for (int i = 0; i < 10 * RAND_DEG; i++) {
 			nextInt();
 		}
+	}
+
+	/**
+	 * Returns the seed most recently supplied to {@link #setSeed(int)}.
+	 *
+	 * @return Current pseudo-random seed
+	 */
+	public int getSeed() {
+		return seed;
 	}
 
 	private int nextInt() {

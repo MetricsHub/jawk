@@ -100,6 +100,25 @@ public class CliOptionTest {
 	}
 
 	@Test
+	public void profileOptionRecordsIndirectUserFunctions() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI --profile records indirect user functions")
+				.argument("--profile")
+				.script(
+						"function inner() { return 1 } "
+								+ "function outer() { callback = \"inner\"; extension = \"typeof\"; "
+								+ "@extension(1); return @callback() } "
+								+ "BEGIN { print outer() }")
+				.expectLines("1")
+				.run();
+
+		result.assertExpected();
+		assertTrue(result.errorOutput().contains("inner"));
+		assertTrue(result.errorOutput().contains("outer"));
+		assertTrue(result.errorOutput().contains("typeof"));
+	}
+
+	@Test
 	public void profileOptionWithFilenameWritesReportToFile() throws Exception {
 		File profile = tempFolder.newFile("profile.txt");
 		assertTrue(profile.delete());
@@ -395,6 +414,26 @@ public class CliOptionTest {
 				.argument("--persist", memory.getAbsolutePath())
 				.script("BEGIN { print arr[\"x\"] }")
 				.expect("9\n")
+				.expectExit(0)
+				.runAndAssert();
+	}
+
+	@Test
+	public void persistOptionExcludesRuntimeMetaTables() throws Exception {
+		File memory = new File(tempFolder.getRoot(), "symtab-memory.bin");
+
+		AwkTestSupport
+				.cliTest("CLI persist excludes SYMTAB from its serialized snapshot")
+				.argument("--persist", memory.getAbsolutePath())
+				.script("BEGIN { value = 7; print SYMTAB[\"value\"] }")
+				.expectLines("7")
+				.expectExit(0)
+				.runAndAssert();
+		AwkTestSupport
+				.cliTest("CLI persist restores user globals and rebuilds SYMTAB")
+				.argument("--persist", memory.getAbsolutePath())
+				.script("BEGIN { print value, SYMTAB[\"value\"] }")
+				.expectLines("7 7")
 				.expectExit(0)
 				.runAndAssert();
 	}
