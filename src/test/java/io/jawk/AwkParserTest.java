@@ -214,6 +214,12 @@ public class AwkParserTest {
 				.expectLines("42 4")
 				.runAndAssert();
 		AwkTestSupport
+				.awkTest("Indirect length without arguments measures the current record")
+				.script("{ callback = \"length\"; print @callback() }")
+				.stdin("abcde\n")
+				.expectLines("5")
+				.runAndAssert();
+		AwkTestSupport
 				.awkTest("Qualified variables can select indirect functions")
 				.script(
 						"@namespace \"ns\"\n"
@@ -277,6 +283,26 @@ public class AwkParserTest {
 								+ "BEGIN { x = 1; callback = \"f\"; @callback(x, x = 2) }")
 				.expectLines("1 2")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Keywords cannot be literal indirect-call selectors")
+				.script("BEGIN { print @if(1) }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtins cannot be literal indirect-call selectors")
+				.script("BEGIN { print @length(1) }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Keywords cannot be qualified literal indirect-call selectors")
+				.script("BEGIN { print @ns::if(1) }")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Extension names remain valid qualified selector variables")
+				.script("BEGIN { ns::typeof = \"length\"; print @ns::typeof(\"abc\") }")
+				.expectLines("3")
+				.runAndAssert();
 	}
 
 	@Test
@@ -323,8 +349,18 @@ public class AwkParserTest {
 				.expectThrow(ParserException.class)
 				.runAndAssert();
 		AwkTestSupport
+				.awkTest("Extension names cannot be used as namespaces")
+				.script("@namespace \"typeof\"\nBEGIN { print 1 }\n")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
 				.awkTest("Reserved words cannot follow namespace separators")
 				.script("BEGIN { ns::if = 3 }\n")
+				.expectThrow(LexerException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Builtin names cannot follow namespace separators")
+				.script("BEGIN { ns::length = 3 }\n")
 				.expectThrow(LexerException.class)
 				.runAndAssert();
 		AwkTestSupport
@@ -384,6 +420,16 @@ public class AwkParserTest {
 				.script("@namespace \"ns\"\nBEGIN { cond = 1; x = 7; y = 9; print (cond?ns::x:y) }")
 				.expectLines("7")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A tight ternary false branch can start with a parenthesis")
+				.script("BEGIN { x = 5; print (1?x:(2)) }")
+				.expectLines("5")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A qualified tight ternary false branch can start with a parenthesis")
+				.script("@namespace \"ns\"\nBEGIN { x = 7; print (1?ns::x:(9)) }")
+				.expectLines("7")
+				.runAndAssert();
 	}
 
 	@Test
@@ -418,17 +464,17 @@ public class AwkParserTest {
 				.expectLines("7")
 				.runAndAssert();
 		AwkTestSupport
-				.cliTest("A top-level source cannot include itself twice")
+				.cliTest("A top-level source cannot include itself")
 				.file("main.awk", "@include \"main.awk\"\nBEGIN { print 1 }\n")
 				.argument("-f", "{{main.awk}}")
-				.expectLines("1")
+				.expectThrow(ParserException.class)
 				.runAndAssert();
 		AwkTestSupport
-				.cliTest("An include cycle cannot reparse its top-level source")
+				.cliTest("An include cycle cannot include its top-level source")
 				.file("main.awk", "@include \"lib.awk\"\nBEGIN { print 1 }\n")
 				.file("lib.awk", "@include \"main.awk\"\nBEGIN { print 2 }\n")
 				.argument("-f", "{{main.awk}}")
-				.expectLines("2", "1")
+				.expectThrow(ParserException.class)
 				.runAndAssert();
 		AwkTestSupport
 				.cliTest("An include directive requires a statement terminator")

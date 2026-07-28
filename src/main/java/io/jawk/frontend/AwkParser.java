@@ -350,6 +350,7 @@ public class AwkParser {
 	private String currentNamespace = "awk";
 	private final Deque<SourceState> includedSourceStack = new ArrayDeque<SourceState>();
 	private final Set<Path> includedSourcePaths = new HashSet<Path>();
+	private final Set<Path> topLevelSourcePaths = new HashSet<Path>();
 
 	private StringBuffer text = new StringBuffer();
 	private StringBuffer string = new StringBuffer();
@@ -494,10 +495,13 @@ public class AwkParser {
 
 	private void resetIncludedSourcePaths() throws IOException {
 		includedSourcePaths.clear();
+		topLevelSourcePaths.clear();
 		for (ScriptSource source : scriptSources) {
 			if (source instanceof ScriptFileSource) {
 				String filePath = ((ScriptFileSource) source).getFilePath();
-				includedSourcePaths.add(Paths.get(filePath).toRealPath());
+				Path sourcePath = Paths.get(filePath).toRealPath();
+				includedSourcePaths.add(sourcePath);
+				topLevelSourcePaths.add(sourcePath);
 			}
 		}
 	}
@@ -820,6 +824,7 @@ public class AwkParser {
 					return token;
 				}
 				pendingIndirectIdentifier = atWord.substring(1);
+				validateIndirectIdentifier(pendingIndirectIdentifier);
 				token = Token.INDIRECT;
 				return token;
 			}
@@ -1065,11 +1070,14 @@ public class AwkParser {
 			// extensions override built-in stuff
 			String sourceIdentifier = text.toString();
 			int namespaceSeparator = sourceIdentifier.indexOf("::");
-			if (namespaceSeparator >= 0
-					&& KEYWORDS.containsKey(sourceIdentifier.substring(namespaceSeparator + 2))) {
-				throw lexerException(
-						"Reserved word cannot be used after a namespace separator: "
-								+ sourceIdentifier);
+			if (namespaceSeparator >= 0) {
+				String namespaceComponent = sourceIdentifier.substring(namespaceSeparator + 2);
+				if (KEYWORDS.containsKey(namespaceComponent)
+						|| BuiltinFunction.of(namespaceComponent) != null) {
+					throw lexerException(
+							"Reserved word cannot be used after a namespace separator: "
+									+ sourceIdentifier);
+				}
 			}
 			String lookupIdentifier = awkNamespaceComponent(sourceIdentifier);
 			boolean awkNamespaceIdentifier = isAwkNamespaceIdentifier(sourceIdentifier);
@@ -1092,7 +1100,7 @@ public class AwkParser {
 				token = Token.BUILTIN_FUNC_NAME;
 				return token;
 			}
-			if (c == '(') {
+			if (c == '(' && !pendingColon) {
 				token = Token.FUNC_ID;
 				return token;
 			} else {
@@ -1258,6 +1266,10 @@ public class AwkParser {
 		String includeName = string.toString();
 		boolean includeTerminatedByEndOfSource = validateIncludeTerminator();
 		Path includePath = resolveIncludePath(includeName);
+		if (topLevelSourcePaths.contains(includePath)) {
+			throw parserException(
+					"Cannot include a top-level program source: " + includeName);
+		}
 		if (!includedSourcePaths.add(includePath)) {
 			lexer();
 			if (!includeTerminatedByEndOfSource) {
@@ -1305,8 +1317,21 @@ public class AwkParser {
 				throw parserException("Invalid gawk namespace name: " + namespace);
 			}
 		}
-		if (KEYWORDS.containsKey(namespace) || BuiltinFunction.of(namespace) != null) {
+		if (KEYWORDS.containsKey(namespace)
+				|| BuiltinFunction.of(namespace) != null
+				|| extensions.containsKey(namespace)) {
 			throw parserException("Reserved identifier cannot be used as a gawk namespace: " + namespace);
+		}
+	}
+
+	private void validateIndirectIdentifier(String identifier) throws LexerException {
+		int separator = identifier.indexOf("::");
+		String namespace = separator < 0 ? "awk" : identifier.substring(0, separator);
+		String component = separator < 0 ? identifier : identifier.substring(separator + 2);
+		if (KEYWORDS.containsKey(component)
+				|| BuiltinFunction.of(component) != null
+				|| ("awk".equals(namespace) && extensions.containsKey(component))) {
+			throw lexerException("Reserved identifier cannot be used as an indirect-call selector: " + identifier);
 		}
 	}
 

@@ -391,6 +391,16 @@ public class GawkExtensionTest {
 								+ "after = SYMTAB[\"x\"]; SYMTAB[\"x\"] = 7; print before, after, x }")
 				.expectLines("1 2 7")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Reading an unknown SYMTAB element returns an empty value")
+				.script("BEGIN { print \"[\" SYMTAB[\"xyzzy\"] \"]\" }")
+				.expectLines("[]")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("SYMTAB rejects assignments to arbitrary elements")
+				.script("BEGIN { SYMTAB[\"xyzzy\"] = 5 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
 	}
 
 	@Test

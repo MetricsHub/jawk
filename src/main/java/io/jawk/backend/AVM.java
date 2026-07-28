@@ -2929,8 +2929,8 @@ public class AVM implements VariableManager, Closeable {
 			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
 			return Long.valueOf((long) JRT.toDouble(args[0]));
 		case LENGTH:
-			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
-			return lengthOf(args[0]);
+			requireIndirectArgumentCount(builtin, args, 0, 1, lineNumber);
+			return args.length == 0 ? Integer.valueOf(jrt.jrtGetInputField(0).toString().length()) : lengthOf(args[0]);
 		case LOG:
 			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
 			return Math.log(JRT.toDouble(args[0]));
@@ -3275,6 +3275,7 @@ public class AVM implements VariableManager, Closeable {
 
 	private final class SymtabArray extends java.util.AbstractMap<Object, Object> implements AssocArray {
 		private final Map<Object, Object> entries = newAwkArray();
+		private final Set<String> assignableNames = new HashSet<String>();
 		private boolean active;
 
 		private void activate() {
@@ -3309,14 +3310,18 @@ public class AVM implements VariableManager, Closeable {
 		/** {@inheritDoc} */
 		@Override
 		public Object put(Object key, Object value) {
-			if (active && key != null) {
-				validateGlobalType(key.toString(), value);
+			String name = key == null ? "" : key.toString();
+			if (!active) {
+				if (key != null) {
+					assignableNames.add(name);
+				}
+				return entries.put(key, value);
 			}
+			if (!assignableNames.contains(name)) {
+				throw new AwkRuntimeException("Cannot assign to an arbitrary element of SYMTAB.");
+			}
+			validateGlobalType(name, value);
 			Object previous = entries.put(key, value);
-			if (!active || key == null) {
-				return previous;
-			}
-			String name = key.toString();
 			if (isMetaTableName(name)) {
 				return previous;
 			}
@@ -3328,6 +3333,11 @@ public class AVM implements VariableManager, Closeable {
 				runtimeStack.setVariable(offset.intValue(), value, true);
 			}
 			return previous;
+		}
+
+		private Object putRuntimeVariable(String name, Object value) {
+			assignableNames.add(name);
+			return put(name, value);
 		}
 
 		private boolean applyLiveSpecialVariable(String name, Object value) {
@@ -3549,7 +3559,9 @@ public class AVM implements VariableManager, Closeable {
 			return;
 		}
 		Object symtab = runtimeStack.getVariable(symtabOffset, true);
-		if (symtab instanceof Map) {
+		if (symtab instanceof SymtabArray) {
+			((SymtabArray) symtab).putRuntimeVariable(name, value);
+		} else if (symtab instanceof Map) {
 			@SuppressWarnings("unchecked")
 			Map<Object, Object> symtabMap = (Map<Object, Object>) symtab;
 			symtabMap.put(name, value);
