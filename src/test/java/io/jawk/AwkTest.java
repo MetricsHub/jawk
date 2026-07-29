@@ -857,6 +857,37 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testUntypedScalarParameterScalarizesUnchangedCaller() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter scalarizes its unchanged caller")
+				.script("function f(x) { print x } BEGIN { f(a); a[1] = 1 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUntypedScalarParameterPreservesChangedArrayElement() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter preserves a changed array element")
+				.script(
+						"function f(x) { a[1] = 7; print \"[\" x \"]\" } "
+								+ "BEGIN { f(a[1]); print a[1] }")
+				.expectLines("[]", "7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUntypedScalarParameterPreservesChangedSubarrayElement() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter preserves a changed subarray element")
+				.script(
+						"function f(x) { a[1][2] = 7; print \"[\" x \"]\" } "
+								+ "BEGIN { f(a[1]); print a[1][2] }")
+				.expectLines("[]", "7")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testDeletedUntypedSubarrayParameterRemainsDetached() throws Exception {
 		AwkTestSupport
 				.awkTest("deleted untyped subarray parameter remains detached")

@@ -4216,7 +4216,7 @@ public class AVM implements VariableManager, Closeable {
 		return value;
 	}
 
-	private boolean isUntyped(Object value) {
+	private static boolean isUntyped(Object value) {
 		return value == null || value instanceof UntypedObject;
 	}
 
@@ -4327,7 +4327,9 @@ public class AVM implements VariableManager, Closeable {
 
 		@Override
 		public void setScalarValue(Object value) {
-			// Scalar arguments are copied at call time.
+			if (isUntyped(currentValue())) {
+				setValue(value);
+			}
 		}
 	}
 
@@ -4367,7 +4369,11 @@ public class AVM implements VariableManager, Closeable {
 
 		@Override
 		public void setScalarValue(Object value) {
-			setValue(value);
+			if (!JRT.containsAwkKey(map, key)) {
+				detachedValue = value;
+			} else if (isUntyped(JRT.getAssocArrayValue(map, key))) {
+				map.put(key, value);
+			}
 		}
 	}
 
