@@ -2098,7 +2098,7 @@ public class AwkParser {
 			} else if (token == Token.KW_BREAK) {
 				stmt = BREAK_STATEMENT();
 			} else {
-				stmt = EXPRESSION_STATEMENT(true, false); // allow in keyword, do Token.NOT allow non-statement ASTs
+				stmt = EXPRESSION_STATEMENT(true);
 			}
 			terminator();
 			return stmt;
@@ -2108,15 +2108,12 @@ public class AwkParser {
 		return stmt;
 	}
 
-	AST EXPRESSION_STATEMENT(boolean allowInKeyword, boolean allowNonStatementAsts) throws IOException {
+	AST EXPRESSION_STATEMENT(boolean allowInKeyword) throws IOException {
 		// true = allow comparators
 		// false = do Token.NOT allow multi-dimensional array indices
 		// return new ExpressionStatementAst(ASSIGNMENT_EXPRESSION(true, allowInKeyword, false));
 
 		AST exprAst = ASSIGNMENT_EXPRESSION(null, true, allowInKeyword, false);
-		if (!allowNonStatementAsts && exprAst.hasFlag(AstFlag.NON_STATEMENT)) {
-			throw parserException("Not a valid statement.");
-		}
 		return new ExpressionStatementAst(exprAst);
 	}
 
@@ -2277,7 +2274,7 @@ public class AwkParser {
 			return PRINTF_STATEMENT();
 		} else {
 			// allow non-statement ASTs
-			return EXPRESSION_STATEMENT(allowInKeyword, true);
+			return EXPRESSION_STATEMENT(allowInKeyword);
 		}
 	}
 
@@ -2541,11 +2538,8 @@ public class AwkParser {
 			String errorMessage) {
 		if (arrayAst instanceof IDAst) {
 			IDAst idAst = (IDAst) arrayAst;
-			if (idAst.isScalar()) {
-				arrayAst.throwSemanticException(errorMessage);
-			}
 			idAst.setArray(true);
-			idAst.populateTuples(tuples);
+			tuples.dereference(idAst.offset, true, idAst.isGlobal);
 			return;
 		}
 		if (arrayAst instanceof ArrayReferenceAst) {
@@ -2613,7 +2607,6 @@ public class AwkParser {
 	private int populateActualParametersUpTo(
 			AwkTuples tuples,
 			FunctionCallParamListAst params,
-			Set<Integer> arrayParameterIndexes,
 			int parameterIndex,
 			int maxParameterCount) {
 		/*
@@ -2634,19 +2627,20 @@ public class AwkParser {
 			populateActualParametersUpTo(
 					tuples,
 					(FunctionCallParamListAst) params.getAst2(),
-					arrayParameterIndexes,
 					parameterIndex + 1,
 					maxParameterCount);
 			return 0;
 		}
-		if (arrayParameterIndexes.contains(Integer.valueOf(parameterIndex))) {
-			populateArrayOperandTuples(
-					params.getAst1(),
-					tuples,
-					true,
-					"Parameter position " + (parameterIndex + 1) + " must be an array or subarray.");
+		AST argument = params.getAst1();
+		if (argument instanceof IDAst
+				&& !isJrtManagedSpecialName(((IDAst) argument).id)) {
+			IDAst idAst = (IDAst) argument;
+			tuples.pushIndirectArgument(idAst.offset, idAst.isGlobal);
+		} else if (argument instanceof ArrayReferenceAst) {
+			((ArrayReferenceAst) argument).populateTargetReferenceTuples(tuples);
+			tuples.pushIndirectArrayArgument();
 		} else {
-			params.getAst1().populateTuples(tuples);
+			argument.populateTuples(tuples);
 		}
 		if (params.getAst2() == null) {
 			return 1;
@@ -2654,7 +2648,6 @@ public class AwkParser {
 		return 1 + populateActualParametersUpTo(
 				tuples,
 				(FunctionCallParamListAst) params.getAst2(),
-				arrayParameterIndexes,
 				parameterIndex + 1,
 				maxParameterCount);
 	}
@@ -4012,9 +4005,6 @@ public class AwkParser {
 			getAst2().populateTuples(tuples); // here, stack contains one value
 			if (getAst1() instanceof IDAst) {
 				IDAst idAst = (IDAst) getAst1();
-				if (idAst.isArray()) {
-					throw new SemanticException("Cannot use " + idAst + " as a scalar. It is an array.");
-				}
 				idAst.setScalar(true);
 				boolean isSpecial = isJrtManagedSpecialName(idAst.id);
 				if (isSpecial) {
@@ -4087,9 +4077,6 @@ public class AwkParser {
 				ArrayReferenceAst arr = (ArrayReferenceAst) getAst1();
 				if (arr.getAst1() instanceof IDAst) {
 					IDAst idAst = (IDAst) arr.getAst1();
-					if (idAst.isScalar()) {
-						throw new SemanticException("Cannot use " + idAst + " as an array. It is a scalar.");
-					}
 					idAst.setArray(true);
 				}
 				arr.populateTargetReferenceTuples(tuples);
@@ -4526,47 +4513,6 @@ public class AwkParser {
 			return count;
 		}
 
-		void checkActualToFormalParameters(AST actualParamList) {
-			AST aPtr = actualParamList;
-			FunctionDefParamListAst fPtr = (FunctionDefParamListAst) getAst1();
-			// Extra actual parameters (accepted with a gawk-style runtime
-			// warning) have no formal counterpart to validate against.
-			while (aPtr != null && fPtr != null) {
-				// actual parameter
-				AST aparam = aPtr.getAst1();
-				// formal function parameter
-				AST fparam = symbolTable.getFunctionParameterIDAST(id, fPtr.id);
-
-				if (fparam.isArray()) {
-					if (aparam instanceof IDAst) {
-						IDAst aparamIdAst = (IDAst) aparam;
-						if (aparamIdAst.isScalar()) {
-							aparam
-									.throwSemanticException(
-											id + ": Actual parameter (" + aparam
-													+ ") is a scalar, but formal parameter is used like an array.");
-						}
-						aparamIdAst.setArray(true);
-					} else if (!(aparam instanceof ArrayReferenceAst)) {
-						aparam
-								.throwSemanticException(
-										id + ": Actual parameter (" + aparam + ") is not an array or subarray reference.");
-					}
-				} else if (fparam.isScalar() && aparam instanceof IDAst) {
-					IDAst aparamIdAst = (IDAst) aparam;
-					if (aparamIdAst.isArray()) {
-						aparam
-								.throwSemanticException(
-										id + ": Actual parameter (" + aparam
-												+ ") is an array, but formal parameter is used like a scalar.");
-					}
-					aparamIdAst.setScalar(true);
-				}
-				// next
-				aPtr = aPtr.getAst2();
-				fPtr = (FunctionDefParamListAst) fPtr.getAst1();
-			}
-		}
 	}
 
 	private final class FunctionCallAst extends ScalarExpressionAst {
@@ -4585,14 +4531,6 @@ public class AwkParser {
 		 * The checks performed are:
 		 * <ul>
 		 * <li>Make sure the function is defined.
-		 * <li>The number of actual parameters does not
-		 * exceed the number of formal parameters.
-		 * <li>Matches actual parameters to formal parameter
-		 * usage with respect to whether they are
-		 * scalars, arrays, or either.
-		 * (This determination is based on how
-		 * the formal parameters are used within
-		 * the function block.)
 		 * </ul>
 		 * A failure of any one of these checks
 		 * results in a SemanticException.
@@ -4604,10 +4542,6 @@ public class AwkParser {
 		public void semanticAnalysis() throws SemanticException {
 			if (!functionProxy.isDefined()) {
 				throw new SemanticException("function " + functionProxy + " not defined");
-			}
-			int formalParamCount = functionProxy.getFunctionParamCount();
-			if (getAst1() != null && formalParamCount > 0) {
-				functionProxy.checkActualToFormalParameters(getAst1());
 			}
 		}
 
@@ -4625,15 +4559,11 @@ public class AwkParser {
 				actualParamCountLocal = populateActualParametersUpTo(
 						tuples,
 						(FunctionCallParamListAst) getAst1(),
-						collectArrayParameterIndexes(functionProxy.functionDefAst),
 						0,
 						functionProxy.getFunctionParamCount());
 			}
 			int formalParamCount = functionProxy.getFunctionParamCount();
 
-			if (getAst1() != null && formalParamCount > 0) {
-				functionProxy.checkActualToFormalParameters(getAst1());
-			}
 			if (actualParamCount() > formalParamCount) {
 				// gawk accepts the call but reports it each time it runs
 				tuples.warning(extraArgumentWarning());
@@ -4944,18 +4874,12 @@ public class AwkParser {
 				AST ptr = getAst1().getAst2().getAst2().getAst1();
 				if (ptr instanceof IDAst) {
 					IDAst idAst = (IDAst) ptr;
-					if (idAst.isArray()) {
-						throw new SemanticException("sub cannot accept an unindexed array as its 3rd argument");
-					}
 					idAst.setScalar(true);
 					tuples.subForVariable(idAst.offset, idAst.isGlobal, isGsub);
 				} else if (ptr instanceof ArrayReferenceAst) {
 					ArrayReferenceAst arrAst = (ArrayReferenceAst) ptr;
 					if (arrAst.getAst1() instanceof IDAst) {
 						IDAst idAst = (IDAst) arrAst.getAst1();
-						if (idAst.isScalar()) {
-							throw new SemanticException("Cannot use " + idAst + " as an array.");
-						}
 						idAst.setArray(true);
 					}
 					arrAst.populateTargetReferenceTuples(tuples);
@@ -5133,7 +5057,9 @@ public class AwkParser {
 				// Use JRT-managed reads for specials
 				pushSpecialVariable(tuples, id);
 			} else {
-				tuples.dereference(offset, isArray(), isGlobal);
+				// Bare identifiers are scalar uses. Array-only contexts emit a
+				// typed dereference through populateArrayOperandTuples().
+				tuples.dereference(offset, false, isGlobal);
 			}
 			popSourceLineNumber(tuples);
 			return 1;
@@ -5223,6 +5149,9 @@ public class AwkParser {
 		private void populateContainerTuples(AwkTuples tuples) {
 			if (getAst1() instanceof ArrayReferenceAst) {
 				((ArrayReferenceAst) getAst1()).populateArrayValueTuples(tuples, true);
+			} else if (getAst1() instanceof IDAst) {
+				IDAst idAst = (IDAst) getAst1();
+				tuples.dereference(idAst.offset, true, idAst.isGlobal);
 			} else {
 				getAst1().populateTuples(tuples);
 			}
@@ -6146,18 +6075,12 @@ public class AwkParser {
 				ArrayReferenceAst arrAst = (ArrayReferenceAst) getAst1();
 				if (arrAst.getAst1() instanceof IDAst) {
 					IDAst idAst = (IDAst) arrAst.getAst1();
-					if (idAst.isScalar()) {
-						throw new SemanticException("delete: Cannot use a scalar as an array.");
-					}
 					idAst.setArray(true);
 				}
 				arrAst.populateTargetReferenceTuples(tuples);
 				tuples.deleteMapElement();
 			} else if (getAst1() instanceof IDAst) {
 				IDAst idAst = (IDAst) getAst1();
-				if (idAst.isScalar()) {
-					throw new SemanticException("delete: Cannot delete a scalar.");
-				}
 				idAst.setArray(true);
 				tuples.deleteArray(idAst.offset, idAst.isGlobal);
 			} else {
@@ -6282,9 +6205,6 @@ public class AwkParser {
 			return super.toString() + " (" + id + ")";
 		}
 
-		private void checkActualToFormalParameters(AST actualParams) {
-			functionDefAst.checkActualToFormalParameters(actualParams);
-		}
 	}
 
 	/**
@@ -6485,9 +6405,6 @@ public class AwkParser {
 		AST addArrayID(String id) throws ParserException {
 			IDAst retVal = getID(id);
 			retVal.markReferenced();
-			if (retVal.isScalar()) {
-				throw parserException("Cannot use " + retVal + " as an array.");
-			}
 			retVal.setArray(true);
 			return retVal;
 		}

@@ -1468,10 +1468,7 @@ public class AVM implements VariableManager, Closeable {
 					VariableTuple variableTuple = (VariableTuple) tuple;
 					long offset = variableTuple.getVariableOffset();
 					boolean isGlobal = variableTuple.isGlobal();
-					Object o1 = runtimeStack.getVariable(offset, isGlobal);
-					if (o1 == null) {
-						o1 = BLANK;
-					}
+					Object o1 = resolveVariable(offset, isGlobal, false);
 					Object o2 = pop();
 					double d1 = JRT.toDouble(o1);
 					double d2 = JRT.toDouble(o2);
@@ -1672,23 +1669,17 @@ public class AVM implements VariableManager, Closeable {
 					DereferenceTuple dereferenceTuple = (DereferenceTuple) tuple;
 					boolean isGlobal = dereferenceTuple.isGlobal();
 					long offset = dereferenceTuple.getVariableOffset();
-					Object o = runtimeStack.getVariable(offset, isGlobal);
-					if (o == null) {
-						if (dereferenceTuple.isArray()) {
-							// is_array
-							push(runtimeStack.setVariable(offset, newAwkArray(), isGlobal));
-						} else {
-							push(runtimeStack.setVariable(offset, BLANK, isGlobal));
-						}
-					} else {
-						push(o);
-					}
+					push(resolveVariable(offset, isGlobal, dereferenceTuple.isArray()));
 					position.next();
 					break;
 				}
 				case PEEK_DEREFERENCE: {
 					VariableTuple variableTuple = (VariableTuple) tuple;
-					push(runtimeStack.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal()));
+					Object value = runtimeStack
+							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
+					push(
+							value instanceof ArgumentReference ?
+									((ArgumentReference) value).currentValue() : value);
 					position.next();
 					break;
 				}
@@ -1698,8 +1689,8 @@ public class AVM implements VariableManager, Closeable {
 							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
 					push(
 							new IndirectArgumentReference(
+									runtimeStack.getVariableFrame(variableTuple.isGlobal()),
 									variableTuple.getVariableOffset(),
-									variableTuple.isGlobal(),
 									scalarValue));
 					position.next();
 					break;
@@ -2016,9 +2007,7 @@ public class AVM implements VariableManager, Closeable {
 						break;
 					}
 					if (!(o instanceof Map)) {
-						throw new AwkRuntimeException(
-								position.lineNumber(),
-								"Cannot get a key list (via 'in') of a non associative array. arg = " + o.getClass() + ", " + o);
+						throw new AwkRuntimeException("Attempting to use a scalar as an array.");
 					}
 					@SuppressWarnings("unchecked")
 					Map<Object, Object> map = (Map<Object, Object>) o;
@@ -2211,10 +2200,11 @@ public class AVM implements VariableManager, Closeable {
 					Address funcAddr = callTuple.getAddress();
 					long numFormalParams = callTuple.getNumFormalParams();
 					long numActualParams = callTuple.getNumActualParams();
+					Object[] actualArguments = popArguments(numActualParams);
+					resolveUserFunctionArguments(actualArguments);
 					runtimeStack.pushFrame(numFormalParams, position.currentIndex());
-					// Arguments are stacked, so first in the stack is the last for the function
-					for (long i = numActualParams - 1; i >= 0; i--) {
-						runtimeStack.setVariable(i, pop(), false); // false = local
+					for (int i = 0; i < actualArguments.length; i++) {
+						runtimeStack.setVariable(i, actualArguments[i], false);
 					}
 					position.jump(funcAddr);
 					// position.next();
@@ -2227,7 +2217,7 @@ public class AVM implements VariableManager, Closeable {
 					String qualifiedName = normalizeIndirectFunctionName(requestedName);
 					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
 					if (target != null) {
-						resolveIndirectArguments(actualArguments, target);
+						resolveUserFunctionArguments(actualArguments);
 						long formalCount = target.getNumFormalParams();
 						if (actualArguments.length > formalCount) {
 							jrt
@@ -2453,7 +2443,7 @@ public class AVM implements VariableManager, Closeable {
 						break;
 					}
 					if (!(arr instanceof Map)) {
-						throw new AwkRuntimeException("Attempting to test membership on a non-associative-array.");
+						throw new AwkRuntimeException("Attempting to use a scalar as an array.");
 					}
 					@SuppressWarnings("unchecked")
 					Map<Object, Object> aa = (Map<Object, Object>) arr;
@@ -2832,15 +2822,22 @@ public class AVM implements VariableManager, Closeable {
 		return functionName.startsWith("awk::") ? functionName.substring("awk::".length()) : functionName;
 	}
 
-	private void resolveIndirectArguments(
-			Object[] actualArgumentsParam,
-			IndirectFunctionTarget target) {
+	private void resolveUserFunctionArguments(Object[] actualArgumentsParam) {
 		for (int index = 0; index < actualArgumentsParam.length; index++) {
-			actualArgumentsParam[index] = resolveIndirectArgument(
-					actualArgumentsParam[index],
-					target.isArrayParameter(index),
-					false);
+			actualArgumentsParam[index] = resolveUserFunctionArgument(actualArgumentsParam[index]);
 		}
+	}
+
+	private Object resolveUserFunctionArgument(Object argument) {
+		if (!(argument instanceof ArgumentReference)) {
+			return argument;
+		}
+		ArgumentReference reference = (ArgumentReference) argument;
+		Object snapshot = reference.snapshot();
+		if (snapshot instanceof ArgumentReference) {
+			return resolveUserFunctionArgument(snapshot);
+		}
+		return isUntyped(snapshot) ? reference : snapshot;
 	}
 
 	private void resolveIndirectArguments(
@@ -2878,24 +2875,14 @@ public class AVM implements VariableManager, Closeable {
 			Object argument,
 			boolean arrayArgument,
 			boolean rawValueArgument) {
-		if (!(argument instanceof IndirectArgumentReference)) {
-			if (!(argument instanceof IndirectArrayArgumentReference)) {
-				return argument;
-			}
-			IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
-			return arrayArgument ?
-					ensureArrayInArray(reference.map, reference.key) : reference.scalarValue;
+		if (!(argument instanceof ArgumentReference)) {
+			return argument;
 		}
-		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
-		if (!arrayArgument) {
-			return reference.scalarValue == null && !rawValueArgument ? BLANK : reference.scalarValue;
+		ArgumentReference reference = (ArgumentReference) argument;
+		if (rawValueArgument) {
+			return reference.currentValue();
 		}
-		Object value = runtimeStack.getVariable(reference.offset, reference.global);
-		if (value == null) {
-			value = newAwkArray();
-			runtimeStack.setVariable(reference.offset, value, reference.global);
-		}
-		return value;
+		return resolveArgumentReference(reference, arrayArgument);
 	}
 
 	private Object invokeIndirectBuiltin(
@@ -3736,9 +3723,10 @@ public class AVM implements VariableManager, Closeable {
 	 */
 	private void assign(long l, Object value, boolean isGlobal, PositionTracker position, boolean push) {
 		value = JRT.untypedToBlank(value);
+		checkScalar(value);
 		// check if curr value already refers to an array
-		if (runtimeStack.getVariable(l, isGlobal) instanceof Map) {
-			throw new AwkRuntimeException(position.lineNumber(), "cannot assign anything to an unindexed associative array");
+		if (resolveVariable(l, isGlobal, false) instanceof Map) {
+			throw new AwkRuntimeException(position.lineNumber(), "Attempting to use an array in a scalar context.");
 		}
 		if (push) {
 			push(value);
@@ -3757,6 +3745,11 @@ public class AVM implements VariableManager, Closeable {
 	private void assignMapElement(Map<Object, Object> array, Object arrIdx, Object rhs) {
 		checkScalar(arrIdx);
 		rhs = JRT.untypedToBlank(rhs);
+		checkScalar(rhs);
+		if (JRT.containsAwkKey(array, arrIdx)
+				&& JRT.getAssocArrayValue(array, arrIdx) instanceof Map) {
+			throw new AwkRuntimeException("Attempting to use an array in a scalar context.");
+		}
 		array.put(arrIdx, rhs);
 		push(rhs);
 	}
@@ -3766,8 +3759,8 @@ public class AVM implements VariableManager, Closeable {
 	 * is placed back into that variable.
 	 */
 	private Object inc(long l, boolean isGlobal) {
-		Object o = runtimeStack.getVariable(l, isGlobal);
-		if (o == null || o instanceof UninitializedObject) {
+		Object o = resolveVariable(l, isGlobal, false);
+		if (o instanceof UninitializedObject) {
 			o = ZERO;
 			runtimeStack.setVariable(l, o, isGlobal);
 		}
@@ -3781,8 +3774,8 @@ public class AVM implements VariableManager, Closeable {
 	 * is placed back into that variable.
 	 */
 	private Object dec(long l, boolean isGlobal) {
-		Object o = runtimeStack.getVariable(l, isGlobal);
-		if (o == null || o instanceof UninitializedObject) {
+		Object o = resolveVariable(l, isGlobal, false);
+		if (o instanceof UninitializedObject) {
 			o = ZERO;
 			runtimeStack.setVariable(l, o, isGlobal);
 		}
@@ -4172,21 +4165,45 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private Map<Object, Object> ensureMapVariable(long offset, boolean isGlobal) {
-		Object value = runtimeStack.getVariable(offset, isGlobal);
-		if (value == null || value.equals(BLANK) || value instanceof UninitializedObject) {
-			Map<Object, Object> map = newAwkArray();
-			runtimeStack.setVariable(offset, map, isGlobal);
-			return map;
-		}
-		return toMap(value);
+		return toMap(resolveVariable(offset, isGlobal, true));
 	}
 
 	private Map<Object, Object> getMapVariable(long offset, boolean isGlobal) {
+		return toMap(resolveVariable(offset, isGlobal, true));
+	}
+
+	private Object resolveVariable(long offset, boolean isGlobal, boolean arrayContext) {
 		Object value = runtimeStack.getVariable(offset, isGlobal);
-		if (value == null || value.equals(BLANK) || value instanceof UninitializedObject) {
-			return null;
+		if (value instanceof ArgumentReference) {
+			value = resolveArgumentReference((ArgumentReference) value, arrayContext);
+			runtimeStack.setVariable(offset, value, isGlobal);
+			return value;
 		}
-		return toMap(value);
+		if (!isUntyped(value)) {
+			return value;
+		}
+		value = arrayContext ? newAwkArray() : BLANK;
+		runtimeStack.setVariable(offset, value, isGlobal);
+		return value;
+	}
+
+	private Object resolveArgumentReference(ArgumentReference reference, boolean arrayContext) {
+		Object value = reference.currentValue();
+		if (value instanceof ArgumentReference) {
+			value = resolveArgumentReference((ArgumentReference) value, arrayContext);
+			reference.setValue(value);
+			return value;
+		}
+		if (!isUntyped(value)) {
+			return value;
+		}
+		value = arrayContext ? newAwkArray() : BLANK;
+		reference.setValue(value);
+		return value;
+	}
+
+	private boolean isUntyped(Object value) {
+		return value == null || value instanceof UntypedObject;
 	}
 
 	/**
@@ -4198,7 +4215,7 @@ public class AVM implements VariableManager, Closeable {
 	 */
 	private Map<Object, Object> toMap(Object value) {
 		if (!(value instanceof Map)) {
-			throw new AwkRuntimeException("Attempting to treat a scalar as an array.");
+			throw new AwkRuntimeException("Attempting to use a scalar as an array.");
 		}
 		@SuppressWarnings("unchecked")
 		Map<Object, Object> map = (Map<Object, Object>) value;
@@ -4257,19 +4274,43 @@ public class AVM implements VariableManager, Closeable {
 
 	private static final UninitializedObject BLANK = new UninitializedObject();
 
-	private static final class IndirectArgumentReference {
+	private interface ArgumentReference {
+
+		Object snapshot();
+
+		Object currentValue();
+
+		void setValue(Object value);
+	}
+
+	private static final class IndirectArgumentReference implements ArgumentReference {
+		private final Object[] frame;
 		private final long offset;
-		private final boolean global;
 		private final Object scalarValue;
 
-		private IndirectArgumentReference(long offsetParam, boolean globalParam, Object scalarValueParam) {
+		private IndirectArgumentReference(Object[] frameParam, long offsetParam, Object scalarValueParam) {
+			frame = frameParam;
 			offset = offsetParam;
-			global = globalParam;
 			scalarValue = scalarValueParam;
+		}
+
+		@Override
+		public Object snapshot() {
+			return scalarValue;
+		}
+
+		@Override
+		public Object currentValue() {
+			return frame[(int) offset];
+		}
+
+		@Override
+		public void setValue(Object value) {
+			frame[(int) offset] = value;
 		}
 	}
 
-	private static final class IndirectArrayArgumentReference {
+	private static final class IndirectArrayArgumentReference implements ArgumentReference {
 		private final Map<Object, Object> map;
 		private final Object key;
 		private final Object scalarValue;
@@ -4281,6 +4322,21 @@ public class AVM implements VariableManager, Closeable {
 			map = mapParam;
 			key = keyParam;
 			scalarValue = scalarValueParam;
+		}
+
+		@Override
+		public Object snapshot() {
+			return scalarValue;
+		}
+
+		@Override
+		public Object currentValue() {
+			return JRT.getAssocArrayValue(map, key);
+		}
+
+		@Override
+		public void setValue(Object value) {
+			map.put(key, value);
 		}
 	}
 

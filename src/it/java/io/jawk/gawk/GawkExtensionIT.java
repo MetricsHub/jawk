@@ -50,7 +50,7 @@ public class GawkExtensionIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_aadelete2() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aadelete2");
 	}
 
 	@Test
@@ -848,7 +848,7 @@ public class GawkExtensionIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_mdim6() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("mdim6");
 	}
 
 	@Test

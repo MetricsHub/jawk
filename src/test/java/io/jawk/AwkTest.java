@@ -830,6 +830,42 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testArrayParameterDefersUntypedActualUntilScalarUse() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped array parameter follows caller scalarization")
+				.script("function f(x) { a = 1; x[1] = 2 } BEGIN { f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testArrayParameterDefersUntypedActualUntilArrayUse() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped array parameter follows caller array materialization")
+				.script("function f(x) { x[1] = 2; a = 1 } BEGIN { f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testArrayParameterRejectsAlreadyScalarActualAtRuntime() throws Exception {
+		AwkTestSupport
+				.awkTest("scalar actual remains scalar in array parameter")
+				.script("function f(x) { x[1] = 2 } BEGIN { a = 1; f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testFunctionResultCannotOverwriteSubarray() throws Exception {
+		AwkTestSupport
+				.awkTest("function result cannot overwrite a subarray")
+				.script("function f(x) { x[1] = 42 } BEGIN { a[0] = f(a[0]) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArraysOfArraysReportLineNumberWhenScalarUsedAsArray() throws Exception {
 		assertRuntimeExceptionLineNumber(
 				"arrays of arrays scalar used as array line number",
