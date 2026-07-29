@@ -848,6 +848,26 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testUntypedScalarParameterKeepsCallTimeValue() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter keeps its call-time value")
+				.script("function f(x) { a = 5; print \"[\" x \"]\"; print a } BEGIN { f(a) }")
+				.expectLines("[]", "5")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testDeletedUntypedSubarrayParameterRemainsDetached() throws Exception {
+		AwkTestSupport
+				.awkTest("deleted untyped subarray parameter remains detached")
+				.script(
+						"function f(x) { delete a[1]; x[2] = 3; print x[2] } "
+								+ "BEGIN { f(a[1]); print (1 in a) }")
+				.expectLines("3", "0")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArrayParameterRejectsAlreadyScalarActualAtRuntime() throws Exception {
 		AwkTestSupport
 				.awkTest("scalar actual remains scalar in array parameter")

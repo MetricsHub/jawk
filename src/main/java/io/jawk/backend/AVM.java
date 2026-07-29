@@ -4188,23 +4188,31 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private Object resolveRawArgumentReference(ArgumentReference reference) {
-		Object value = reference.currentValue();
+		Object value = reference.snapshot();
 		return value instanceof ArgumentReference ?
 				resolveRawArgumentReference((ArgumentReference) value) : value;
 	}
 
 	private Object resolveArgumentReference(ArgumentReference reference, boolean arrayContext) {
-		Object value = reference.currentValue();
+		Object value = arrayContext ? reference.currentValue() : reference.snapshot();
 		if (value instanceof ArgumentReference) {
 			value = resolveArgumentReference((ArgumentReference) value, arrayContext);
-			reference.setValue(value);
+			if (arrayContext) {
+				reference.setValue(value);
+			} else {
+				reference.setScalarValue(value);
+			}
 			return value;
 		}
 		if (!isUntyped(value)) {
 			return value;
 		}
 		value = arrayContext ? newAwkArray() : BLANK;
-		reference.setValue(value);
+		if (arrayContext) {
+			reference.setValue(value);
+		} else {
+			reference.setScalarValue(value);
+		}
 		return value;
 	}
 
@@ -4287,6 +4295,8 @@ public class AVM implements VariableManager, Closeable {
 		Object currentValue();
 
 		void setValue(Object value);
+
+		void setScalarValue(Object value);
 	}
 
 	private static final class IndirectArgumentReference implements ArgumentReference {
@@ -4314,12 +4324,17 @@ public class AVM implements VariableManager, Closeable {
 		public void setValue(Object value) {
 			frame[(int) offset] = value;
 		}
+
+		@Override
+		public void setScalarValue(Object value) {
+			// Scalar arguments are copied at call time.
+		}
 	}
 
 	private static final class IndirectArrayArgumentReference implements ArgumentReference {
 		private final Map<Object, Object> map;
 		private final Object key;
-		private final Object scalarValue;
+		private Object detachedValue;
 
 		private IndirectArrayArgumentReference(
 				Map<Object, Object> mapParam,
@@ -4327,22 +4342,32 @@ public class AVM implements VariableManager, Closeable {
 				Object scalarValueParam) {
 			map = mapParam;
 			key = keyParam;
-			scalarValue = scalarValueParam;
+			detachedValue = scalarValueParam;
 		}
 
 		@Override
 		public Object snapshot() {
-			return scalarValue;
+			return detachedValue;
 		}
 
 		@Override
 		public Object currentValue() {
-			return JRT.getAssocArrayValue(map, key);
+			return JRT.containsAwkKey(map, key) ?
+					JRT.getAssocArrayValue(map, key) : detachedValue;
 		}
 
 		@Override
 		public void setValue(Object value) {
-			map.put(key, value);
+			if (JRT.containsAwkKey(map, key)) {
+				map.put(key, value);
+			} else {
+				detachedValue = value;
+			}
+		}
+
+		@Override
+		public void setScalarValue(Object value) {
+			setValue(value);
 		}
 	}
 
