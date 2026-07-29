@@ -850,6 +850,20 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void rawValueExtensionsUnwrapForwardedUntypedArguments() throws Exception {
+		AwkTestSupport
+				.awkTest("raw value extensions receive forwarded untyped arguments")
+				.script(
+						"function forward(value) { inspect(value) } "
+								+ "function inspect(value) { "
+								+ "callback = \"typeof\"; print typeof(value), @callback(value) "
+								+ "} "
+								+ "BEGIN { forward(unset) }")
+				.expectLines("untyped untyped")
+				.runAndAssert();
+	}
+
+	@Test
 	public void typeofReportsStrnumForNumericInputFields() throws Exception {
 		AwkTestSupport
 				.awkTest("typeof reports strnum for numeric-looking input")

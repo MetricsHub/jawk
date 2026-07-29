@@ -1679,7 +1679,7 @@ public class AVM implements VariableManager, Closeable {
 							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
 					push(
 							value instanceof ArgumentReference ?
-									((ArgumentReference) value).currentValue() : value);
+									resolveRawArgumentReference((ArgumentReference) value) : value);
 					position.next();
 					break;
 				}
@@ -2880,7 +2880,7 @@ public class AVM implements VariableManager, Closeable {
 		}
 		ArgumentReference reference = (ArgumentReference) argument;
 		if (rawValueArgument) {
-			return reference.currentValue();
+			return resolveRawArgumentReference(reference);
 		}
 		return resolveArgumentReference(reference, arrayArgument);
 	}
@@ -4185,6 +4185,12 @@ public class AVM implements VariableManager, Closeable {
 		value = arrayContext ? newAwkArray() : BLANK;
 		runtimeStack.setVariable(offset, value, isGlobal);
 		return value;
+	}
+
+	private Object resolveRawArgumentReference(ArgumentReference reference) {
+		Object value = reference.currentValue();
+		return value instanceof ArgumentReference ?
+				resolveRawArgumentReference((ArgumentReference) value) : value;
 	}
 
 	private Object resolveArgumentReference(ArgumentReference reference, boolean arrayContext) {
