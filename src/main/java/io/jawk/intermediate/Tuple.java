@@ -155,6 +155,18 @@ public abstract class Tuple implements Serializable {
 	}
 
 	/**
+	 * Tuple for discarding an expression-statement value after validating that it
+	 * is scalar.
+	 */
+	public static final class ScalarPopTuple extends NoOperandTuple {
+		private static final long serialVersionUID = 1L;
+
+		ScalarPopTuple() {
+			super(Opcode.POP);
+		}
+	}
+
+	/**
 	 * Tuple for JRT-managed built-in variable operations.
 	 */
 	public static final class BuiltinVarTuple extends NoOperandTuple {

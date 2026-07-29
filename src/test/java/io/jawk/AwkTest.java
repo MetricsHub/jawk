@@ -830,6 +830,15 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testDiscardedArrayExpressionRejectsScalarContext() throws Exception {
+		AwkTestSupport
+				.awkTest("discarded array expression rejects scalar context")
+				.script("BEGIN { a[1] = 1; a; print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArrayParameterDefersUntypedActualUntilScalarUse() throws Exception {
 		AwkTestSupport
 				.awkTest("untyped array parameter follows caller scalarization")
@@ -843,6 +852,15 @@ public class AwkTest {
 		AwkTestSupport
 				.awkTest("untyped array parameter follows caller array materialization")
 				.script("function f(x) { x[1] = 2; a = 1 } BEGIN { f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testScalarParameterRejectsCallerArrayTransition() throws Exception {
+		AwkTestSupport
+				.awkTest("scalar parameter rejects caller array transition")
+				.script("function f(x, y) { x[1] = 1; print y } BEGIN { f(a, a) }")
 				.expectThrow(AwkRuntimeException.class)
 				.runAndAssert();
 	}
@@ -877,13 +895,13 @@ public class AwkTest {
 	}
 
 	@Test
-	public void testUntypedScalarParameterPreservesChangedSubarrayElement() throws Exception {
+	public void testUntypedScalarParameterRejectsChangedSubarrayElement() throws Exception {
 		AwkTestSupport
-				.awkTest("untyped scalar parameter preserves a changed subarray element")
+				.awkTest("untyped scalar parameter rejects a changed subarray element")
 				.script(
 						"function f(x) { a[1][2] = 7; print \"[\" x \"]\" } "
 								+ "BEGIN { f(a[1]); print a[1][2] }")
-				.expectLines("[]", "7")
+				.expectThrow(AwkRuntimeException.class)
 				.runAndAssert();
 	}
 

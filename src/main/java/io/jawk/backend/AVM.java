@@ -73,6 +73,7 @@ import io.jawk.intermediate.Tuple.PushDoubleTuple;
 import io.jawk.intermediate.Tuple.PushLongTuple;
 import io.jawk.intermediate.Tuple.PushStringTuple;
 import io.jawk.intermediate.Tuple.RegexTuple;
+import io.jawk.intermediate.Tuple.ScalarPopTuple;
 import io.jawk.intermediate.Tuple.SubstitutionVariableTuple;
 import io.jawk.intermediate.Tuple.VariableTuple;
 import io.jawk.intermediate.UninitializedObject;
@@ -1161,7 +1162,10 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case POP: {
 					// stack[0] = item to pop from the stack
-					pop();
+					Object discarded = pop();
+					if (tuple instanceof ScalarPopTuple) {
+						checkScalar(discarded);
+					}
 					position.next();
 					break;
 				}
@@ -4188,12 +4192,25 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private Object resolveRawArgumentReference(ArgumentReference reference) {
+		Object currentValue = readCurrentArgumentValue(reference);
+		if (currentValue instanceof Map) {
+			return currentValue;
+		}
 		Object value = reference.snapshot();
 		return value instanceof ArgumentReference ?
 				resolveRawArgumentReference((ArgumentReference) value) : value;
 	}
 
+	private Object readCurrentArgumentValue(ArgumentReference reference) {
+		Object value = reference.currentValue();
+		return value instanceof ArgumentReference ?
+				readCurrentArgumentValue((ArgumentReference) value) : value;
+	}
+
 	private Object resolveArgumentReference(ArgumentReference reference, boolean arrayContext) {
+		if (!arrayContext) {
+			checkScalar(readCurrentArgumentValue(reference));
+		}
 		Object value = arrayContext ? reference.currentValue() : reference.snapshot();
 		if (value instanceof ArgumentReference) {
 			value = resolveArgumentReference((ArgumentReference) value, arrayContext);

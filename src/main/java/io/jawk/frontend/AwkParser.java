@@ -3975,7 +3975,7 @@ public class AwkParser {
 			pushSourceLineNumber(tuples);
 			int exprCount = getAst1().populateTuples(tuples);
 			if (exprCount == 1) {
-				tuples.pop();
+				tuples.popScalar();
 			}
 			popSourceLineNumber(tuples);
 			return 0;

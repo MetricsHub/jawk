@@ -864,6 +864,17 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void rawValueExtensionsObserveCallerArrayTransitions() throws Exception {
+		AwkTestSupport
+				.awkTest("raw value extensions observe caller array transitions")
+				.script(
+						"function f(x) { a[1] = 1; print typeof(x), isarray(x) } "
+								+ "BEGIN { f(a) }")
+				.expectLines("array 1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void typeofReportsStrnumForNumericInputFields() throws Exception {
 		AwkTestSupport
 				.awkTest("typeof reports strnum for numeric-looking input")
