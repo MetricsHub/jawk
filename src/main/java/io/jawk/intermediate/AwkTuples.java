@@ -153,6 +153,13 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
+	 * Discards a value that was evaluated in scalar context.
+	 */
+	public void popScalar() {
+		queue.add(new Tuple.ScalarPopTuple());
+	}
+
+	/**
 	 * <p>
 	 * push.
 	 * </p>

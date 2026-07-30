@@ -119,6 +119,6 @@ public class HashAssocArray extends HashMap<Object, Object> implements AssocArra
 	 */
 	@Override
 	public String toString() {
-		throw new AwkRuntimeException("Cannot evaluate an unindexed array.");
+		throw new AwkRuntimeException("Attempting to use an array in a scalar context.");
 	}
 }

@@ -23,12 +23,15 @@ package io.jawk.gawk;
  */
 
 import static org.junit.Assume.assumeTrue;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import io.jawk.AwkTestSupport;
 import io.jawk.CompatibilityTestResources;
+import io.jawk.jrt.AwkRuntimeException;
 
 /**
  * Shared helpers for the explicit gawk compatibility integration suites
@@ -53,6 +56,21 @@ abstract class AbstractGawkSuite {
 
 	protected static String gawkText(String fileName) throws IOException {
 		return new String(Files.readAllBytes(gawkPath(fileName)), StandardCharsets.UTF_8);
+	}
+
+	protected static void assertGawkRuntimeFailure(String testName) throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.awkTest("GAWK " + testName)
+				.script(gawkText(testName + ".awk"))
+				.expectThrow(AwkRuntimeException.class)
+				.run();
+		result.assertExpected();
+
+		String expectedTranscript = gawkText(testName + ".ok");
+		String expectedMessage = expectedTranscript.contains(" as an array") ?
+				"scalar as an array" : "array in a scalar context";
+		String actualMessage = result.thrownException().getMessage();
+		assertTrue(actualMessage, actualMessage.contains(expectedMessage));
 	}
 
 	protected static void skip(String reason) {

@@ -98,7 +98,7 @@ public class GawkIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_arrayparm() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("arrayparm");
 	}
 
 	@Test
@@ -153,17 +153,17 @@ public class GawkIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_arryref3() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("arryref3");
 	}
 
 	@Test
 	public void test_arryref4() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("arryref4");
 	}
 
 	@Test
 	public void test_arryref5() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("arryref5");
 	}
 
 	@Test
@@ -178,37 +178,37 @@ public class GawkIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_aryprm1() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm1");
 	}
 
 	@Test
 	public void test_aryprm2() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm2");
 	}
 
 	@Test
 	public void test_aryprm3() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm3");
 	}
 
 	@Test
 	public void test_aryprm4() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm4");
 	}
 
 	@Test
 	public void test_aryprm5() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm5");
 	}
 
 	@Test
 	public void test_aryprm6() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm6");
 	}
 
 	@Test
 	public void test_aryprm7() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("aryprm7");
 	}
 
 	@Test
@@ -651,7 +651,7 @@ public class GawkIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_fnaryscl() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("fnaryscl");
 	}
 
 	@Test
@@ -1530,7 +1530,7 @@ public class GawkIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_prmarscl() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("prmarscl");
 	}
 
 	@Test
@@ -1845,17 +1845,17 @@ public class GawkIT extends AbstractGawkSuite {
 
 	@Test
 	public void test_scalar() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("scalar");
 	}
 
 	@Test
 	public void test_sclforin() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("sclforin");
 	}
 
 	@Test
 	public void test_sclifin() throws Exception {
-		skip(NON_ZERO_TRANSCRIPT_REASON);
+		assertGawkRuntimeFailure("sclifin");
 	}
 
 	@Test

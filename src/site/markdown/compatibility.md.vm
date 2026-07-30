@@ -135,6 +135,8 @@ GNU Awk (gawk)
 
 [GNU Awk](https://www.gnu.org/software/gawk/) compatibility gathered from explicit Java integration suites that mirror the main gawk test families: core behavior, extensions, locale-sensitive behavior, and optional features.
 
+Array and scalar types follow gawk's runtime rules across function parameters and nested array references. An untyped argument remains linked to its caller until its first scalar or array use fixes the type; conflicting assignment, membership, iteration, deletion, or subarray use then fails at runtime.
+
 <div class="row compat-row">
   <div class="col-sm-9">
     <div class="progress">

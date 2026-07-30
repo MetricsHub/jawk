@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -73,6 +74,7 @@ import io.jawk.intermediate.Tuple.PushDoubleTuple;
 import io.jawk.intermediate.Tuple.PushLongTuple;
 import io.jawk.intermediate.Tuple.PushStringTuple;
 import io.jawk.intermediate.Tuple.RegexTuple;
+import io.jawk.intermediate.Tuple.ScalarPopTuple;
 import io.jawk.intermediate.Tuple.SubstitutionVariableTuple;
 import io.jawk.intermediate.Tuple.VariableTuple;
 import io.jawk.intermediate.UninitializedObject;
@@ -127,6 +129,11 @@ public class AVM implements VariableManager, Closeable {
 
 	// operand stack
 	private Deque<Object> operandStack = new ArrayDeque<Object>();
+	// Untyped array elements currently passed as user-function arguments, in
+	// call order. Each reference lives exactly as long as the call frame that
+	// received it, so this stack stays empty unless an untyped element
+	// argument is in flight.
+	private final Deque<IndirectArrayArgumentReference> elementArgumentReferences = new ArrayDeque<IndirectArrayArgumentReference>();
 	private List<String> arguments;
 	private boolean sortedArrayKeys;
 	private final Map<String, Object> baseInitialVariables;
@@ -703,6 +710,7 @@ public class AVM implements VariableManager, Closeable {
 	private void resetTransientRuntimeState(List<String> runtimeArguments, Map<String, Object> variableOverrides) {
 		// Reset the AVM-owned state that must not leak across executions.
 		operandStack.clear();
+		elementArgumentReferences.clear();
 		environOffset = NULL_OFFSET;
 		argcOffset = NULL_OFFSET;
 		argvOffset = NULL_OFFSET;
@@ -1161,7 +1169,10 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case POP: {
 					// stack[0] = item to pop from the stack
-					pop();
+					Object discarded = pop();
+					if (tuple instanceof ScalarPopTuple) {
+						checkScalar(discarded);
+					}
 					position.next();
 					break;
 				}
@@ -1468,10 +1479,7 @@ public class AVM implements VariableManager, Closeable {
 					VariableTuple variableTuple = (VariableTuple) tuple;
 					long offset = variableTuple.getVariableOffset();
 					boolean isGlobal = variableTuple.isGlobal();
-					Object o1 = runtimeStack.getVariable(offset, isGlobal);
-					if (o1 == null) {
-						o1 = BLANK;
-					}
+					Object o1 = resolveVariable(offset, isGlobal, false);
 					Object o2 = pop();
 					double d1 = JRT.toDouble(o1);
 					double d2 = JRT.toDouble(o2);
@@ -1672,23 +1680,17 @@ public class AVM implements VariableManager, Closeable {
 					DereferenceTuple dereferenceTuple = (DereferenceTuple) tuple;
 					boolean isGlobal = dereferenceTuple.isGlobal();
 					long offset = dereferenceTuple.getVariableOffset();
-					Object o = runtimeStack.getVariable(offset, isGlobal);
-					if (o == null) {
-						if (dereferenceTuple.isArray()) {
-							// is_array
-							push(runtimeStack.setVariable(offset, newAwkArray(), isGlobal));
-						} else {
-							push(runtimeStack.setVariable(offset, BLANK, isGlobal));
-						}
-					} else {
-						push(o);
-					}
+					push(resolveVariable(offset, isGlobal, dereferenceTuple.isArray()));
 					position.next();
 					break;
 				}
 				case PEEK_DEREFERENCE: {
 					VariableTuple variableTuple = (VariableTuple) tuple;
-					push(runtimeStack.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal()));
+					Object value = runtimeStack
+							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
+					push(
+							value instanceof ArgumentReference ?
+									resolveRawArgumentReference((ArgumentReference) value) : value);
 					position.next();
 					break;
 				}
@@ -1696,11 +1698,19 @@ public class AVM implements VariableManager, Closeable {
 					VariableTuple variableTuple = (VariableTuple) tuple;
 					Object scalarValue = runtimeStack
 							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
-					push(
-							new IndirectArgumentReference(
-									variableTuple.getVariableOffset(),
-									variableTuple.isGlobal(),
-									scalarValue));
+					// Typed values are passed as plain values; only untyped
+					// variables need a live link back to the caller's slot.
+					if (scalarValue instanceof ArgumentReference) {
+						push(resolveUserFunctionArgument(scalarValue));
+					} else if (isUntyped(scalarValue)) {
+						push(
+								new IndirectArgumentReference(
+										runtimeStack.getVariableFrame(variableTuple.isGlobal()),
+										variableTuple.getVariableOffset(),
+										scalarValue));
+					} else {
+						push(scalarValue);
+					}
 					position.next();
 					break;
 				}
@@ -1709,7 +1719,11 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(idx);
 					Map<Object, Object> map = toMap(pop());
 					Object scalarValue = JRT.getAssocArrayValue(map, idx);
-					push(new IndirectArrayArgumentReference(map, idx, scalarValue));
+					// Typed elements are passed as plain values; only untyped
+					// elements need a live link back to their containing array.
+					push(
+							isUntyped(scalarValue) ?
+									new IndirectArrayArgumentReference(map, idx, scalarValue) : scalarValue);
 					position.next();
 					break;
 				}
@@ -1738,10 +1752,10 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(idx);
 					Map<Object, Object> map = toMap(pop());
 					if (map instanceof AssocArray && !JRT.containsAwkKey(map, idx)) {
-						push(BLANK);
+						push(AssocArray.UNTYPED);
 					} else {
 						Object value = map.get(idx);
-						push(value != null ? value : BLANK);
+						push(value != null ? value : AssocArray.UNTYPED);
 					}
 					position.next();
 					break;
@@ -2010,15 +2024,13 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case KEYLIST: {
 					Object o = pop();
-					if (o == null || o instanceof UninitializedObject) {
+					if (isUntyped(o)) {
 						push(new ArrayDeque<>());
 						position.next();
 						break;
 					}
 					if (!(o instanceof Map)) {
-						throw new AwkRuntimeException(
-								position.lineNumber(),
-								"Cannot get a key list (via 'in') of a non associative array. arg = " + o.getClass() + ", " + o);
+						throw new AwkRuntimeException("Attempting to use a scalar as an array.");
 					}
 					@SuppressWarnings("unchecked")
 					Map<Object, Object> map = (Map<Object, Object>) o;
@@ -2214,7 +2226,9 @@ public class AVM implements VariableManager, Closeable {
 					runtimeStack.pushFrame(numFormalParams, position.currentIndex());
 					// Arguments are stacked, so first in the stack is the last for the function
 					for (long i = numActualParams - 1; i >= 0; i--) {
-						runtimeStack.setVariable(i, pop(), false); // false = local
+						Object argument = pop();
+						adoptElementArgumentReference(argument);
+						runtimeStack.setVariable(i, argument, false); // false = local
 					}
 					position.jump(funcAddr);
 					// position.next();
@@ -2227,7 +2241,6 @@ public class AVM implements VariableManager, Closeable {
 					String qualifiedName = normalizeIndirectFunctionName(requestedName);
 					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
 					if (target != null) {
-						resolveIndirectArguments(actualArguments, target);
 						long formalCount = target.getNumFormalParams();
 						if (actualArguments.length > formalCount) {
 							jrt
@@ -2244,6 +2257,7 @@ public class AVM implements VariableManager, Closeable {
 							activeProfilingFunctions.push(new ActiveFunction(qualifiedName, tupleStartNanos));
 						}
 						runtimeStack.pushFrame(formalCount, position.currentIndex());
+						adoptElementArgumentReferences(actualArguments);
 						int copiedArgumentCount = Math.min(actualArguments.length, (int) formalCount);
 						for (int i = 0; i < copiedArgumentCount; i++) {
 							runtimeStack.setVariable(i, actualArguments[i], false);
@@ -2306,6 +2320,7 @@ public class AVM implements VariableManager, Closeable {
 					break;
 				}
 				case RETURN_FROM_FUNCTION: {
+					releaseElementArgumentReferences();
 					position.jump(runtimeStack.popFrame());
 					push(runtimeStack.getReturnValue());
 					position.next();
@@ -2355,6 +2370,7 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(key);
 					if (aa != null) {
 						aa.remove(key);
+						detachMissingArrayArgumentReferences(aa);
 					}
 					position.next();
 					break;
@@ -2366,6 +2382,7 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(key);
 					Map<Object, Object> aa = toMap(pop());
 					aa.remove(key);
+					detachMissingArrayArgumentReferences(aa);
 					position.next();
 					break;
 				}
@@ -2379,6 +2396,7 @@ public class AVM implements VariableManager, Closeable {
 					Map<Object, Object> array = getMapVariable(offset, isGlobal);
 					if (array != null) {
 						array.clear();
+						detachMissingArrayArgumentReferences(array);
 					}
 					position.next();
 					break;
@@ -2402,10 +2420,7 @@ public class AVM implements VariableManager, Closeable {
 
 					// If in BEGIN or in a rule, jump to the END section
 					if (!withinEndBlocks && exitAddress != null) {
-						// clear runtime stack
-						runtimeStack.popAllFrames();
-						// clear operand stack
-						operandStack.clear();
+						resetCallState();
 						position.jump(exitAddress);
 					} else {
 						// Exit immediately with ExitException
@@ -2447,13 +2462,13 @@ public class AVM implements VariableManager, Closeable {
 					Object arr = pop();
 					Object arg = pop();
 					checkScalar(arg);
-					if (arr == null || arr instanceof UninitializedObject) {
+					if (isUntyped(arr)) {
 						push(ZERO);
 						position.next();
 						break;
 					}
 					if (!(arr instanceof Map)) {
-						throw new AwkRuntimeException("Attempting to test membership on a non-associative-array.");
+						throw new AwkRuntimeException("Attempting to use a scalar as an array.");
 					}
 					@SuppressWarnings("unchecked")
 					Map<Object, Object> aa = (Map<Object, Object>) arr;
@@ -2717,25 +2732,16 @@ public class AVM implements VariableManager, Closeable {
 			}
 			throw ee;
 		} catch (IOException ioe) {
-			// clear runtime stack
-			runtimeStack.popAllFrames();
-			// clear operand stack
-			operandStack.clear();
+			resetCallState();
 			throw ioe;
 		} catch (RuntimeException re) {
-			// clear runtime stack
-			runtimeStack.popAllFrames();
-			// clear operand stack
-			operandStack.clear();
+			resetCallState();
 			if (re instanceof AwkSandboxException) {
 				throw re;
 			}
 			throw new AwkRuntimeException(position.lineNumber(), re.getMessage(), re);
 		} catch (AssertionError ae) {
-			// clear runtime stack
-			runtimeStack.popAllFrames();
-			// clear operand stack
-			operandStack.clear();
+			resetCallState();
 			throw ae;
 		}
 
@@ -2820,7 +2826,11 @@ public class AVM implements VariableManager, Closeable {
 			push(jrt.jrtGetInputField(0).toString().length());
 			return;
 		}
-		push(lengthOf(pop()));
+		Object value = pop();
+		if (value instanceof ArgumentReference) {
+			value = resolveLengthArgumentReference((ArgumentReference) value);
+		}
+		push(lengthOf(value));
 	}
 
 	private Object lengthOf(Object value) {
@@ -2832,15 +2842,61 @@ public class AVM implements VariableManager, Closeable {
 		return functionName.startsWith("awk::") ? functionName.substring("awk::".length()) : functionName;
 	}
 
-	private void resolveIndirectArguments(
-			Object[] actualArgumentsParam,
-			IndirectFunctionTarget target) {
-		for (int index = 0; index < actualArgumentsParam.length; index++) {
-			actualArgumentsParam[index] = resolveIndirectArgument(
-					actualArgumentsParam[index],
-					target.isArrayParameter(index),
-					false);
+	/**
+	 * Unwinds every call frame and clears the per-call runtime state, after an
+	 * {@code exit} statement or an abandoned execution.
+	 */
+	private void resetCallState() {
+		runtimeStack.popAllFrames();
+		elementArgumentReferences.clear();
+		operandStack.clear();
+	}
+
+	/**
+	 * Registers the untyped element references received by the call frame that
+	 * was just pushed, so array mutations occurring during the call can detach
+	 * them. References forwarded from an enclosing call keep their original
+	 * owner.
+	 */
+	private void adoptElementArgumentReferences(Object[] actualArguments) {
+		for (Object argument : actualArguments) {
+			adoptElementArgumentReference(argument);
 		}
+	}
+
+	private void adoptElementArgumentReference(Object argument) {
+		if (argument instanceof IndirectArrayArgumentReference) {
+			IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
+			if (reference.ownerFrame < 0) {
+				reference.ownerFrame = runtimeStack.frameCount();
+				elementArgumentReferences.push(reference);
+			}
+		}
+	}
+
+	/**
+	 * Drops the element references owned by the call frame that is about to be
+	 * popped. Frames are strictly nested, so the owned references always sit on
+	 * top of the tracking stack.
+	 */
+	private void releaseElementArgumentReferences() {
+		int depth = runtimeStack.frameCount();
+		while (!elementArgumentReferences.isEmpty()
+				&& elementArgumentReferences.peek().ownerFrame == depth) {
+			elementArgumentReferences.pop();
+		}
+	}
+
+	private Object resolveUserFunctionArgument(Object argument) {
+		if (!(argument instanceof ArgumentReference)) {
+			return argument;
+		}
+		ArgumentReference reference = (ArgumentReference) argument;
+		Object snapshot = reference.snapshot();
+		if (snapshot instanceof ArgumentReference) {
+			return resolveUserFunctionArgument(snapshot);
+		}
+		return isUntyped(snapshot) ? reference : snapshot;
 	}
 
 	private void resolveIndirectArguments(
@@ -2878,24 +2934,14 @@ public class AVM implements VariableManager, Closeable {
 			Object argument,
 			boolean arrayArgument,
 			boolean rawValueArgument) {
-		if (!(argument instanceof IndirectArgumentReference)) {
-			if (!(argument instanceof IndirectArrayArgumentReference)) {
-				return argument;
-			}
-			IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
-			return arrayArgument ?
-					ensureArrayInArray(reference.map, reference.key) : reference.scalarValue;
+		if (!(argument instanceof ArgumentReference)) {
+			return argument;
 		}
-		IndirectArgumentReference reference = (IndirectArgumentReference) argument;
-		if (!arrayArgument) {
-			return reference.scalarValue == null && !rawValueArgument ? BLANK : reference.scalarValue;
+		ArgumentReference reference = (ArgumentReference) argument;
+		if (rawValueArgument) {
+			return resolveRawArgumentReference(reference);
 		}
-		Object value = runtimeStack.getVariable(reference.offset, reference.global);
-		if (value == null) {
-			value = newAwkArray();
-			runtimeStack.setVariable(reference.offset, value, reference.global);
-		}
-		return value;
+		return resolveArgumentReference(reference, arrayArgument);
 	}
 
 	private Object invokeIndirectBuiltin(
@@ -3023,7 +3069,13 @@ public class AVM implements VariableManager, Closeable {
 							+ "' does not extend "
 							+ AbstractExtension.class.getName());
 		}
-		Object result = function.invoke((AbstractExtension) extension, args);
+		Map<IndirectArrayArgumentReference, Object> attachedValues = captureAttachedArrayArgumentValues();
+		Object result;
+		try {
+			result = function.invoke((AbstractExtension) extension, args);
+		} finally {
+			detachReplacedArrayArgumentReferences(attachedValues);
+		}
 		if (blockResult && result instanceof BlockObject) {
 			result = new BlockManager().block((BlockObject) result);
 		}
@@ -3122,6 +3174,7 @@ public class AVM implements VariableManager, Closeable {
 		@SuppressWarnings("unchecked")
 		Map<Object, Object> assocArray = (Map<Object, Object>) target;
 		assocArray.clear();
+		detachMissingArrayArgumentReferences(assocArray);
 		long cnt = 0;
 		while (tokenizer.hasMoreElements()) {
 			Object value = tokenizer.nextElement();
@@ -3736,9 +3789,10 @@ public class AVM implements VariableManager, Closeable {
 	 */
 	private void assign(long l, Object value, boolean isGlobal, PositionTracker position, boolean push) {
 		value = JRT.untypedToBlank(value);
+		checkScalar(value);
 		// check if curr value already refers to an array
-		if (runtimeStack.getVariable(l, isGlobal) instanceof Map) {
-			throw new AwkRuntimeException(position.lineNumber(), "cannot assign anything to an unindexed associative array");
+		if (resolveVariable(l, isGlobal, false) instanceof Map) {
+			throw new AwkRuntimeException(position.lineNumber(), "Attempting to use an array in a scalar context.");
 		}
 		if (push) {
 			push(value);
@@ -3757,6 +3811,11 @@ public class AVM implements VariableManager, Closeable {
 	private void assignMapElement(Map<Object, Object> array, Object arrIdx, Object rhs) {
 		checkScalar(arrIdx);
 		rhs = JRT.untypedToBlank(rhs);
+		checkScalar(rhs);
+		if (JRT.containsAwkKey(array, arrIdx)
+				&& JRT.getAssocArrayValue(array, arrIdx) instanceof Map) {
+			throw new AwkRuntimeException("Attempting to use an array in a scalar context.");
+		}
 		array.put(arrIdx, rhs);
 		push(rhs);
 	}
@@ -3766,8 +3825,8 @@ public class AVM implements VariableManager, Closeable {
 	 * is placed back into that variable.
 	 */
 	private Object inc(long l, boolean isGlobal) {
-		Object o = runtimeStack.getVariable(l, isGlobal);
-		if (o == null || o instanceof UninitializedObject) {
+		Object o = resolveVariable(l, isGlobal, false);
+		if (o instanceof UninitializedObject) {
 			o = ZERO;
 			runtimeStack.setVariable(l, o, isGlobal);
 		}
@@ -3781,8 +3840,8 @@ public class AVM implements VariableManager, Closeable {
 	 * is placed back into that variable.
 	 */
 	private Object dec(long l, boolean isGlobal) {
-		Object o = runtimeStack.getVariable(l, isGlobal);
-		if (o == null || o instanceof UninitializedObject) {
+		Object o = resolveVariable(l, isGlobal, false);
+		if (o instanceof UninitializedObject) {
 			o = ZERO;
 			runtimeStack.setVariable(l, o, isGlobal);
 		}
@@ -4172,21 +4231,110 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private Map<Object, Object> ensureMapVariable(long offset, boolean isGlobal) {
-		Object value = runtimeStack.getVariable(offset, isGlobal);
-		if (value == null || value.equals(BLANK) || value instanceof UninitializedObject) {
-			Map<Object, Object> map = newAwkArray();
-			runtimeStack.setVariable(offset, map, isGlobal);
-			return map;
-		}
-		return toMap(value);
+		return toMap(resolveVariable(offset, isGlobal, true));
 	}
 
 	private Map<Object, Object> getMapVariable(long offset, boolean isGlobal) {
+		return toMap(resolveVariable(offset, isGlobal, true));
+	}
+
+	private Object resolveVariable(long offset, boolean isGlobal, boolean arrayContext) {
 		Object value = runtimeStack.getVariable(offset, isGlobal);
-		if (value == null || value.equals(BLANK) || value instanceof UninitializedObject) {
-			return null;
+		// Argument references are only ever stored in local parameter slots,
+		// so global reads skip the reference check entirely.
+		if (!isGlobal && value instanceof ArgumentReference) {
+			value = resolveArgumentReference((ArgumentReference) value, arrayContext);
+			runtimeStack.setVariable(offset, value, isGlobal);
+			return value;
 		}
-		return toMap(value);
+		if (!isUntyped(value)) {
+			return value;
+		}
+		value = arrayContext ? newAwkArray() : BLANK;
+		runtimeStack.setVariable(offset, value, isGlobal);
+		return value;
+	}
+
+	private Object resolveRawArgumentReference(ArgumentReference reference) {
+		Object currentValue = readCurrentArgumentValue(reference);
+		if (currentValue instanceof Map
+				|| currentValue instanceof UninitializedObject
+						&& !(currentValue instanceof UntypedObject)) {
+			return currentValue;
+		}
+		Object value = reference.snapshot();
+		return value instanceof ArgumentReference ?
+				resolveRawArgumentReference((ArgumentReference) value) : value;
+	}
+
+	private Object readCurrentArgumentValue(ArgumentReference reference) {
+		Object value = reference.currentValue();
+		return value instanceof ArgumentReference ?
+				readCurrentArgumentValue((ArgumentReference) value) : value;
+	}
+
+	private Object resolveArgumentReference(ArgumentReference reference, boolean arrayContext) {
+		if (!arrayContext) {
+			checkScalar(readCurrentArgumentValue(reference));
+		}
+		Object value = arrayContext ? reference.currentValue() : reference.snapshot();
+		if (value instanceof ArgumentReference) {
+			value = resolveArgumentReference((ArgumentReference) value, arrayContext);
+			if (arrayContext) {
+				reference.setValue(value);
+			} else {
+				reference.setScalarValue(value);
+			}
+			return value;
+		}
+		if (!isUntyped(value)) {
+			return value;
+		}
+		value = arrayContext ? newAwkArray() : BLANK;
+		if (arrayContext) {
+			reference.setValue(value);
+		} else {
+			reference.setScalarValue(value);
+		}
+		return value;
+	}
+
+	private Object resolveLengthArgumentReference(ArgumentReference reference) {
+		Object currentValue = readCurrentArgumentValue(reference);
+		return currentValue instanceof Map ? currentValue : resolveArgumentReference(reference, false);
+	}
+
+	private Map<IndirectArrayArgumentReference, Object> captureAttachedArrayArgumentValues() {
+		if (elementArgumentReferences.isEmpty()) {
+			return Collections.emptyMap();
+		}
+		Map<IndirectArrayArgumentReference, Object> values = new IdentityHashMap<IndirectArrayArgumentReference, Object>();
+		for (IndirectArrayArgumentReference reference : elementArgumentReferences) {
+			if (reference.isAttached()) {
+				values.put(reference, reference.currentValue());
+			}
+		}
+		return values;
+	}
+
+	private void detachReplacedArrayArgumentReferences(
+			Map<IndirectArrayArgumentReference, Object> attachedValues) {
+		for (Map.Entry<IndirectArrayArgumentReference, Object> entry : attachedValues.entrySet()) {
+			entry.getKey().detachIfReplaced(entry.getValue());
+		}
+	}
+
+	private void detachMissingArrayArgumentReferences(Map<Object, Object> map) {
+		if (elementArgumentReferences.isEmpty()) {
+			return;
+		}
+		for (IndirectArrayArgumentReference reference : elementArgumentReferences) {
+			reference.detachIfMissing(map);
+		}
+	}
+
+	private static boolean isUntyped(Object value) {
+		return value == null || value instanceof UntypedObject;
 	}
 
 	/**
@@ -4198,7 +4346,7 @@ public class AVM implements VariableManager, Closeable {
 	 */
 	private Map<Object, Object> toMap(Object value) {
 		if (!(value instanceof Map)) {
-			throw new AwkRuntimeException("Attempting to treat a scalar as an array.");
+			throw new AwkRuntimeException("Attempting to use a scalar as an array.");
 		}
 		@SuppressWarnings("unchecked")
 		Map<Object, Object> map = (Map<Object, Object>) value;
@@ -4257,22 +4405,59 @@ public class AVM implements VariableManager, Closeable {
 
 	private static final UninitializedObject BLANK = new UninitializedObject();
 
-	private static final class IndirectArgumentReference {
+	private interface ArgumentReference {
+
+		Object snapshot();
+
+		Object currentValue();
+
+		void setValue(Object value);
+
+		void setScalarValue(Object value);
+	}
+
+	private static final class IndirectArgumentReference implements ArgumentReference {
+		private final Object[] frame;
 		private final long offset;
-		private final boolean global;
 		private final Object scalarValue;
 
-		private IndirectArgumentReference(long offsetParam, boolean globalParam, Object scalarValueParam) {
+		private IndirectArgumentReference(Object[] frameParam, long offsetParam, Object scalarValueParam) {
+			frame = frameParam;
 			offset = offsetParam;
-			global = globalParam;
 			scalarValue = scalarValueParam;
+		}
+
+		@Override
+		public Object snapshot() {
+			return scalarValue;
+		}
+
+		@Override
+		public Object currentValue() {
+			return frame[(int) offset];
+		}
+
+		@Override
+		public void setValue(Object value) {
+			frame[(int) offset] = value;
+		}
+
+		@Override
+		public void setScalarValue(Object value) {
+			if (isUntyped(currentValue())) {
+				setValue(value);
+			}
 		}
 	}
 
-	private static final class IndirectArrayArgumentReference {
+	private static final class IndirectArrayArgumentReference implements ArgumentReference {
 		private final Map<Object, Object> map;
 		private final Object key;
-		private final Object scalarValue;
+		private Object detachedValue;
+		private boolean detached;
+		// Depth of the call frame that received this reference as an
+		// argument; negative until the call is entered.
+		private int ownerFrame = -1;
 
 		private IndirectArrayArgumentReference(
 				Map<Object, Object> mapParam,
@@ -4280,7 +4465,55 @@ public class AVM implements VariableManager, Closeable {
 				Object scalarValueParam) {
 			map = mapParam;
 			key = keyParam;
-			scalarValue = scalarValueParam;
+			detachedValue = scalarValueParam;
+			detached = !JRT.containsAwkKey(map, key);
+		}
+
+		@Override
+		public Object snapshot() {
+			return detachedValue;
+		}
+
+		@Override
+		public Object currentValue() {
+			return !detached && JRT.containsAwkKey(map, key) ?
+					JRT.getAssocArrayValue(map, key) : detachedValue;
+		}
+
+		@Override
+		public void setValue(Object value) {
+			if (!detached && JRT.containsAwkKey(map, key)) {
+				map.put(key, value);
+			} else {
+				detachedValue = value;
+			}
+		}
+
+		@Override
+		public void setScalarValue(Object value) {
+			if (detached || !JRT.containsAwkKey(map, key)) {
+				detachedValue = value;
+			} else if (isUntyped(JRT.getAssocArrayValue(map, key))) {
+				map.put(key, value);
+			}
+		}
+
+		private void detachIfMissing(Map<Object, Object> candidateMap) {
+			if (!detached && map == candidateMap && !JRT.containsAwkKey(map, key)) {
+				detached = true;
+			}
+		}
+
+		private boolean isAttached() {
+			return !detached && JRT.containsAwkKey(map, key);
+		}
+
+		private void detachIfReplaced(Object previousValue) {
+			if (!detached
+					&& (!JRT.containsAwkKey(map, key)
+							|| JRT.getAssocArrayValue(map, key) != previousValue)) {
+				detached = true;
+			}
 		}
 	}
 

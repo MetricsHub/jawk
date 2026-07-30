@@ -830,6 +830,201 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testDiscardedArrayExpressionRejectsScalarContext() throws Exception {
+		AwkTestSupport
+				.awkTest("discarded array expression rejects scalar context")
+				.script("BEGIN { a[1] = 1; a; print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testAssignedBlankRejectsForInArrayContext() throws Exception {
+		AwkTestSupport
+				.awkTest("assigned blank rejects for-in array context")
+				.script("BEGIN { print \"[\" a \"]\"; for (i in a); print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testAssignedBlankRejectsMembershipArrayContext() throws Exception {
+		AwkTestSupport
+				.awkTest("assigned blank rejects membership array context")
+				.script("BEGIN { print \"[\" a \"]\"; print (1 in a); print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testSpecialScalarRejectsArrayElementAssignment() throws Exception {
+		AwkTestSupport
+				.awkTest("special scalar rejects array element assignment")
+				.script("BEGIN { FS[1] = 2; print FS }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testSpecialScalarRejectsArrayOnlyContexts() throws Exception {
+		AwkTestSupport
+				.awkTest("special scalar rejects array membership")
+				.script("BEGIN { print (1 in FS) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("special scalar rejects for-in")
+				.script("BEGIN { for (key in NR); print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("special scalar rejects split destination")
+				.script("BEGIN { split(\"a\", FS) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testArrayParameterDefersUntypedActualUntilScalarUse() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped array parameter follows caller scalarization")
+				.script("function f(x) { a = 1; x[1] = 2 } BEGIN { f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testArrayParameterDefersUntypedActualUntilArrayUse() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped array parameter follows caller array materialization")
+				.script("function f(x) { x[1] = 2; a = 1 } BEGIN { f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testScalarParameterRejectsCallerArrayTransition() throws Exception {
+		AwkTestSupport
+				.awkTest("scalar parameter rejects caller array transition")
+				.script("function f(x, y) { x[1] = 1; print y } BEGIN { f(a, a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testLengthParameterObservesCallerArrayTransition() throws Exception {
+		AwkTestSupport
+				.awkTest("length parameter observes caller array transition")
+				.script("function f(x, y) { y[1] = 1; print length(x) } BEGIN { f(a, a) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUntypedScalarParameterKeepsCallTimeValue() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter keeps its call-time value")
+				.script("function f(x) { a = 5; print \"[\" x \"]\"; print a } BEGIN { f(a) }")
+				.expectLines("[]", "5")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUntypedScalarParameterScalarizesUnchangedCaller() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter scalarizes its unchanged caller")
+				.script("function f(x) { print x } BEGIN { f(a); a[1] = 1 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUntypedScalarParameterPreservesChangedArrayElement() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter preserves a changed array element")
+				.script(
+						"function f(x) { a[1] = 7; print \"[\" x \"]\" } "
+								+ "BEGIN { f(a[1]); print a[1] }")
+				.expectLines("[]", "7")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUntypedScalarParameterRejectsChangedSubarrayElement() throws Exception {
+		AwkTestSupport
+				.awkTest("untyped scalar parameter rejects a changed subarray element")
+				.script(
+						"function f(x) { a[1][2] = 7; print \"[\" x \"]\" } "
+								+ "BEGIN { f(a[1]); print a[1][2] }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testDeletedUntypedSubarrayParameterRemainsDetached() throws Exception {
+		AwkTestSupport
+				.awkTest("deleted untyped subarray parameter remains detached")
+				.script(
+						"function f(x) { delete a[1]; x[2] = 3; print x[2] } "
+								+ "BEGIN { f(a[1]); print (1 in a) }")
+				.expectLines("3", "0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testReinsertedUntypedSubarrayParameterRemainsDetached() throws Exception {
+		AwkTestSupport
+				.awkTest("reinserted untyped subarray parameter remains detached")
+				.script(
+						"function f(x) { delete a[1]; a[1][9] = 9; x[2] = 2; print x[2] } "
+								+ "BEGIN { f(a[1]); print (2 in a[1]); print a[1][9] }")
+				.expectLines("2", "0", "9")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testArrayParameterRejectsAlreadyScalarActualAtRuntime() throws Exception {
+		AwkTestSupport
+				.awkTest("scalar actual remains scalar in array parameter")
+				.script("function f(x) { x[1] = 2 } BEGIN { a = 1; f(a) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testFunctionResultCannotOverwriteSubarray() throws Exception {
+		AwkTestSupport
+				.awkTest("function result cannot overwrite a subarray")
+				.script("function f(x) { x[1] = 42 } BEGIN { a[0] = f(a[0]) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test(timeout = 30000)
+	public void testElementArgumentTrackingStaysLinear() throws Exception {
+		// Element arguments passed in a hot loop, combined with delete, must not
+		// accumulate tracking state across calls (quadratic before the
+		// frame-scoped reference lifecycle).
+		AwkTestSupport
+				.awkTest("untyped element argument tracking stays linear")
+				.script(
+						"function f(x) { delete c[1]; c[1] = 1 } "
+								+ "BEGIN { c[1] = 1; for (i = 0; i < 50000; i++) f(a[i]); print \"done\" }")
+				.expectLines("done")
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("typed element argument tracking stays linear")
+				.script(
+						"function f(x) { delete c[1]; c[1] = 1 } "
+								+ "BEGIN { c[1] = 1; for (i = 0; i < 50000; i++) { a[i] = i; f(a[i]) } print \"done\" }")
+				.expectLines("done")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArraysOfArraysReportLineNumberWhenScalarUsedAsArray() throws Exception {
 		assertRuntimeExceptionLineNumber(
 				"arrays of arrays scalar used as array line number",

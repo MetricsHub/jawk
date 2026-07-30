@@ -684,6 +684,17 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void asortReplacementKeepsElementArgumentsDetached() throws Exception {
+		AwkTestSupport
+				.awkTest("asort replacement keeps element arguments detached")
+				.script(
+						"function f(x) { b[3][4] = 9; asort(b, a); x[2] = 2; print (2 in a[1]) } "
+								+ "BEGIN { f(a[1]) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
 	public void asortiSortsByIndex() throws Exception {
 		AwkTestSupport
 				.awkTest("asorti sorts array indices into values")
@@ -846,6 +857,40 @@ public class GawkExtensionTest {
 				.awkTest("indirect typeof receives an untyped variable")
 				.script("BEGIN { callback = \"typeof\"; print @callback(unset), typeof(unset) }")
 				.expectLines("untyped untyped")
+				.runAndAssert();
+	}
+
+	@Test
+	public void rawValueExtensionsUnwrapForwardedUntypedArguments() throws Exception {
+		AwkTestSupport
+				.awkTest("raw value extensions receive forwarded untyped arguments")
+				.script(
+						"function forward(value) { inspect(value) } "
+								+ "function inspect(value) { "
+								+ "callback = \"typeof\"; print typeof(value), @callback(value) "
+								+ "} "
+								+ "BEGIN { forward(unset) }")
+				.expectLines("untyped untyped")
+				.runAndAssert();
+	}
+
+	@Test
+	public void rawValueExtensionsObserveCallerArrayTransitions() throws Exception {
+		AwkTestSupport
+				.awkTest("raw value extensions observe caller array transitions")
+				.script(
+						"function f(x) { a[1] = 1; print typeof(x), isarray(x) } "
+								+ "BEGIN { f(a) }")
+				.expectLines("array 1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void rawValueExtensionsObserveCallerScalarization() throws Exception {
+		AwkTestSupport
+				.awkTest("raw value extensions observe caller scalarization")
+				.script("function f(x, y) { print x; print typeof(y) } BEGIN { f(a, a) }")
+				.expect("\nunassigned\n")
 				.runAndAssert();
 	}
 
