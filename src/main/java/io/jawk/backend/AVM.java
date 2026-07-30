@@ -1740,10 +1740,10 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(idx);
 					Map<Object, Object> map = toMap(pop());
 					if (map instanceof AssocArray && !JRT.containsAwkKey(map, idx)) {
-						push(BLANK);
+						push(AssocArray.UNTYPED);
 					} else {
 						Object value = map.get(idx);
-						push(value != null ? value : BLANK);
+						push(value != null ? value : AssocArray.UNTYPED);
 					}
 					position.next();
 					break;
@@ -2012,7 +2012,7 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case KEYLIST: {
 					Object o = pop();
-					if (o == null || o instanceof UninitializedObject) {
+					if (isUntyped(o)) {
 						push(new ArrayDeque<>());
 						position.next();
 						break;
@@ -2451,7 +2451,7 @@ public class AVM implements VariableManager, Closeable {
 					Object arr = pop();
 					Object arg = pop();
 					checkScalar(arg);
-					if (arr == null || arr instanceof UninitializedObject) {
+					if (isUntyped(arr)) {
 						push(ZERO);
 						position.next();
 						break;
@@ -4214,7 +4214,9 @@ public class AVM implements VariableManager, Closeable {
 
 	private Object resolveRawArgumentReference(ArgumentReference reference) {
 		Object currentValue = readCurrentArgumentValue(reference);
-		if (currentValue instanceof Map) {
+		if (currentValue instanceof Map
+				|| currentValue instanceof UninitializedObject
+						&& !(currentValue instanceof UntypedObject)) {
 			return currentValue;
 		}
 		Object value = reference.snapshot();

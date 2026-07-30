@@ -886,6 +886,15 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void rawValueExtensionsObserveCallerScalarization() throws Exception {
+		AwkTestSupport
+				.awkTest("raw value extensions observe caller scalarization")
+				.script("function f(x, y) { print x; print typeof(y) } BEGIN { f(a, a) }")
+				.expect("\nunassigned\n")
+				.runAndAssert();
+	}
+
+	@Test
 	public void typeofReportsStrnumForNumericInputFields() throws Exception {
 		AwkTestSupport
 				.awkTest("typeof reports strnum for numeric-looking input")

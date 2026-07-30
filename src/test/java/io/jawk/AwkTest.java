@@ -839,6 +839,24 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testAssignedBlankRejectsForInArrayContext() throws Exception {
+		AwkTestSupport
+				.awkTest("assigned blank rejects for-in array context")
+				.script("BEGIN { print \"[\" a \"]\"; for (i in a); print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testAssignedBlankRejectsMembershipArrayContext() throws Exception {
+		AwkTestSupport
+				.awkTest("assigned blank rejects membership array context")
+				.script("BEGIN { print \"[\" a \"]\"; print (1 in a); print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArrayParameterDefersUntypedActualUntilScalarUse() throws Exception {
 		AwkTestSupport
 				.awkTest("untyped array parameter follows caller scalarization")
