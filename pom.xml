@@ -3,7 +3,7 @@
 
 	<groupId>io.jawk</groupId>
 	<artifactId>jawk</artifactId>
-	<version>6.5.00-SNAPSHOT</version>
+	<version>7.1.00-SNAPSHOT</version>
 
 	<name>Jawk</name>
 	<description>Java AWK interpreter, allowing Java to call and execute AWK scripts in the JVM.</description>
@@ -83,7 +83,7 @@
 
 		<!-- Reproducible Build -->
 		<!-- See https://maven.apache.org/guides/mini/guide-reproducible-builds.html -->
-		<project.build.outputTimestamp>2026-06-03T10:27:54Z</project.build.outputTimestamp>
+		<project.build.outputTimestamp>2026-07-30T21:35:57Z</project.build.outputTimestamp>
 		<jmh.version>1.37</jmh.version>
 
 		<!-- Same version for the verify-phase checks and the site-phase reports,
