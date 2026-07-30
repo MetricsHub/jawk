@@ -43,7 +43,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -130,8 +129,11 @@ public class AVM implements VariableManager, Closeable {
 
 	// operand stack
 	private Deque<Object> operandStack = new ArrayDeque<Object>();
-	private final Set<IndirectArrayArgumentReference> indirectArrayArgumentReferences = Collections
-			.newSetFromMap(new WeakHashMap<IndirectArrayArgumentReference, Boolean>());
+	// Untyped array elements currently passed as user-function arguments, in
+	// call order. Each reference lives exactly as long as the call frame that
+	// received it, so this stack stays empty unless an untyped element
+	// argument is in flight.
+	private final Deque<IndirectArrayArgumentReference> elementArgumentReferences = new ArrayDeque<IndirectArrayArgumentReference>();
 	private List<String> arguments;
 	private boolean sortedArrayKeys;
 	private final Map<String, Object> baseInitialVariables;
@@ -708,7 +710,7 @@ public class AVM implements VariableManager, Closeable {
 	private void resetTransientRuntimeState(List<String> runtimeArguments, Map<String, Object> variableOverrides) {
 		// Reset the AVM-owned state that must not leak across executions.
 		operandStack.clear();
-		indirectArrayArgumentReferences.clear();
+		elementArgumentReferences.clear();
 		environOffset = NULL_OFFSET;
 		argcOffset = NULL_OFFSET;
 		argvOffset = NULL_OFFSET;
@@ -1696,11 +1698,19 @@ public class AVM implements VariableManager, Closeable {
 					VariableTuple variableTuple = (VariableTuple) tuple;
 					Object scalarValue = runtimeStack
 							.getVariable(variableTuple.getVariableOffset(), variableTuple.isGlobal());
-					push(
-							new IndirectArgumentReference(
-									runtimeStack.getVariableFrame(variableTuple.isGlobal()),
-									variableTuple.getVariableOffset(),
-									scalarValue));
+					// Typed values are passed as plain values; only untyped
+					// variables need a live link back to the caller's slot.
+					if (scalarValue instanceof ArgumentReference) {
+						push(resolveUserFunctionArgument(scalarValue));
+					} else if (isUntyped(scalarValue)) {
+						push(
+								new IndirectArgumentReference(
+										runtimeStack.getVariableFrame(variableTuple.isGlobal()),
+										variableTuple.getVariableOffset(),
+										scalarValue));
+					} else {
+						push(scalarValue);
+					}
 					position.next();
 					break;
 				}
@@ -1709,9 +1719,11 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(idx);
 					Map<Object, Object> map = toMap(pop());
 					Object scalarValue = JRT.getAssocArrayValue(map, idx);
-					IndirectArrayArgumentReference reference = new IndirectArrayArgumentReference(map, idx, scalarValue);
-					indirectArrayArgumentReferences.add(reference);
-					push(reference);
+					// Typed elements are passed as plain values; only untyped
+					// elements need a live link back to their containing array.
+					push(
+							isUntyped(scalarValue) ?
+									new IndirectArrayArgumentReference(map, idx, scalarValue) : scalarValue);
 					position.next();
 					break;
 				}
@@ -2212,8 +2224,8 @@ public class AVM implements VariableManager, Closeable {
 					long numFormalParams = callTuple.getNumFormalParams();
 					long numActualParams = callTuple.getNumActualParams();
 					Object[] actualArguments = popArguments(numActualParams);
-					resolveUserFunctionArguments(actualArguments);
 					runtimeStack.pushFrame(numFormalParams, position.currentIndex());
+					adoptElementArgumentReferences(actualArguments);
 					for (int i = 0; i < actualArguments.length; i++) {
 						runtimeStack.setVariable(i, actualArguments[i], false);
 					}
@@ -2228,7 +2240,6 @@ public class AVM implements VariableManager, Closeable {
 					String qualifiedName = normalizeIndirectFunctionName(requestedName);
 					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
 					if (target != null) {
-						resolveUserFunctionArguments(actualArguments);
 						long formalCount = target.getNumFormalParams();
 						if (actualArguments.length > formalCount) {
 							jrt
@@ -2245,6 +2256,7 @@ public class AVM implements VariableManager, Closeable {
 							activeProfilingFunctions.push(new ActiveFunction(qualifiedName, tupleStartNanos));
 						}
 						runtimeStack.pushFrame(formalCount, position.currentIndex());
+						adoptElementArgumentReferences(actualArguments);
 						int copiedArgumentCount = Math.min(actualArguments.length, (int) formalCount);
 						for (int i = 0; i < copiedArgumentCount; i++) {
 							runtimeStack.setVariable(i, actualArguments[i], false);
@@ -2307,6 +2319,7 @@ public class AVM implements VariableManager, Closeable {
 					break;
 				}
 				case RETURN_FROM_FUNCTION: {
+					releaseElementArgumentReferences();
 					position.jump(runtimeStack.popFrame());
 					push(runtimeStack.getReturnValue());
 					position.next();
@@ -2406,10 +2419,7 @@ public class AVM implements VariableManager, Closeable {
 
 					// If in BEGIN or in a rule, jump to the END section
 					if (!withinEndBlocks && exitAddress != null) {
-						// clear runtime stack
-						runtimeStack.popAllFrames();
-						// clear operand stack
-						operandStack.clear();
+						resetCallState();
 						position.jump(exitAddress);
 					} else {
 						// Exit immediately with ExitException
@@ -2721,25 +2731,16 @@ public class AVM implements VariableManager, Closeable {
 			}
 			throw ee;
 		} catch (IOException ioe) {
-			// clear runtime stack
-			runtimeStack.popAllFrames();
-			// clear operand stack
-			operandStack.clear();
+			resetCallState();
 			throw ioe;
 		} catch (RuntimeException re) {
-			// clear runtime stack
-			runtimeStack.popAllFrames();
-			// clear operand stack
-			operandStack.clear();
+			resetCallState();
 			if (re instanceof AwkSandboxException) {
 				throw re;
 			}
 			throw new AwkRuntimeException(position.lineNumber(), re.getMessage(), re);
 		} catch (AssertionError ae) {
-			// clear runtime stack
-			runtimeStack.popAllFrames();
-			// clear operand stack
-			operandStack.clear();
+			resetCallState();
 			throw ae;
 		}
 
@@ -2840,9 +2841,44 @@ public class AVM implements VariableManager, Closeable {
 		return functionName.startsWith("awk::") ? functionName.substring("awk::".length()) : functionName;
 	}
 
-	private void resolveUserFunctionArguments(Object[] actualArgumentsParam) {
-		for (int index = 0; index < actualArgumentsParam.length; index++) {
-			actualArgumentsParam[index] = resolveUserFunctionArgument(actualArgumentsParam[index]);
+	/**
+	 * Unwinds every call frame and clears the per-call runtime state, after an
+	 * {@code exit} statement or an abandoned execution.
+	 */
+	private void resetCallState() {
+		runtimeStack.popAllFrames();
+		elementArgumentReferences.clear();
+		operandStack.clear();
+	}
+
+	/**
+	 * Registers the untyped element references received by the call frame that
+	 * was just pushed, so array mutations occurring during the call can detach
+	 * them. References forwarded from an enclosing call keep their original
+	 * owner.
+	 */
+	private void adoptElementArgumentReferences(Object[] actualArguments) {
+		for (Object argument : actualArguments) {
+			if (argument instanceof IndirectArrayArgumentReference) {
+				IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
+				if (reference.ownerFrame < 0) {
+					reference.ownerFrame = runtimeStack.frameCount();
+					elementArgumentReferences.push(reference);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Drops the element references owned by the call frame that is about to be
+	 * popped. Frames are strictly nested, so the owned references always sit on
+	 * top of the tracking stack.
+	 */
+	private void releaseElementArgumentReferences() {
+		int depth = runtimeStack.frameCount();
+		while (!elementArgumentReferences.isEmpty()
+				&& elementArgumentReferences.peek().ownerFrame == depth) {
+			elementArgumentReferences.pop();
 		}
 	}
 
@@ -4262,8 +4298,11 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private Map<IndirectArrayArgumentReference, Object> captureAttachedArrayArgumentValues() {
+		if (elementArgumentReferences.isEmpty()) {
+			return Collections.emptyMap();
+		}
 		Map<IndirectArrayArgumentReference, Object> values = new IdentityHashMap<IndirectArrayArgumentReference, Object>();
-		for (IndirectArrayArgumentReference reference : indirectArrayArgumentReferences) {
+		for (IndirectArrayArgumentReference reference : elementArgumentReferences) {
 			if (reference.isAttached()) {
 				values.put(reference, reference.currentValue());
 			}
@@ -4279,7 +4318,10 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private void detachMissingArrayArgumentReferences(Map<Object, Object> map) {
-		for (IndirectArrayArgumentReference reference : indirectArrayArgumentReferences) {
+		if (elementArgumentReferences.isEmpty()) {
+			return;
+		}
+		for (IndirectArrayArgumentReference reference : elementArgumentReferences) {
 			reference.detachIfMissing(map);
 		}
 	}
@@ -4406,6 +4448,9 @@ public class AVM implements VariableManager, Closeable {
 		private final Object key;
 		private Object detachedValue;
 		private boolean detached;
+		// Depth of the call frame that received this reference as an
+		// argument; negative until the call is entered.
+		private int ownerFrame = -1;
 
 		private IndirectArrayArgumentReference(
 				Map<Object, Object> mapParam,

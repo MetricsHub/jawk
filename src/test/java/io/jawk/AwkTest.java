@@ -1002,6 +1002,28 @@ public class AwkTest {
 				.runAndAssert();
 	}
 
+	@Test(timeout = 30000)
+	public void testElementArgumentTrackingStaysLinear() throws Exception {
+		// Element arguments passed in a hot loop, combined with delete, must not
+		// accumulate tracking state across calls (quadratic before the
+		// frame-scoped reference lifecycle).
+		AwkTestSupport
+				.awkTest("untyped element argument tracking stays linear")
+				.script(
+						"function f(x) { delete c[1]; c[1] = 1 } "
+								+ "BEGIN { c[1] = 1; for (i = 0; i < 50000; i++) f(a[i]); print \"done\" }")
+				.expectLines("done")
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("typed element argument tracking stays linear")
+				.script(
+						"function f(x) { delete c[1]; c[1] = 1 } "
+								+ "BEGIN { c[1] = 1; for (i = 0; i < 50000; i++) { a[i] = i; f(a[i]) } print \"done\" }")
+				.expectLines("done")
+				.runAndAssert();
+	}
+
 	@Test
 	public void testArraysOfArraysReportLineNumberWhenScalarUsedAsArray() throws Exception {
 		assertRuntimeExceptionLineNumber(

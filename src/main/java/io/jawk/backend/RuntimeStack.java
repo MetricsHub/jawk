@@ -157,6 +157,10 @@ class RuntimeStack {
 		return isGlobal ? globals : locals;
 	}
 
+	int frameCount() {
+		return localsStack.size();
+	}
+
 	Object setVariable(long offset, Object val, boolean isGlobal) {
 		if (isGlobal) {
 			globals[(int) offset] = val;
