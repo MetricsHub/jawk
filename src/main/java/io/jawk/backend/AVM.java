@@ -2223,11 +2223,12 @@ public class AVM implements VariableManager, Closeable {
 					Address funcAddr = callTuple.getAddress();
 					long numFormalParams = callTuple.getNumFormalParams();
 					long numActualParams = callTuple.getNumActualParams();
-					Object[] actualArguments = popArguments(numActualParams);
 					runtimeStack.pushFrame(numFormalParams, position.currentIndex());
-					adoptElementArgumentReferences(actualArguments);
-					for (int i = 0; i < actualArguments.length; i++) {
-						runtimeStack.setVariable(i, actualArguments[i], false);
+					// Arguments are stacked, so first in the stack is the last for the function
+					for (long i = numActualParams - 1; i >= 0; i--) {
+						Object argument = pop();
+						adoptElementArgumentReference(argument);
+						runtimeStack.setVariable(i, argument, false); // false = local
 					}
 					position.jump(funcAddr);
 					// position.next();
@@ -2859,12 +2860,16 @@ public class AVM implements VariableManager, Closeable {
 	 */
 	private void adoptElementArgumentReferences(Object[] actualArguments) {
 		for (Object argument : actualArguments) {
-			if (argument instanceof IndirectArrayArgumentReference) {
-				IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
-				if (reference.ownerFrame < 0) {
-					reference.ownerFrame = runtimeStack.frameCount();
-					elementArgumentReferences.push(reference);
-				}
+			adoptElementArgumentReference(argument);
+		}
+	}
+
+	private void adoptElementArgumentReference(Object argument) {
+		if (argument instanceof IndirectArrayArgumentReference) {
+			IndirectArrayArgumentReference reference = (IndirectArrayArgumentReference) argument;
+			if (reference.ownerFrame < 0) {
+				reference.ownerFrame = runtimeStack.frameCount();
+				elementArgumentReferences.push(reference);
 			}
 		}
 	}
@@ -4235,7 +4240,9 @@ public class AVM implements VariableManager, Closeable {
 
 	private Object resolveVariable(long offset, boolean isGlobal, boolean arrayContext) {
 		Object value = runtimeStack.getVariable(offset, isGlobal);
-		if (value instanceof ArgumentReference) {
+		// Argument references are only ever stored in local parameter slots,
+		// so global reads skip the reference check entirely.
+		if (!isGlobal && value instanceof ArgumentReference) {
 			value = resolveArgumentReference((ArgumentReference) value, arrayContext);
 			runtimeStack.setVariable(offset, value, isGlobal);
 			return value;
