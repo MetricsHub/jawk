@@ -2539,7 +2539,11 @@ public class AwkParser {
 		if (arrayAst instanceof IDAst) {
 			IDAst idAst = (IDAst) arrayAst;
 			idAst.setArray(true);
-			tuples.dereference(idAst.offset, true, idAst.isGlobal);
+			if (isJrtManagedSpecialName(idAst.id)) {
+				idAst.populateTuples(tuples);
+			} else {
+				tuples.dereference(idAst.offset, true, idAst.isGlobal);
+			}
 			return;
 		}
 		if (arrayAst instanceof ArrayReferenceAst) {
@@ -5163,7 +5167,11 @@ public class AwkParser {
 				((ArrayReferenceAst) getAst1()).populateArrayValueTuples(tuples, true);
 			} else if (getAst1() instanceof IDAst) {
 				IDAst idAst = (IDAst) getAst1();
-				tuples.dereference(idAst.offset, true, idAst.isGlobal);
+				if (isJrtManagedSpecialName(idAst.id)) {
+					idAst.populateTuples(tuples);
+				} else {
+					tuples.dereference(idAst.offset, true, idAst.isGlobal);
+				}
 			} else {
 				getAst1().populateTuples(tuples);
 			}

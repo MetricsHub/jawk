@@ -857,6 +857,36 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testSpecialScalarRejectsArrayElementAssignment() throws Exception {
+		AwkTestSupport
+				.awkTest("special scalar rejects array element assignment")
+				.script("BEGIN { FS[1] = 2; print FS }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testSpecialScalarRejectsArrayOnlyContexts() throws Exception {
+		AwkTestSupport
+				.awkTest("special scalar rejects array membership")
+				.script("BEGIN { print (1 in FS) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("special scalar rejects for-in")
+				.script("BEGIN { for (key in NR); print \"continued\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("special scalar rejects split destination")
+				.script("BEGIN { split(\"a\", FS) }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArrayParameterDefersUntypedActualUntilScalarUse() throws Exception {
 		AwkTestSupport
 				.awkTest("untyped array parameter follows caller scalarization")
