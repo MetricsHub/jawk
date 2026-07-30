@@ -917,6 +917,17 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testReinsertedUntypedSubarrayParameterRemainsDetached() throws Exception {
+		AwkTestSupport
+				.awkTest("reinserted untyped subarray parameter remains detached")
+				.script(
+						"function f(x) { delete a[1]; a[1][9] = 9; x[2] = 2; print x[2] } "
+								+ "BEGIN { f(a[1]); print (2 in a[1]); print a[1][9] }")
+				.expectLines("2", "0", "9")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testArrayParameterRejectsAlreadyScalarActualAtRuntime() throws Exception {
 		AwkTestSupport
 				.awkTest("scalar actual remains scalar in array parameter")

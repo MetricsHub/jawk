@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
@@ -128,6 +129,8 @@ public class AVM implements VariableManager, Closeable {
 
 	// operand stack
 	private Deque<Object> operandStack = new ArrayDeque<Object>();
+	private final Set<IndirectArrayArgumentReference> indirectArrayArgumentReferences = Collections
+			.newSetFromMap(new WeakHashMap<IndirectArrayArgumentReference, Boolean>());
 	private List<String> arguments;
 	private boolean sortedArrayKeys;
 	private final Map<String, Object> baseInitialVariables;
@@ -704,6 +707,7 @@ public class AVM implements VariableManager, Closeable {
 	private void resetTransientRuntimeState(List<String> runtimeArguments, Map<String, Object> variableOverrides) {
 		// Reset the AVM-owned state that must not leak across executions.
 		operandStack.clear();
+		indirectArrayArgumentReferences.clear();
 		environOffset = NULL_OFFSET;
 		argcOffset = NULL_OFFSET;
 		argvOffset = NULL_OFFSET;
@@ -1704,7 +1708,9 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(idx);
 					Map<Object, Object> map = toMap(pop());
 					Object scalarValue = JRT.getAssocArrayValue(map, idx);
-					push(new IndirectArrayArgumentReference(map, idx, scalarValue));
+					IndirectArrayArgumentReference reference = new IndirectArrayArgumentReference(map, idx, scalarValue);
+					indirectArrayArgumentReferences.add(reference);
+					push(reference);
 					position.next();
 					break;
 				}
@@ -2349,6 +2355,7 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(key);
 					if (aa != null) {
 						aa.remove(key);
+						detachMissingArrayArgumentReferences(aa);
 					}
 					position.next();
 					break;
@@ -2360,6 +2367,7 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(key);
 					Map<Object, Object> aa = toMap(pop());
 					aa.remove(key);
+					detachMissingArrayArgumentReferences(aa);
 					position.next();
 					break;
 				}
@@ -2373,6 +2381,7 @@ public class AVM implements VariableManager, Closeable {
 					Map<Object, Object> array = getMapVariable(offset, isGlobal);
 					if (array != null) {
 						array.clear();
+						detachMissingArrayArgumentReferences(array);
 					}
 					position.next();
 					break;
@@ -3113,6 +3122,7 @@ public class AVM implements VariableManager, Closeable {
 		@SuppressWarnings("unchecked")
 		Map<Object, Object> assocArray = (Map<Object, Object>) target;
 		assocArray.clear();
+		detachMissingArrayArgumentReferences(assocArray);
 		long cnt = 0;
 		while (tokenizer.hasMoreElements()) {
 			Object value = tokenizer.nextElement();
@@ -4233,6 +4243,12 @@ public class AVM implements VariableManager, Closeable {
 		return value;
 	}
 
+	private void detachMissingArrayArgumentReferences(Map<Object, Object> map) {
+		for (IndirectArrayArgumentReference reference : indirectArrayArgumentReferences) {
+			reference.detachIfMissing(map);
+		}
+	}
+
 	private static boolean isUntyped(Object value) {
 		return value == null || value instanceof UntypedObject;
 	}
@@ -4354,6 +4370,7 @@ public class AVM implements VariableManager, Closeable {
 		private final Map<Object, Object> map;
 		private final Object key;
 		private Object detachedValue;
+		private boolean detached;
 
 		private IndirectArrayArgumentReference(
 				Map<Object, Object> mapParam,
@@ -4362,6 +4379,7 @@ public class AVM implements VariableManager, Closeable {
 			map = mapParam;
 			key = keyParam;
 			detachedValue = scalarValueParam;
+			detached = !JRT.containsAwkKey(map, key);
 		}
 
 		@Override
@@ -4371,13 +4389,13 @@ public class AVM implements VariableManager, Closeable {
 
 		@Override
 		public Object currentValue() {
-			return JRT.containsAwkKey(map, key) ?
+			return !detached && JRT.containsAwkKey(map, key) ?
 					JRT.getAssocArrayValue(map, key) : detachedValue;
 		}
 
 		@Override
 		public void setValue(Object value) {
-			if (JRT.containsAwkKey(map, key)) {
+			if (!detached && JRT.containsAwkKey(map, key)) {
 				map.put(key, value);
 			} else {
 				detachedValue = value;
@@ -4386,10 +4404,16 @@ public class AVM implements VariableManager, Closeable {
 
 		@Override
 		public void setScalarValue(Object value) {
-			if (!JRT.containsAwkKey(map, key)) {
+			if (detached || !JRT.containsAwkKey(map, key)) {
 				detachedValue = value;
 			} else if (isUntyped(JRT.getAssocArrayValue(map, key))) {
 				map.put(key, value);
+			}
+		}
+
+		private void detachIfMissing(Map<Object, Object> candidateMap) {
+			if (!detached && map == candidateMap && !JRT.containsAwkKey(map, key)) {
+				detached = true;
 			}
 		}
 	}
