@@ -684,6 +684,17 @@ public class GawkExtensionTest {
 	}
 
 	@Test
+	public void asortReplacementKeepsElementArgumentsDetached() throws Exception {
+		AwkTestSupport
+				.awkTest("asort replacement keeps element arguments detached")
+				.script(
+						"function f(x) { b[3][4] = 9; asort(b, a); x[2] = 2; print (2 in a[1]) } "
+								+ "BEGIN { f(a[1]) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
 	public void asortiSortsByIndex() throws Exception {
 		AwkTestSupport
 				.awkTest("asorti sorts array indices into values")

@@ -4807,7 +4807,19 @@ public class AwkParser {
 			if (getAst1() == null) {
 				tuples.length(0);
 			} else {
-				int ast1Result = getAst1().populateTuples(tuples);
+				AST params = getAst1();
+				AST argument = params instanceof FunctionCallParamListAst
+						&& params.getAst2() == null ?
+								params.getAst1() : params;
+				int ast1Result;
+				if (argument instanceof IDAst
+						&& !isJrtManagedSpecialName(((IDAst) argument).id)) {
+					IDAst idAst = (IDAst) argument;
+					tuples.pushIndirectArgument(idAst.offset, idAst.isGlobal);
+					ast1Result = 1;
+				} else {
+					ast1Result = argument.populateTuples(tuples);
+				}
 				if (ast1Result != 1) {
 					throw new SemanticException("length requires at least one argument");
 				}

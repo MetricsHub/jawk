@@ -866,6 +866,15 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testLengthParameterObservesCallerArrayTransition() throws Exception {
+		AwkTestSupport
+				.awkTest("length parameter observes caller array transition")
+				.script("function f(x, y) { y[1] = 1; print length(x) } BEGIN { f(a, a) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testUntypedScalarParameterKeepsCallTimeValue() throws Exception {
 		AwkTestSupport
 				.awkTest("untyped scalar parameter keeps its call-time value")

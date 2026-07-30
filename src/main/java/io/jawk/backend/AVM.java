@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -2823,7 +2824,11 @@ public class AVM implements VariableManager, Closeable {
 			push(jrt.jrtGetInputField(0).toString().length());
 			return;
 		}
-		push(lengthOf(pop()));
+		Object value = pop();
+		if (value instanceof ArgumentReference) {
+			value = resolveLengthArgumentReference((ArgumentReference) value);
+		}
+		push(lengthOf(value));
 	}
 
 	private Object lengthOf(Object value) {
@@ -3023,7 +3028,13 @@ public class AVM implements VariableManager, Closeable {
 							+ "' does not extend "
 							+ AbstractExtension.class.getName());
 		}
-		Object result = function.invoke((AbstractExtension) extension, args);
+		Map<IndirectArrayArgumentReference, Object> attachedValues = captureAttachedArrayArgumentValues();
+		Object result;
+		try {
+			result = function.invoke((AbstractExtension) extension, args);
+		} finally {
+			detachReplacedArrayArgumentReferences(attachedValues);
+		}
 		if (blockResult && result instanceof BlockObject) {
 			result = new BlockManager().block((BlockObject) result);
 		}
@@ -4243,6 +4254,28 @@ public class AVM implements VariableManager, Closeable {
 		return value;
 	}
 
+	private Object resolveLengthArgumentReference(ArgumentReference reference) {
+		Object currentValue = readCurrentArgumentValue(reference);
+		return currentValue instanceof Map ? currentValue : resolveArgumentReference(reference, false);
+	}
+
+	private Map<IndirectArrayArgumentReference, Object> captureAttachedArrayArgumentValues() {
+		Map<IndirectArrayArgumentReference, Object> values = new IdentityHashMap<IndirectArrayArgumentReference, Object>();
+		for (IndirectArrayArgumentReference reference : indirectArrayArgumentReferences) {
+			if (reference.isAttached()) {
+				values.put(reference, reference.currentValue());
+			}
+		}
+		return values;
+	}
+
+	private void detachReplacedArrayArgumentReferences(
+			Map<IndirectArrayArgumentReference, Object> attachedValues) {
+		for (Map.Entry<IndirectArrayArgumentReference, Object> entry : attachedValues.entrySet()) {
+			entry.getKey().detachIfReplaced(entry.getValue());
+		}
+	}
+
 	private void detachMissingArrayArgumentReferences(Map<Object, Object> map) {
 		for (IndirectArrayArgumentReference reference : indirectArrayArgumentReferences) {
 			reference.detachIfMissing(map);
@@ -4413,6 +4446,18 @@ public class AVM implements VariableManager, Closeable {
 
 		private void detachIfMissing(Map<Object, Object> candidateMap) {
 			if (!detached && map == candidateMap && !JRT.containsAwkKey(map, key)) {
+				detached = true;
+			}
+		}
+
+		private boolean isAttached() {
+			return !detached && JRT.containsAwkKey(map, key);
+		}
+
+		private void detachIfReplaced(Object previousValue) {
+			if (!detached
+					&& (!JRT.containsAwkKey(map, key)
+							|| JRT.getAssocArrayValue(map, key) != previousValue)) {
 				detached = true;
 			}
 		}
