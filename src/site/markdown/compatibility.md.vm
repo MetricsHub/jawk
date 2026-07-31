@@ -176,6 +176,30 @@ Array and scalar types follow gawk's runtime rules across function parameters an
 Compatibility data is unavailable in this build. Run `mvn verify site` to generate the compatibility reports and this dashboard.
 #end
 
+Detailed Behavior Notes
+-----------------------
+
+### Date and time functions
+
+The date and time functions (`mktime()`, `strftime()`) follow the Java platform's time zone data and calendar rules rather than the C library's, which differs from gawk in a few edge cases:
+
+- `ENVIRON["TZ"]` accepts the zone IDs Java understands: Olson names such as `Europe/Paris` (optionally with a POSIX `:` prefix) and Java's custom `GMT+3` IDs with Java's sign convention (`GMT+3` is UTC+03:00, where POSIX would read UTC-03:00). POSIX TZ rule specifications such as `XXX3` or `CET-1CEST,M3.5.0,M10.5.0/3` are not parsed; unknown zones fall back to GMT. An explicitly empty TZ selects UTC, as in POSIX.
+- An ambiguous wall time during a DST fall-back resolves to its standard-time occurrence; the explicit DST field of `mktime()` still selects either occurrence.
+- A positive `mktime()` DST hint applies the zone's current daylight adjustment; zones without daylight saving time ignore the hint.
+- `strftime()`'s `%Z` prints the zone's current designation (the JDK's time zone data records historical offsets and DST rules, but not historical zone names), and timestamps before the common era use the JDK's year numbering rather than astronomical (negative) years.
+
+### Where Jawk follows gawk
+
+Jawk follows gawk in several places where gawk departs from historical AWK:
+
+- A regexp literal used as an ordinary expression evaluates as `$0 ~ /re/`, per POSIX; `x = /re/` assigns 0 or 1, not the pattern text.
+- Typed regexp literals (`@/re/`) are accepted; `--posix` rejects them.
+- `IGNORECASE` is a built-in special variable managed by the runtime, like `FS` or `RS`: a truthy value makes regexp matching, field and `split()` separators, string comparisons, `index()`, and gawk array sorting case-insensitive.
+- Because the [gawk compatibility extension](extensions.html#gawk) is enabled by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` are function names and can no longer be used as variables. Load an explicit extension list without `GawkExtension` to reclaim those identifiers.
+- Calling a user-defined function with more arguments than it declares is accepted: the extra expressions are evaluated and discarded, and a gawk-style warning is printed to stderr.
+- Assigning a scalar value to an array element (`a[1] = z`) types that element as a scalar; later using it as a subarray (`a[1][2] = 3`) is a runtime error, exactly as in gawk.
+- `print` and `printf` resolve the leading-parenthesis ambiguity as gawk does: `print (a, b)` prints the parenthesized group as the whole argument list (which is how `print (a, b) > "file"` disambiguates a redirection from a comparison), while a single parenthesized expression followed by a comma continues the output list, as in `print (i==0), (i=="")`. A comma group followed by more arguments, such as `print (1,2), 3`, is a syntax error. More generally, outside of a `print`/`printf` argument list, a parenthesized expression list such as `(i, j)` is a grouping, not an expression, and is only valid immediately before `in`, as in `((i, j) in array)`.
+
 See Also
 --------
 

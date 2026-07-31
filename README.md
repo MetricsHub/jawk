@@ -21,7 +21,7 @@ Jawk fully implements POSIX AWK, and adds support for the most commonly used gaw
 
 The gawk-specific `@` syntax and arrays-of-arrays syntax are rejected in `--posix` mode.
 
-`print` and `printf` parse parenthesized arguments as POSIX and gawk do: `print (a, b)` prints the parenthesized group as the whole argument list, while a single parenthesized expression followed by a comma continues the output list, as in `print (i==0), (i=="")`. Elsewhere, a parenthesized expression list such as `(i, j)` is only valid immediately before `in`, as in `((i, j) in array)`.
+See the [compatibility page](https://jawk.io/compatibility.html) for detailed behavior notes and live compatibility reports against the POSIX, One True Awk, and gawk test suites.
 
 ## CLI Example
 
