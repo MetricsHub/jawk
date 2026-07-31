@@ -400,6 +400,32 @@ public class AwkTest {
 				.stdin(input)
 				.expect("bb\ncc\nbb\ncc\n")
 				.runAndAssert();
+
+		String numbers = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10";
+
+		// The end condition must not be evaluated until the range starts matching,
+		// and the start condition must not be evaluated while within the range
+		// (https://github.com/jawkio/jawk/issues/115)
+		AwkTestSupport
+				.awkTest("range with side effects")
+				.script("a++ == 2, a++ == 5")
+				.stdin(numbers)
+				.expect("3\n4\n5\n")
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("range end side effect on start record")
+				.script("NR == 2, b++ == 2 { print $0, b }")
+				.stdin(numbers)
+				.expect("2 1\n3 2\n4 3\n")
+				.runAndAssert();
+
+		AwkTestSupport
+				.awkTest("multiple independent ranges")
+				.script("NR == 2, NR == 3 { print \"r1\", $0 } NR == 3, NR == 4 { print \"r2\", $0 }")
+				.stdin(numbers)
+				.expect("r1 2\nr1 3\nr2 3\nr2 4\n")
+				.runAndAssert();
 	}
 
 	@Test

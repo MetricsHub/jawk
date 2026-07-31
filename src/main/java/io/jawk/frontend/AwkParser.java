@@ -348,6 +348,7 @@ public class AwkParser {
 	private String pendingIndirectIdentifier;
 	private boolean pendingColon;
 	private String currentNamespace = "awk";
+	private long conditionPairCount;
 	private final Deque<SourceState> includedSourceStack = new ArrayDeque<SourceState>();
 	private final Set<Path> includedSourcePaths = new HashSet<Path>();
 	private final Set<Path> topLevelSourcePaths = new HashSet<Path>();
@@ -5314,16 +5315,44 @@ public class AwkParser {
 
 	private final class ConditionPairAst extends ScalarExpressionAst {
 
+		private final long conditionPairId;
+
 		private ConditionPairAst(AST booleanAst1, AST booleanAst2) {
 			super(booleanAst1, booleanAst2);
+			conditionPairId = ++conditionPairCount;
 		}
 
 		@Override
 		public int populateTuples(AwkTuples tuples) {
+			// The start condition is evaluated only while outside the range, and the
+			// end condition only once the range has started (including on the very
+			// record that starts it, so a range can begin and end on the same record)
 			pushSourceLineNumber(tuples);
+
+			Address enterRange = tuples.createAddress("conditionPairEnterRange");
+			Address testEnd = tuples.createAddress("conditionPairTestEnd");
+			Address withinRange = tuples.createAddress("conditionPairWithinRange");
+			Address end = tuples.createAddress("conditionPairEnd");
+
+			tuples.conditionPairInRange(conditionPairId);
+			tuples.ifTrue(testEnd);
 			getAst1().populateTuples(tuples);
+			tuples.ifTrue(enterRange);
+			tuples.push(0);
+			tuples.gotoAddress(end);
+
+			tuples.address(enterRange);
+			tuples.conditionPairEnter(conditionPairId);
+
+			tuples.address(testEnd);
 			getAst2().populateTuples(tuples);
-			tuples.conditionPair();
+			tuples.ifFalse(withinRange);
+			tuples.conditionPairLeave(conditionPairId);
+
+			tuples.address(withinRange);
+			tuples.push(1);
+			tuples.address(end);
+
 			popSourceLineNumber(tuples);
 			return 1;
 		}

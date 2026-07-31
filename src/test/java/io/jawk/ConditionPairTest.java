@@ -50,6 +50,16 @@ public class ConditionPairTest {
 	}
 
 	@Test
+	public void testEnterLeave() {
+		ConditionPair cp = new ConditionPair();
+		assertFalse("Initially outside", cp.isWithin());
+		cp.enter();
+		assertTrue("Within after enter", cp.isWithin());
+		cp.leave();
+		assertFalse("Outside after leave", cp.isWithin());
+	}
+
+	@Test
 	public void testEdgeTransitions() {
 		ConditionPair cp = new ConditionPair();
 
