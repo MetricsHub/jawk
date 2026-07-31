@@ -192,10 +192,6 @@ ${esc.h}${esc.h}${esc.h} Range patterns
 
 Range patterns (`begpat, endpat`) evaluate their two conditions lazily, as POSIX requires: the start condition is evaluated only while outside the range, and the end condition only once the range has started — including on the very record that starts it, so a range can begin and end on the same record. Conditions with side effects, such as `a++ == 2, a++ == 5`, therefore behave exactly as in gawk and One True Awk: each condition's side effects run only on the records where that condition is actually tested.
 
-${esc.h}${esc.h}${esc.h} Output conversion in `print`
-
-`print` writes string values verbatim, as POSIX requires: numeric-looking string constants such as `"0100"` or `"1e3"` are printed unchanged, and so are numeric strings that originate from input (fields, `getline`, `split()` pieces), which keep their original text. Only actual numbers are converted on output: integral values print as integers, and non-integral values are formatted with `OFMT`. `CONVFMT` governs number-to-string conversion everywhere else (concatenation, array subscripts, comparisons against strings), so `x = 1.2345; s = x ""; print s` prints the `CONVFMT`-converted string as-is, without reformatting it through `OFMT`.
-
 ${esc.h}${esc.h}${esc.h} Where Jawk follows gawk
 
 Jawk follows gawk in several places where gawk departs from historical AWK:
@@ -211,5 +207,6 @@ Jawk follows gawk in several places where gawk departs from historical AWK:
 See Also
 --------
 
+- [Behavior changes by version](behavior-changes.html)
 - [CLI options and tuple workflows](cli-reference.html)
 - [Java compilation and reuse APIs](java-compile.html)
