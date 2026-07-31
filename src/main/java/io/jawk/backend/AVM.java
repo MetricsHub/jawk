@@ -1087,7 +1087,7 @@ public class AVM implements VariableManager, Closeable {
 	private void executeTuples(PositionTracker position)
 			throws ExitException,
 			IOException {
-		Map<Integer, ConditionPair> conditionPairs = null;
+		Map<Long, ConditionPair> conditionPairs = null;
 		Opcode opcode = null;
 		long tupleStartNanos = 0L;
 		try {
@@ -2440,12 +2440,13 @@ public class AVM implements VariableManager, Closeable {
 					break;
 				}
 				case CONDITION_PAIR: {
+					// Legacy opcode kept for precompiled tuple streams
 					// stack[0] = End condition
 					// stack[1] = Start condition
 					if (conditionPairs == null) {
-						conditionPairs = new HashMap<Integer, ConditionPair>();
+						conditionPairs = new HashMap<Long, ConditionPair>();
 					}
-					int currentIndex = position.currentIndex();
+					long currentIndex = position.currentIndex();
 					ConditionPair cp = conditionPairs.get(currentIndex);
 					if (cp == null) {
 						cp = new ConditionPair();
@@ -2454,6 +2455,35 @@ public class AVM implements VariableManager, Closeable {
 					boolean end = jrt.toBoolean(pop());
 					boolean start = jrt.toBoolean(pop());
 					push(cp.update(start, end) ? ONE : ZERO);
+					position.next();
+					break;
+				}
+				case CONDITION_PAIR_IN_RANGE: {
+					// arg[0] = unique identifier of the range pattern
+					if (conditionPairs == null) {
+						conditionPairs = new HashMap<Long, ConditionPair>();
+					}
+					long id = ((LongTuple) tuple).getValue();
+					ConditionPair cp = conditionPairs.get(id);
+					if (cp == null) {
+						cp = new ConditionPair();
+						conditionPairs.put(id, cp);
+					}
+					push(cp.isWithin() ? ONE : ZERO);
+					position.next();
+					break;
+				}
+				case CONDITION_PAIR_ENTER: {
+					// arg[0] = unique identifier of the range pattern
+					// A CONDITION_PAIR_IN_RANGE tuple for the same identifier always
+					// executes first, so the pair is already registered
+					conditionPairs.get(((LongTuple) tuple).getValue()).enter();
+					position.next();
+					break;
+				}
+				case CONDITION_PAIR_LEAVE: {
+					// arg[0] = unique identifier of the range pattern
+					conditionPairs.get(((LongTuple) tuple).getValue()).leave();
 					position.next();
 					break;
 				}

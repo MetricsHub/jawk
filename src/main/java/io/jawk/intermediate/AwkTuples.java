@@ -1964,9 +1964,47 @@ public class AwkTuples implements Serializable {
 	 * <p>
 	 * regexpPair.
 	 * </p>
+	 *
+	 * @deprecated Evaluates both range conditions on every record, which is
+	 *             incorrect when the conditions have side effects. Use
+	 *             {@link #conditionPairInRange(long)},
+	 *             {@link #conditionPairEnter(long)} and
+	 *             {@link #conditionPairLeave(long)} with conditional jumps instead.
 	 */
+	@Deprecated
 	public void conditionPair() {
 		queue.add(new Tuple.NoOperandTuple(Opcode.CONDITION_PAIR));
+	}
+
+	/**
+	 * Pushes whether the specified range pattern is currently active, i.e. its
+	 * start condition matched a previous record and its end condition hasn't
+	 * matched yet.
+	 *
+	 * @param id unique identifier of the range pattern within the script
+	 */
+	public void conditionPairInRange(long id) {
+		queue.add(new Tuple.LongTuple(Opcode.CONDITION_PAIR_IN_RANGE, id));
+	}
+
+	/**
+	 * Marks the specified range pattern as active, after its start condition
+	 * matched the current record.
+	 *
+	 * @param id unique identifier of the range pattern within the script
+	 */
+	public void conditionPairEnter(long id) {
+		queue.add(new Tuple.LongTuple(Opcode.CONDITION_PAIR_ENTER, id));
+	}
+
+	/**
+	 * Marks the specified range pattern as inactive, after its end condition
+	 * matched the current record.
+	 *
+	 * @param id unique identifier of the range pattern within the script
+	 */
+	public void conditionPairLeave(long id) {
+		queue.add(new Tuple.LongTuple(Opcode.CONDITION_PAIR_LEAVE, id));
 	}
 
 	/**

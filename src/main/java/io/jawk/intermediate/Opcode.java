@@ -1624,7 +1624,35 @@ public enum Opcode {
 	 * Push an indirect-call subarray argument that snapshots its scalar value while
 	 * retaining its containing map and key for a runtime-selected array parameter.
 	 */
-	PUSH_INDIRECT_ARRAY_ARGUMENT;
+	PUSH_INDIRECT_ARRAY_ARGUMENT,
+
+	/**
+	 * Pushes whether the range pattern identified by the tuple's operand is
+	 * currently active (i.e. its start condition matched a previous record and its
+	 * end condition has not matched yet).
+	 * <p>
+	 * Stack before: ... <br>
+	 * Stack after: 1|0 ...
+	 */
+	CONDITION_PAIR_IN_RANGE,
+
+	/**
+	 * Marks the range pattern identified by the tuple's operand as active, after
+	 * its start condition matched the current record.
+	 * <p>
+	 * Stack before: ... <br>
+	 * Stack after: ...
+	 */
+	CONDITION_PAIR_ENTER,
+
+	/**
+	 * Marks the range pattern identified by the tuple's operand as inactive, after
+	 * its end condition matched the current record.
+	 * <p>
+	 * Stack before: ... <br>
+	 * Stack after: ...
+	 */
+	CONDITION_PAIR_LEAVE;
 
 	private static final Opcode[] VALUES = values();
 

@@ -63,4 +63,30 @@ public class ConditionPair {
 
 		return result;
 	}
+
+	/**
+	 * Returns whether we're currently within the range, i.e. the start condition
+	 * matched a previous record and the end condition hasn't matched yet.
+	 *
+	 * @return whether we're within the range
+	 */
+	public boolean isWithin() {
+		return within;
+	}
+
+	/**
+	 * Marks the range as started, after the start condition matched the current
+	 * record.
+	 */
+	public void enter() {
+		within = true;
+	}
+
+	/**
+	 * Marks the range as finished, after the end condition matched the current
+	 * record.
+	 */
+	public void leave() {
+		within = false;
+	}
 }
