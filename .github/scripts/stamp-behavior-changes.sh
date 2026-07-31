@@ -14,6 +14,7 @@ set -euo pipefail
 version="${1:?usage: stamp-behavior-changes.sh <releaseVersion>}"
 file="src/site/markdown/behavior-changes.md"
 releaseDate="$(date -u +%Y-%m-%d)"
+placeholder="_No user-visible behavior changes recorded yet._"
 
 if [ ! -f "${file}" ]; then
 	echo "ERROR: ${file} not found." >&2
@@ -56,20 +57,32 @@ if [ "${bullets}" -eq 0 ]; then
 fi
 
 # Replace the "Unreleased" heading line with the version heading (reusing the
-# existing setext underline), and insert a fresh "Unreleased" stub above it.
+# existing setext underline), insert a fresh "Unreleased" stub above it, and
+# drop the placeholder left by a previous stamping from the released section.
 tmp="$(mktemp)"
-awk -v version="${version}" -v releaseDate="${releaseDate}" '
+awk -v version="${version}" -v releaseDate="${releaseDate}" -v placeholder="${placeholder}" '
 	$0 == "Unreleased" && !stamped {
 		print "Unreleased"
 		print "----------"
 		print ""
-		print "_No user-visible behavior changes recorded yet._"
+		print placeholder
 		print ""
 		printf "[v%s](https://github.com/jawkio/jawk/releases/tag/v%s) (%s)\n", version, version, releaseDate
 		stamped = 1
 		next
 	}
-	{ print }
+	stamped && $0 == placeholder {
+		skipBlank = 1
+		next
+	}
+	skipBlank && $0 == "" {
+		skipBlank = 0
+		next
+	}
+	{
+		skipBlank = 0
+		print
+	}
 ' "${file}" > "${tmp}"
 mv "${tmp}" "${file}"
 
