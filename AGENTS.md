@@ -32,3 +32,5 @@ Code quality checks are performed during the build with `mvn verify` (checkstyle
 ## Documentation
 
 Any change that affects the end user of Jawk must be properly documented in README.md and src/site/*.md.
+
+Any change to Jawk's user-visible behavior (AWK language semantics, CLI behavior, or output) must also be recorded as a bullet under the `Unreleased` section at the top of src/site/markdown/behavior-changes.md, briefly describing the old and new behavior and linking the issue. Do not rename the `Unreleased` section manually: the release workflow stamps it with the release version automatically (via .github/scripts/stamp-behavior-changes.sh).

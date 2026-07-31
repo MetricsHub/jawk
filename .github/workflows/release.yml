@@ -77,6 +77,17 @@ jobs:
           git checkout "${branchName}" 2>/dev/null || git checkout -b "${branchName}"
           git push --force origin "${branchName}"
 
+      - name: Stamp behavior changes for v${{ inputs.releaseVersion }}
+        run: |
+          bash .github/scripts/stamp-behavior-changes.sh "${INPUT_RELEASE_VERSION}"
+          if ! git diff --quiet -- src/site/markdown/behavior-changes.md; then
+            git add src/site/markdown/behavior-changes.md
+            git commit -m "Stamp behavior changes for v${INPUT_RELEASE_VERSION}"
+            git push origin "${branchName}"
+          fi
+        env:
+          INPUT_RELEASE_VERSION: ${{ inputs.releaseVersion }}
+
       - name: Clean up existing release tag
         run: |
           git tag -d "${tagName}" || true

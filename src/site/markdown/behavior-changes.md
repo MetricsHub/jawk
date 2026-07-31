@@ -12,6 +12,13 @@ embedders. Releases that only contain internal refactoring, performance work, bu
 documentation changes are omitted. For the complete change lists, see the
 [GitHub releases](https://github.com/jawkio/jawk/releases).
 
+<!--
+Maintainers: every pull request that changes user-visible behavior must add a
+bullet under "Unreleased" below (see AGENTS.md). Do NOT rename that section by
+hand: the release workflow (.github/workflows/release.yml) stamps it with the
+released version automatically via .github/scripts/stamp-behavior-changes.sh.
+-->
+
 Unreleased
 ----------
 
