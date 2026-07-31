@@ -179,7 +179,7 @@ Compatibility data is unavailable in this build. Run `mvn verify site` to genera
 Detailed Behavior Notes
 -----------------------
 
-### Date and time functions
+${esc.h}${esc.h}${esc.h} Date and time functions
 
 The date and time functions (`mktime()`, `strftime()`) follow the Java platform's time zone data and calendar rules rather than the C library's, which differs from gawk in a few edge cases:
 
@@ -188,7 +188,7 @@ The date and time functions (`mktime()`, `strftime()`) follow the Java platform'
 - A positive `mktime()` DST hint applies the zone's current daylight adjustment; zones without daylight saving time ignore the hint.
 - `strftime()`'s `%Z` prints the zone's current designation (the JDK's time zone data records historical offsets and DST rules, but not historical zone names), and timestamps before the common era use the JDK's year numbering rather than astronomical (negative) years.
 
-### Where Jawk follows gawk
+${esc.h}${esc.h}${esc.h} Where Jawk follows gawk
 
 Jawk follows gawk in several places where gawk departs from historical AWK:
 
