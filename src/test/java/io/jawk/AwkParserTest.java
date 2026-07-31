@@ -158,6 +158,148 @@ public class AwkParserTest {
 	}
 
 	@Test
+	public void testPrintParenthesizedExpressionList() throws Exception {
+		AwkTestSupport
+				.awkTest("A parenthesized print argument followed by a comma continues the list")
+				.script("BEGIN { i = \"\"; print (i==0), (i==\"\") }")
+				.expectLines("0 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Uninitialized variables compare equal to both 0 and the null string")
+				.script("BEGIN { print (i==0), (i==\"\") }")
+				.expectLines("1 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Several parenthesized print arguments must parse")
+				.script("BEGIN { print (1), (2), (3) }")
+				.expectLines("1 2 3")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A concatenated parenthesized print argument can continue the list")
+				.script("BEGIN { print (1) (2), 3 }")
+				.expectLines("12 3")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A newline may follow the comma after a parenthesized print argument")
+				.script("BEGIN { print (1),\n2 }")
+				.expectLines("1 2")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("printf also continues the list after a parenthesized first argument")
+				.script("BEGIN { printf (\"%s-%s\\n\"), \"a\", \"b\" }")
+				.expect("a-b\n")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parenthesized group of several expressions cannot continue the list")
+				.script("BEGIN { print (1,2), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Extra parentheses around a comma group cannot continue the list either")
+				.script("BEGIN { print ((1,2)), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group consumed by 'in' can continue the list")
+				.script("BEGIN { a[1,2]=5; print ((1,2) in a), \"x\" }")
+				.expectLines("1 x")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group wrapped by an operator cannot continue the list")
+				.script("BEGIN { print ((1,2)+0), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group wrapped by a concatenation cannot continue the list")
+				.script("BEGIN { print ((1,2) \"\"), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testCommaGroupOnlyValidBeforeIn() throws Exception {
+		AwkTestSupport
+				.awkTest("A comma group cannot be assigned")
+				.script("BEGIN { x = (1,2) }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group cannot be a function argument")
+				.script("function f(x) { return x }\nBEGIN { print f((1,2)) }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A doubly parenthesized comma group cannot precede 'in'")
+				.script("BEGIN { a[1,2]=5; print (((1,2)) in a) }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group before 'in' works in a condition")
+				.script("BEGIN { a[1,2]=5; if ((1,2) in a) print \"yes\" }")
+				.expectLines("yes")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group cannot be an assignment right-hand side")
+				.script("BEGIN { x = (y = 1, 2); print x, y }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("An assignment can be the first element of a comma group before 'in'")
+				.script("BEGIN { a[1,2]=5; if ((y=1,2) in a) print \"yes\", y }")
+				.expectLines("yes 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("An assignment can be a later element of a comma group before 'in'")
+				.script("BEGIN { a[1,2]=5; if ((1, y=2) in a) print \"yes\", y }")
+				.expectLines("yes 2")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parenthesized 'in' membership test is a valid expression")
+				.script("BEGIN { a[1,2]=1; x = ((1,2) in a); print x }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A doubly parenthesized 'in' membership test can be printed")
+				.script("BEGIN { a[1,2]=1; print (((1,2) in a)) }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A nested comma group is rejected")
+				.script("BEGIN { a[1,2,3]=5; if ((1, (2,3)) in a) print \"yes\" }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testPrintMembershipAfterParenthesizedGroup() throws Exception {
+		AwkTestSupport
+				.awkTest("A parenthesized print group followed by 'in' is a membership key")
+				.script("BEGIN { a[1,2]=9; print (1,2) in a }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A three-element group followed by 'in' is a membership key")
+				.script("BEGIN { a[1,2,3]=9; print (1,2,3) in a }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A membership test after a group can continue the output list")
+				.script("BEGIN { a[1,2]=9; print (1,2) in a, \"x\" }")
+				.expectLines("1 x")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A single parenthesized expression followed by 'in' is a membership key")
+				.script("BEGIN { a[1]=9; print (1) in a }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("printf also accepts a membership test after a parenthesized group")
+				.script("BEGIN { a[1,2]=9; printf (1,2) in a }")
+				.expect("1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testGron() throws Exception {
 		AwkTestSupport
 				.awkTest("gron.awk must not trigger any parser exception")

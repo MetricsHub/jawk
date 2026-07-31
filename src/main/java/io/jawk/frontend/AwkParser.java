@@ -1536,7 +1536,8 @@ public class AwkParser {
 			boolean allowInKeyword,
 			boolean allowMultidimIndices)
 			throws IOException {
-		AST commaExpression = COMMA_EXPRESSION(left, allowComparison, allowInKeyword, allowMultidimIndices);
+		AST ternaryExpression = TERNARY_EXPRESSION(left, allowComparison, allowInKeyword, allowMultidimIndices);
+		AST result = ternaryExpression;
 		if (token == Token.EQUALS
 				|| token == Token.PLUS_EQ
 				|| token == Token.MINUS_EQ
@@ -1547,36 +1548,30 @@ public class AwkParser {
 			Token op = token;
 			String txt = text.toString();
 			lexer();
+			// An assignment RHS is a single expression: a following comma belongs to
+			// the enclosing grouping, as in ((y=1, 2) in a), where the group elements
+			// are (y=1) and (2)
 			AST assignmentExpression = ASSIGNMENT_EXPRESSION(
 					null,
 					allowComparison,
 					allowInKeyword,
-					allowMultidimIndices);
-			return new AssignmentExpressionAst(commaExpression, op, txt, assignmentExpression);
+					false);
+			result = new AssignmentExpressionAst(ternaryExpression, op, txt, assignmentExpression);
 		}
-		return commaExpression;
-	}
-
-	// COMMA_EXPRESSION = TERNARY_EXPRESSION [, COMMA_EXPRESSION] !!!ONLY IF!!! allowMultidimIndices is true
-	// allowMultidimIndices is set to true when we need (1,2,3,4) expressions to collapse into an array index expression
-	// (converts 1,2,3,4 to 1 SUBSEP 2 SUBSEP 3 SUBSEP 4) after an open parenthesis (grouping) expression starter
-	private AST COMMA_EXPRESSION(
-			AST left,
-			boolean allowComparison,
-			boolean allowInKeyword,
-			boolean allowMultidimIndices)
-			throws IOException {
-		AST concatExpression = TERNARY_EXPRESSION(left, allowComparison, allowInKeyword, allowMultidimIndices);
+		// ASSIGNMENT_EXPRESSION [, ASSIGNMENT_EXPRESSION] !!!ONLY IF!!! allowMultidimIndices is true
+		// allowMultidimIndices is set to true when we need (1,2,3,4) expressions to collapse into an array index
+		// expression (converts 1,2,3,4 to 1 SUBSEP 2 SUBSEP 3 SUBSEP 4) after an open parenthesis (grouping)
+		// expression starter
 		if (allowMultidimIndices && token == Token.COMMA) {
 			lexer();
 			optNewline();
-			AST rest = COMMA_EXPRESSION(null, allowComparison, allowInKeyword, allowMultidimIndices);
+			AST rest = ASSIGNMENT_EXPRESSION(null, allowComparison, allowInKeyword, true);
 			if (rest instanceof ArrayIndexAst) {
-				return new ArrayIndexAst(concatExpression, rest);
+				return new ArrayIndexAst(result, rest);
 			}
-			return new ArrayIndexAst(concatExpression, new ArrayIndexAst(rest, null));
+			return new ArrayIndexAst(result, new ArrayIndexAst(rest, null));
 		}
-		return concatExpression;
+		return result;
 	}
 
 	// TERNARY_EXPRESSION = LOGICAL_OR_EXPRESSION [ ? TERNARY_EXPRESSION : TERNARY_EXPRESSION ]
@@ -1867,10 +1862,14 @@ public class AwkParser {
 			lexer();
 			// true = allow multi-dimensional array indices (i.e., commas for 1,2,3,4)
 			AST assignmentExpression = ASSIGNMENT_EXPRESSION(null, true, allowInKeyword, true);
-			if (allowMultidimIndices && (assignmentExpression instanceof ArrayIndexAst)) {
-				throw parserException("Cannot nest multi-dimensional array index expressions.");
-			}
 			lexer(Token.CLOSE_PAREN);
+			if (assignmentExpression instanceof ArrayIndexAst && !(allowInKeyword && token == Token.KW_IN)) {
+				// (expr, expr, ...) is a grouping, not an expression: it is only valid
+				// immediately before "in", as in ((i, j) in array). This also rejects
+				// nested groupings such as (1, (2, 3)), whose inner group is followed
+				// by ')' rather than "in".
+				throw parserException("A parenthesized expression list is only valid before 'in'.");
+			}
 			return assignmentExpression;
 		} else if (token == Token.INTEGER) {
 			AST integer = symbolTable.addINTEGER(text.toString());
@@ -2373,17 +2372,35 @@ public class AwkParser {
 
 		if (params instanceof FunctionCallParamListAst) {
 			FunctionCallParamListAst paramList = (FunctionCallParamListAst) params;
-			if (paramList.getAst2() == null && !endsPrintArgumentList(token)) {
+			boolean singleExpression = paramList.getAst2() == null;
+			// A parenthesized group followed by "in" is a membership test whose key is
+			// the whole group, e.g.: print (1,2) in a
+			boolean membershipKey = !singleExpression && token == Token.KW_IN;
+			if ((singleExpression || membershipKey) && !endsPrintArgumentList(token)) {
 				AST continuedExpression = ASSIGNMENT_EXPRESSION(
-						paramList.getAst1(),
+						singleExpression ? paramList.getAst1() : toMultidimIndex(paramList),
 						false,
 						true,
 						false);
+				if (token == Token.COMMA) {
+					// A single parenthesized expression followed by a comma continues the
+					// output expression list, e.g.: print (i==0), (i=="")
+					lexer(); // consume ','
+					optNewline(); // allow newline after comma (AWK style)
+					return new FunctionCallParamListAst(continuedExpression, EXPRESSION_LIST(false, true));
+				}
 				return new FunctionCallParamListAst(continuedExpression, null);
 			}
 		}
 
 		return params;
+	}
+
+	// Converts a print argument list back into the multi-dimensional array index
+	// it turned out to be, when the parenthesized group is followed by "in"
+	private AST toMultidimIndex(FunctionCallParamListAst list) {
+		AST rest = list.getAst2() == null ? null : toMultidimIndex((FunctionCallParamListAst) list.getAst2());
+		return new ArrayIndexAst(list.getAst1(), rest);
 	}
 
 	AST PRINT_STATEMENT() throws IOException {

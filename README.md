@@ -21,6 +21,8 @@ Jawk fully implements POSIX AWK, and adds support for the most commonly used gaw
 
 The gawk-specific `@` syntax and arrays-of-arrays syntax are rejected in `--posix` mode.
 
+See the [compatibility page](https://jawk.io/compatibility.html) for detailed behavior notes and live compatibility reports against the POSIX, One True Awk, and gawk test suites.
+
 ## CLI Example
 
 ```shell
