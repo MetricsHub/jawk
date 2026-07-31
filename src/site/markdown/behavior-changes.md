@@ -20,6 +20,10 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+_No user-visible behavior changes recorded yet._
+
+## [v7.0.01](https://github.com/jawkio/jawk/releases/tag/v7.0.01) (2026-07-31)
+
 - `print` outputs numeric-looking strings verbatim, as POSIX requires: `print "0100"` now prints
   `0100` (previously `100`), and input-derived values such as `$1` keep their original text.
   `OFMT` applies only when printing actual non-integral numbers, and `CONVFMT` governs
