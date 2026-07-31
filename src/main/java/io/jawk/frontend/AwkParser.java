@@ -1862,13 +1862,12 @@ public class AwkParser {
 			lexer();
 			// true = allow multi-dimensional array indices (i.e., commas for 1,2,3,4)
 			AST assignmentExpression = ASSIGNMENT_EXPRESSION(null, true, allowInKeyword, true);
-			if (allowMultidimIndices && (assignmentExpression instanceof ArrayIndexAst)) {
-				throw parserException("Cannot nest multi-dimensional array index expressions.");
-			}
 			lexer(Token.CLOSE_PAREN);
 			if (assignmentExpression instanceof ArrayIndexAst && !(allowInKeyword && token == Token.KW_IN)) {
-				// (expr, expr, ...) is a grouping, not an expression: it is only
-				// valid immediately before "in", as in ((i, j) in array)
+				// (expr, expr, ...) is a grouping, not an expression: it is only valid
+				// immediately before "in", as in ((i, j) in array). This also rejects
+				// nested groupings such as (1, (2, 3)), whose inner group is followed
+				// by ')' rather than "in".
 				throw parserException("A parenthesized expression list is only valid before 'in'.");
 			}
 			return assignmentExpression;

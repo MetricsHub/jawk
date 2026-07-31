@@ -253,6 +253,21 @@ public class AwkParserTest {
 				.script("BEGIN { a[1,2]=5; if ((1, y=2) in a) print \"yes\", y }")
 				.expectLines("yes 2")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parenthesized 'in' membership test is a valid expression")
+				.script("BEGIN { a[1,2]=1; x = ((1,2) in a); print x }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A doubly parenthesized 'in' membership test can be printed")
+				.script("BEGIN { a[1,2]=1; print (((1,2) in a)) }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A nested comma group is rejected")
+				.script("BEGIN { a[1,2,3]=5; if ((1, (2,3)) in a) print \"yes\" }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
 	}
 
 	@Test
