@@ -1,8 +1,7 @@
 keywords: behavior, changes, releases, versions, migration, awk, jawk
 description: User-visible behavior changes in each version of Jawk, from newest to oldest.
 
-Behavior Changes by Version
-===========================
+# Behavior Changes by Version
 
 <!-- MACRO{toc|fromDepth=2|toDepth=2|id=toc} -->
 
@@ -19,8 +18,7 @@ hand: the release workflow (.github/workflows/release.yml) stamps it with the
 released version automatically via .github/scripts/stamp-behavior-changes.sh.
 -->
 
-Unreleased
-----------
+## Unreleased
 
 - `print` outputs numeric-looking strings verbatim, as POSIX requires: `print "0100"` now prints
   `0100` (previously `100`), and input-derived values such as `$1` keep their original text.
@@ -35,8 +33,7 @@ Unreleased
   `((i, j) in array)` is accepted as an expression
   ([#535](https://github.com/jawkio/jawk/issues/535)).
 
-[v7.0.00](https://github.com/jawkio/jawk/releases/tag/v7.0.00) (2026-07-30)
-----------
+## [v7.0.00](https://github.com/jawkio/jawk/releases/tag/v7.0.00) (2026-07-30)
 
 - The full set of gawk language extensions is now enabled by default: `BEGINFILE` / `ENDFILE`
   special rules, the `nextfile` statement, the `ERRNO` and `ARGIND` special variables,
@@ -54,28 +51,24 @@ Unreleased
   AWK script in `ARGV` once the program text has been supplied, which makes `#!` interpreter
   scripts work as in gawk.
 
-[v6.4.01](https://github.com/jawkio/jawk/releases/tag/v6.4.01) (2026-06-03)
-----------
+## [v6.4.01](https://github.com/jawkio/jawk/releases/tag/v6.4.01) (2026-06-03)
 
 - Input-derived values (fields, `getline` results, `split()` pieces) now follow POSIX
   "numeric string" (strnum) semantics: they compare numerically when both operands are numeric,
   and as strings otherwise, matching gawk and One True Awk.
 
-[v6.2.00](https://github.com/jawkio/jawk/releases/tag/v6.2.00) (2026-05-04)
-----------
+## [v6.2.00](https://github.com/jawkio/jawk/releases/tag/v6.2.00) (2026-05-04)
 
 - New persistent memory support: the `--persist <file>` CLI option (or the
   `JAWK_PERSISTENT_MEMORY` environment variable) saves user-defined global variables to a file
   and restores them on the next run, in the spirit of gawk's persistent memory feature.
 
-[v6.1.00](https://github.com/jawkio/jawk/releases/tag/v6.1.00) (2026-04-19)
-----------
+## [v6.1.00](https://github.com/jawkio/jawk/releases/tag/v6.1.00) (2026-04-19)
 
 - gawk-style arrays of arrays (`a[i][j]`) are now supported.
 - New `--posix` CLI option.
 
-[v6.0.00](https://github.com/jawkio/jawk/releases/tag/v6.0.00) (2026-04-16)
-----------
+## [v6.0.00](https://github.com/jawkio/jawk/releases/tag/v6.0.00) (2026-04-16)
 
 - Breaking change for Java embedders: the project moved to [jawk.io](https://jawk.io), with new
   Maven coordinates and the `io.jawk` package (previously `org.metricshub.jawk`), and the Java
@@ -83,14 +76,12 @@ Unreleased
   purely behavioral `AwkSettings`).
 - Fixed `print` argument list parsing (argument continuation detection).
 
-[v5.0.00](https://github.com/jawkio/jawk/releases/tag/v5.0.00) (2025-11-04)
-----------
+## [v5.0.00](https://github.com/jawkio/jawk/releases/tag/v5.0.00) (2025-11-04)
 
 - Java embedding API changes only (`AssocArray` became a real `java.util.Map`, refined extension
   metadata APIs); no changes to AWK script behavior.
 
-[v4.1.00](https://github.com/jawkio/jawk/releases/tag/v4.1.00) (2025-09-29)
-----------
+## [v4.1.00](https://github.com/jawkio/jawk/releases/tag/v4.1.00) (2025-09-29)
 
 - Removed the deprecated Jawk-specific language extensions: the `_INTEGER`, `_DOUBLE`, and
   `_STRING` typecast keywords (and the `-y` CLI flag), and the `_sleep` and `_dump` keywords
@@ -100,14 +91,12 @@ Unreleased
 - Environment variables with non-numeric values no longer trigger spurious
   `NumberFormatException` log messages.
 
-[v4.0.01](https://github.com/jawkio/jawk/releases/tag/v4.0.01) (2025-08-08)
-----------
+## [v4.0.01](https://github.com/jawkio/jawk/releases/tag/v4.0.01) (2025-08-08)
 
 - Fixed field splitting with a regex `FS` producing leading or trailing separators, and a
   tokenizer regression, raising One True Awk test-suite compatibility from 94.2% to 97.8%.
 
-[v4.0.00](https://github.com/jawkio/jawk/releases/tag/v4.0.00) (2025-07-29)
-----------
+## [v4.0.00](https://github.com/jawkio/jawk/releases/tag/v4.0.00) (2025-07-29)
 
 A large conformance release aligning Jawk with [One True Awk](https://github.com/onetrueawk/awk):
 
@@ -124,63 +113,53 @@ A large conformance release aligning Jawk with [One True Awk](https://github.com
   comparison.
 - `rand()` produces a deterministic sequence for a given `srand()` seed.
 
-[v3.3.05](https://github.com/jawkio/jawk/releases/tag/v3.3.05) (2025-04-03)
-----------
+## [v3.3.05](https://github.com/jawkio/jawk/releases/tag/v3.3.05) (2025-04-03)
 
 - Java embedders only: packages renamed from `org.sentrysoftware.jawk` to `org.metricshub.jawk`;
   no changes to AWK script behavior.
 
-[v3.3.04](https://github.com/jawkio/jawk/releases/tag/v3.3.04) (2025-02-13)
-----------
+## [v3.3.04](https://github.com/jawkio/jawk/releases/tag/v3.3.04) (2025-02-13)
 
 - Fixed `sub()` with dollar references, and `sub()` / `gsub()` with `&` references in the
   replacement string.
 
-[v3.3.03](https://github.com/jawkio/jawk/releases/tag/v3.3.03) (2024-08-29)
-----------
+## [v3.3.03](https://github.com/jawkio/jawk/releases/tag/v3.3.03) (2024-08-29)
 
 - Fixed `gsub()` on array elements.
 - Removed the spurious SLF4J connection message from standard output.
 
-[v3.3.02](https://github.com/jawkio/jawk/releases/tag/v3.3.02) (2024-08-09)
-----------
+## [v3.3.02](https://github.com/jawkio/jawk/releases/tag/v3.3.02) (2024-08-09)
 
 - Fixed operator associativity: most operations are left-associative, exponentiation (`^`) is
   right-associative.
 
-[v3.3.01](https://github.com/jawkio/jawk/releases/tag/v3.3.01) (2024-08-09)
-----------
+## [v3.3.01](https://github.com/jawkio/jawk/releases/tag/v3.3.01) (2024-08-09)
 
 - `substr()` no longer fails on out-of-range arguments.
 - Output redirection (`>`) is supported within `print` statements.
 - Fixed the argument order in extension function calls.
 
-[v3.3.00](https://github.com/jawkio/jawk/releases/tag/v3.3.00) (2024-02-04)
-----------
+## [v3.3.00](https://github.com/jawkio/jawk/releases/tag/v3.3.00) (2024-02-04)
 
 - Fixed the evaluation order in string concatenation and in function argument lists.
 
-[v3.2.00](https://github.com/jawkio/jawk/releases/tag/v3.2.00) (2024-02-01)
-----------
+## [v3.2.00](https://github.com/jawkio/jawk/releases/tag/v3.2.00) (2024-02-01)
 
 - `exit NN` returns the proper exit code from `BEGIN` and main rules.
 - Full support for the `ORS` special variable.
 - Full support for range patterns (`/start/, /end/`).
 - `NR` is updated even when the program has no main rule.
 
-[v3.1.02](https://github.com/jawkio/jawk/releases/tag/v3.1.02) (2024-01-18)
-----------
+## [v3.1.02](https://github.com/jawkio/jawk/releases/tag/v3.1.02) (2024-01-18)
 
 - `!x` on an uninitialized variable now correctly evaluates to true.
 
-[v3.1.01](https://github.com/jawkio/jawk/releases/tag/v3.1.01) (2024-01-17)
-----------
+## [v3.1.01](https://github.com/jawkio/jawk/releases/tag/v3.1.01) (2024-01-17)
 
 - Fixed escaping in regexp constants, notably octal sequences.
 - Improved syntax error messages.
 
-[v3.1.00](https://github.com/jawkio/jawk/releases/tag/v3.1.00) (2024-01-17)
-----------
+## [v3.1.00](https://github.com/jawkio/jawk/releases/tag/v3.1.00) (2024-01-17)
 
 - Newlines are allowed after `&&`, `||`, `?`, `:`, and `,`.
 - Unary plus (`+a`) is supported.
@@ -189,21 +168,18 @@ A large conformance release aligning Jawk with [One True Awk](https://github.com
 - Fixed parsing of escape sequences in regular expression constants.
 - Jawk runs on Java 8 and later.
 
-[v3.0.00](https://github.com/jawkio/jawk/releases/tag/v3.0.00) (2023-12-14)
-----------
+## [v3.0.00](https://github.com/jawkio/jawk/releases/tag/v3.0.00) (2023-12-14)
 
 - `printf()` and `sprintf()` use the [Printf4J](https://github.com/metricshub/printf4j) library
   for C-style formatting.
 - Java embedders: packages renamed from `org.jawk` to `org.sentrysoftware.jawk`; the library is
   licensed under LGPL and released on Maven Central.
 
-[v2.1.00 (beta)](https://github.com/jawkio/jawk/releases/tag/v2.1.00-SNAPSHOT7) (2023)
-----------
+## [v2.1.00 (beta)](https://github.com/jawkio/jawk/releases/tag/v2.1.00-SNAPSHOT7) (2023)
 
 - Octal (`"\033"`) and hexadecimal (`"\x1B"`) escape sequences are supported in strings.
 
-See Also
---------
+## See Also
 
 - [Compatibility and Compliance](compatibility.html)
 - [GitHub releases](https://github.com/jawkio/jawk/releases)

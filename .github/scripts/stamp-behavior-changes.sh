@@ -21,53 +21,35 @@ if [ ! -f "${file}" ]; then
 	exit 1
 fi
 
-if ! grep -qx "Unreleased" "${file}"; then
-	echo "ERROR: ${file} has no 'Unreleased' section; restore it before releasing." >&2
+if ! grep -qx "## Unreleased" "${file}"; then
+	echo "ERROR: ${file} has no '## Unreleased' section; restore it before releasing." >&2
 	exit 1
 fi
 
-# Count bullet items inside the "Unreleased" section (up to the next setext heading).
+# Count bullet items inside the "## Unreleased" section (up to the next H2).
 bullets="$(awk '
-	{ lines[NR] = $0 }
-	END {
-		inSection = 0
-		count = 0
-		for (i = 1; i <= NR; i++) {
-			if (!inSection && lines[i] == "Unreleased" && lines[i + 1] ~ /^-{4,}$/) {
-				inSection = 1
-				i++
-				continue
-			}
-			if (inSection) {
-				if (i < NR && lines[i] != "" && lines[i + 1] ~ /^-{4,}$/) {
-					break
-				}
-				if (lines[i] ~ /^- /) {
-					count++
-				}
-			}
-		}
-		print count
-	}
+	/^## Unreleased$/ { inSection = 1; next }
+	inSection && /^## / { exit }
+	inSection && /^- / { count++ }
+	END { print count + 0 }
 ' "${file}")"
 
 if [ "${bullets}" -eq 0 ]; then
-	echo "No behavior changes recorded under 'Unreleased'; leaving ${file} unchanged."
+	echo "No behavior changes recorded under '## Unreleased'; leaving ${file} unchanged."
 	exit 0
 fi
 
-# Replace the "Unreleased" heading line with the version heading (reusing the
-# existing setext underline), insert a fresh "Unreleased" stub above it, and
-# drop the placeholder left by a previous stamping from the released section.
+# Replace the "## Unreleased" heading with the version heading, insert a fresh
+# "## Unreleased" stub above it, and drop the placeholder left by a previous
+# stamping from the released section.
 tmp="$(mktemp)"
 awk -v version="${version}" -v releaseDate="${releaseDate}" -v placeholder="${placeholder}" '
-	$0 == "Unreleased" && !stamped {
-		print "Unreleased"
-		print "----------"
+	$0 == "## Unreleased" && !stamped {
+		print "## Unreleased"
 		print ""
 		print placeholder
 		print ""
-		printf "[v%s](https://github.com/jawkio/jawk/releases/tag/v%s) (%s)\n", version, version, releaseDate
+		printf "## [v%s](https://github.com/jawkio/jawk/releases/tag/v%s) (%s)\n", version, version, releaseDate
 		stamped = 1
 		next
 	}
@@ -86,7 +68,7 @@ awk -v version="${version}" -v releaseDate="${releaseDate}" -v placeholder="${pl
 ' "${file}" > "${tmp}"
 mv "${tmp}" "${file}"
 
-if ! grep -qF "[v${version}](https://github.com/jawkio/jawk/releases/tag/v${version}) (${releaseDate})" "${file}"; then
+if ! grep -qF "## [v${version}](https://github.com/jawkio/jawk/releases/tag/v${version}) (${releaseDate})" "${file}"; then
 	echo "ERROR: failed to stamp v${version} in ${file}." >&2
 	exit 1
 fi
