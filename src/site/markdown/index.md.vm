@@ -136,6 +136,7 @@ Jawk also follows gawk in several places where gawk departs from historical AWK:
 - Because the [gawk compatibility extension](extensions.html#gawk) is enabled by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` are function names and can no longer be used as variables. Load an explicit extension list without `GawkExtension` to reclaim those identifiers.
 - Calling a user-defined function with more arguments than it declares is accepted: the extra expressions are evaluated and discarded, and a gawk-style warning is printed to stderr.
 - Assigning a scalar value to an array element (`a[1] = z`) types that element as a scalar; later using it as a subarray (`a[1][2] = 3`) is a runtime error, exactly as in gawk.
+- `print` and `printf` resolve the leading-parenthesis ambiguity as gawk does: `print (a, b)` prints the parenthesized group as the whole argument list (which is how `print (a, b) > "file"` disambiguates a redirection from a comparison), while a single parenthesized expression followed by a comma continues the output list, as in `print (i==0), (i=="")`. A comma group followed by more arguments, such as `print (1,2), 3`, is a syntax error.
 
 History of Jawk
 ---------------

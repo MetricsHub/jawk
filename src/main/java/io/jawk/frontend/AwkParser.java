@@ -2379,9 +2379,12 @@ public class AwkParser {
 						false,
 						true,
 						false);
-				if (token == Token.COMMA) {
+				if (token == Token.COMMA && !(continuedExpression instanceof ArrayIndexAst)) {
 					// A single parenthesized expression followed by a comma continues the
 					// output expression list, e.g.: print (i==0), (i=="")
+					// A grouping such as ((1,2)) stays an ArrayIndexAst unless consumed by
+					// "in"; it cannot start an output list, as in gawk: print ((1,2)), 3
+					// remains a syntax error.
 					lexer(); // consume ','
 					optNewline(); // allow newline after comma (AWK style)
 					return new FunctionCallParamListAst(continuedExpression, EXPRESSION_LIST(false, true));

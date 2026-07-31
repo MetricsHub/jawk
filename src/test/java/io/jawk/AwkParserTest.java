@@ -194,6 +194,16 @@ public class AwkParserTest {
 				.script("BEGIN { print (1,2), 3 }")
 				.expectThrow(ParserException.class)
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Extra parentheses around a comma group cannot continue the list either")
+				.script("BEGIN { print ((1,2)), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group consumed by 'in' can continue the list")
+				.script("BEGIN { a[1,2]=5; print ((1,2) in a), \"x\" }")
+				.expectLines("1 x")
+				.runAndAssert();
 	}
 
 	@Test
