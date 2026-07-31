@@ -2372,9 +2372,13 @@ public class AwkParser {
 
 		if (params instanceof FunctionCallParamListAst) {
 			FunctionCallParamListAst paramList = (FunctionCallParamListAst) params;
-			if (paramList.getAst2() == null && !endsPrintArgumentList(token)) {
+			boolean singleExpression = paramList.getAst2() == null;
+			// A parenthesized group followed by "in" is a membership test whose key is
+			// the whole group, e.g.: print (1,2) in a
+			boolean membershipKey = !singleExpression && token == Token.KW_IN;
+			if ((singleExpression || membershipKey) && !endsPrintArgumentList(token)) {
 				AST continuedExpression = ASSIGNMENT_EXPRESSION(
-						paramList.getAst1(),
+						singleExpression ? paramList.getAst1() : toMultidimIndex(paramList),
 						false,
 						true,
 						false);
@@ -2390,6 +2394,13 @@ public class AwkParser {
 		}
 
 		return params;
+	}
+
+	// Converts a print argument list back into the multi-dimensional array index
+	// it turned out to be, when the parenthesized group is followed by "in"
+	private AST toMultidimIndex(FunctionCallParamListAst list) {
+		AST rest = list.getAst2() == null ? null : toMultidimIndex((FunctionCallParamListAst) list.getAst2());
+		return new ArrayIndexAst(list.getAst1(), rest);
 	}
 
 	AST PRINT_STATEMENT() throws IOException {

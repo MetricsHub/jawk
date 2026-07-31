@@ -271,6 +271,35 @@ public class AwkParserTest {
 	}
 
 	@Test
+	public void testPrintMembershipAfterParenthesizedGroup() throws Exception {
+		AwkTestSupport
+				.awkTest("A parenthesized print group followed by 'in' is a membership key")
+				.script("BEGIN { a[1,2]=9; print (1,2) in a }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A three-element group followed by 'in' is a membership key")
+				.script("BEGIN { a[1,2,3]=9; print (1,2,3) in a }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A membership test after a group can continue the output list")
+				.script("BEGIN { a[1,2]=9; print (1,2) in a, \"x\" }")
+				.expectLines("1 x")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A single parenthesized expression followed by 'in' is a membership key")
+				.script("BEGIN { a[1]=9; print (1) in a }")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("printf also accepts a membership test after a parenthesized group")
+				.script("BEGIN { a[1,2]=9; printf (1,2) in a }")
+				.expect("1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testGron() throws Exception {
 		AwkTestSupport
 				.awkTest("gron.awk must not trigger any parser exception")
