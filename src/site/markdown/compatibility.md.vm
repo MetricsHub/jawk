@@ -207,5 +207,6 @@ Jawk follows gawk in several places where gawk departs from historical AWK:
 See Also
 --------
 
+- [Behavior changes by version](behavior-changes.html)
 - [CLI options and tuple workflows](cli-reference.html)
 - [Java compilation and reuse APIs](java-compile.html)

@@ -239,9 +239,9 @@ public abstract class AwkSink {
 	/**
 	 * Formats one operand of a plain AWK {@code print} statement.
 	 * <p>
-	 * AWK applies {@code OFMT} not only to numeric values, but also to strings
-	 * that can be interpreted numerically. This helper preserves that behaviour
-	 * for text-based sinks.
+	 * Numeric values are rendered with {@code OFMT} (or as integers when they
+	 * hold an integral value). String values — including numeric strings that
+	 * originate from input — are printed verbatim, as required by POSIX.
 	 * </p>
 	 *
 	 * @param value operand to format
@@ -249,7 +249,36 @@ public abstract class AwkSink {
 	 * @return the textual representation AWK would print for this operand
 	 */
 	protected final String formatPrintArgument(Object value, String ofmt) {
-		return formatOutputValue(normalizePrintArgument(value), ofmt, locale);
+		return formatOutputValue(value, ofmt, locale);
+	}
+
+	/**
+	 * Converts a {@code print} operand that renders as a numeric string into a
+	 * numeric form.
+	 * <p>
+	 * Historical versions of Jawk applied this conversion in plain {@code print},
+	 * which is not what POSIX AWK does: {@code print} outputs string values
+	 * verbatim, and only actual numbers are formatted with {@code OFMT}. The
+	 * built-in sinks therefore no longer call this helper; it is preserved only
+	 * for compatibility with custom sinks compiled against earlier releases.
+	 * </p>
+	 *
+	 * @param value operand to normalize
+	 * @return the normalized value, either unchanged or converted to a numeric form
+	 * @deprecated Plain {@code print} does not numerically coerce string values;
+	 *             use the operand as-is, or {@link #formatPrintArgument(Object, String)}
+	 *             to render it the way {@code print} would.
+	 */
+	@Deprecated
+	protected final Object normalizePrintArgument(Object value) {
+		if (value == null || value instanceof Number) {
+			return value;
+		}
+		try {
+			return Double.valueOf(new BigDecimal(value.toString()).doubleValue());
+		} catch (NumberFormatException e) {
+			return value;
+		}
 	}
 
 	/**
@@ -280,29 +309,6 @@ public abstract class AwkSink {
 	 */
 	protected final String formatPrintfResult(String format, Object... values) {
 		return sprintf(format, values);
-	}
-
-	/**
-	 * Converts a {@code print} operand into the value shape AWK uses before it
-	 * applies {@code OFMT}.
-	 * <p>
-	 * When a non-numeric object renders as a numeric string, AWK treats it as a
-	 * number for plain {@code print}. Structured sinks can reuse this helper when
-	 * they want text output compatible with standard AWK behaviour.
-	 * </p>
-	 *
-	 * @param value operand to normalize
-	 * @return the normalized value, either unchanged or converted to a numeric form
-	 */
-	protected final Object normalizePrintArgument(Object value) {
-		if (value == null || value instanceof Number) {
-			return value;
-		}
-		try {
-			return Double.valueOf(new BigDecimal(value.toString()).doubleValue());
-		} catch (NumberFormatException e) {
-			return value;
-		}
 	}
 
 	/**
