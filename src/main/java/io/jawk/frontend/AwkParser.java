@@ -2379,6 +2379,13 @@ public class AwkParser {
 						false,
 						true,
 						false);
+				if (token == Token.COMMA) {
+					// A single parenthesized expression followed by a comma continues the
+					// output expression list, e.g.: print (i==0), (i=="")
+					lexer(); // consume ','
+					optNewline(); // allow newline after comma (AWK style)
+					return new FunctionCallParamListAst(continuedExpression, EXPRESSION_LIST(false, true));
+				}
 				return new FunctionCallParamListAst(continuedExpression, null);
 			}
 		}

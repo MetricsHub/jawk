@@ -158,6 +158,45 @@ public class AwkParserTest {
 	}
 
 	@Test
+	public void testPrintParenthesizedExpressionList() throws Exception {
+		AwkTestSupport
+				.awkTest("A parenthesized print argument followed by a comma continues the list")
+				.script("BEGIN { i = \"\"; print (i==0), (i==\"\") }")
+				.expectLines("0 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Uninitialized variables compare equal to both 0 and the null string")
+				.script("BEGIN { print (i==0), (i==\"\") }")
+				.expectLines("1 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Several parenthesized print arguments must parse")
+				.script("BEGIN { print (1), (2), (3) }")
+				.expectLines("1 2 3")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A concatenated parenthesized print argument can continue the list")
+				.script("BEGIN { print (1) (2), 3 }")
+				.expectLines("12 3")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A newline may follow the comma after a parenthesized print argument")
+				.script("BEGIN { print (1),\n2 }")
+				.expectLines("1 2")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("printf also continues the list after a parenthesized first argument")
+				.script("BEGIN { printf (\"%s-%s\\n\"), \"a\", \"b\" }")
+				.expect("a-b\n")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A parenthesized group of several expressions cannot continue the list")
+				.script("BEGIN { print (1,2), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testGron() throws Exception {
 		AwkTestSupport
 				.awkTest("gron.awk must not trigger any parser exception")
