@@ -238,6 +238,21 @@ public class AwkParserTest {
 				.script("BEGIN { a[1,2]=5; if ((1,2) in a) print \"yes\" }")
 				.expectLines("yes")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group cannot be an assignment right-hand side")
+				.script("BEGIN { x = (y = 1, 2); print x, y }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("An assignment can be the first element of a comma group before 'in'")
+				.script("BEGIN { a[1,2]=5; if ((y=1,2) in a) print \"yes\", y }")
+				.expectLines("yes 1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("An assignment can be a later element of a comma group before 'in'")
+				.script("BEGIN { a[1,2]=5; if ((1, y=2) in a) print \"yes\", y }")
+				.expectLines("yes 2")
+				.runAndAssert();
 	}
 
 	@Test
