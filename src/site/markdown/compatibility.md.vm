@@ -188,6 +188,10 @@ The date and time functions (`mktime()`, `strftime()`) follow the Java platform'
 - A positive `mktime()` DST hint applies the zone's current daylight adjustment; zones without daylight saving time ignore the hint.
 - `strftime()`'s `%Z` prints the zone's current designation (the JDK's time zone data records historical offsets and DST rules, but not historical zone names), and timestamps before the common era use the JDK's year numbering rather than astronomical (negative) years.
 
+${esc.h}${esc.h}${esc.h} Range patterns
+
+Range patterns (`begpat, endpat`) evaluate their two conditions lazily, as POSIX requires: the start condition is evaluated only while outside the range, and the end condition only once the range has started — including on the very record that starts it, so a range can begin and end on the same record. Conditions with side effects, such as `a++ == 2, a++ == 5`, therefore behave exactly as in gawk and One True Awk: each condition's side effects run only on the records where that condition is actually tested.
+
 ${esc.h}${esc.h}${esc.h} Where Jawk follows gawk
 
 Jawk follows gawk in several places where gawk departs from historical AWK:
