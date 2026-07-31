@@ -1871,6 +1871,11 @@ public class AwkParser {
 				throw parserException("Cannot nest multi-dimensional array index expressions.");
 			}
 			lexer(Token.CLOSE_PAREN);
+			if (assignmentExpression instanceof ArrayIndexAst && !(allowInKeyword && token == Token.KW_IN)) {
+				// (expr, expr, ...) is a grouping, not an expression: it is only
+				// valid immediately before "in", as in ((i, j) in array)
+				throw parserException("A parenthesized expression list is only valid before 'in'.");
+			}
 			return assignmentExpression;
 		} else if (token == Token.INTEGER) {
 			AST integer = symbolTable.addINTEGER(text.toString());
@@ -2379,12 +2384,9 @@ public class AwkParser {
 						false,
 						true,
 						false);
-				if (token == Token.COMMA && !(continuedExpression instanceof ArrayIndexAst)) {
+				if (token == Token.COMMA) {
 					// A single parenthesized expression followed by a comma continues the
 					// output expression list, e.g.: print (i==0), (i=="")
-					// A grouping such as ((1,2)) stays an ArrayIndexAst unless consumed by
-					// "in"; it cannot start an output list, as in gawk: print ((1,2)), 3
-					// remains a syntax error.
 					lexer(); // consume ','
 					optNewline(); // allow newline after comma (AWK style)
 					return new FunctionCallParamListAst(continuedExpression, EXPRESSION_LIST(false, true));

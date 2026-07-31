@@ -204,6 +204,40 @@ public class AwkParserTest {
 				.script("BEGIN { a[1,2]=5; print ((1,2) in a), \"x\" }")
 				.expectLines("1 x")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group wrapped by an operator cannot continue the list")
+				.script("BEGIN { print ((1,2)+0), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group wrapped by a concatenation cannot continue the list")
+				.script("BEGIN { print ((1,2) \"\"), 3 }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testCommaGroupOnlyValidBeforeIn() throws Exception {
+		AwkTestSupport
+				.awkTest("A comma group cannot be assigned")
+				.script("BEGIN { x = (1,2) }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group cannot be a function argument")
+				.script("function f(x) { return x }\nBEGIN { print f((1,2)) }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A doubly parenthesized comma group cannot precede 'in'")
+				.script("BEGIN { a[1,2]=5; print (((1,2)) in a) }")
+				.expectThrow(ParserException.class)
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A comma group before 'in' works in a condition")
+				.script("BEGIN { a[1,2]=5; if ((1,2) in a) print \"yes\" }")
+				.expectLines("yes")
+				.runAndAssert();
 	}
 
 	@Test
