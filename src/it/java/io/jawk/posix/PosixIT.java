@@ -388,7 +388,7 @@ public class PosixIT {
 		AwkTestSupport
 				.awkTest("33. OFMT vs CONVFMT")
 				.script("BEGIN{OFMT=\"%.2f\"; CONVFMT=\"%.3f\"; x=1.2345; print x; s=x \"\"; print s}")
-				.expectLines("1.23", "1.24")
+				.expectLines("1.23", "1.235")
 				.runAndAssert();
 	}
 

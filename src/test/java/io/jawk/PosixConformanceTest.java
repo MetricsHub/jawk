@@ -365,6 +365,35 @@ public class PosixConformanceTest {
 	}
 
 	@Test
+	public void posix410aPrintStringConstantsVerbatim() throws Exception {
+		AwkTestSupport
+				.awkTest("POSIX 4.10a print outputs numeric-looking string constants verbatim")
+				.script("BEGIN { print \"0100\"; print \"1e3\"; print \"+0100\"; print \"-0500\"; print \"3.0\" }")
+				.expectLines("0100", "1e3", "+0100", "-0500", "3.0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void posix410bPrintInputFieldsVerbatim() throws Exception {
+		AwkTestSupport
+				.awkTest("POSIX 4.10b print outputs numeric strings from input verbatim")
+				.script("{ print $1 }")
+				.stdin("0100\n1e3\n")
+				.expectLines("0100", "1e3")
+				.runAndAssert();
+	}
+
+	@Test
+	public void posix410cOfmtNotAppliedToStrings() throws Exception {
+		AwkTestSupport
+				.awkTest("POSIX 4.10c OFMT applies to numbers only, not to numeric strings")
+				.script("BEGIN{OFMT=\"%.2f\"} { print $1; print $1 + 0 }")
+				.stdin("3.14159\n")
+				.expectLines("3.14159", "3.14")
+				.runAndAssert();
+	}
+
+	@Test
 	public void posix411DivisionOperator() throws Exception {
 		AwkTestSupport
 				.awkTest("POSIX 4.11 division vs regex literal disambiguation")
