@@ -663,9 +663,8 @@ public final class AwkPrintf {
 
 		/**
 		 * Renders the digits of a finite double for a floating-point
-		 * conversion, without sign and without width padding. The result
-		 * carries a leading '-' only for {@code %a} (which is delegated to
-		 * Java); all other conversions format the absolute value.
+		 * conversion, without sign and without width padding: the absolute
+		 * value is formatted and the caller applies the sign.
 		 */
 		private String floatBody(char conversion, Flags flags, int precision, double d) {
 			double abs = Math.abs(d);
@@ -676,7 +675,7 @@ public final class AwkPrintf {
 				// The exact binary value of the double is intended: it makes rounding match gawk's C library.
 				String s = decimalString(new BigDecimal(abs).setScale(p, RoundingMode.HALF_EVEN)); // NOPMD
 				if (flags.alternate && p == 0) {
-					s = s + ".";
+					s = forceDecimalSeparator(s);
 				}
 				if (flags.grouping) {
 					s = groupDigits(s);
@@ -688,7 +687,8 @@ public final class AwkPrintf {
 				int p = precision < 0 ? 6 : precision;
 				String s = scientific(abs, p);
 				if (flags.alternate && p == 0) {
-					s = s.replace("e", ".e");
+					int exponentStart = s.indexOf('e');
+					s = forceDecimalSeparator(s.substring(0, exponentStart)) + s.substring(exponentStart);
 				}
 				return conversion == 'E' ? s.toUpperCase(Locale.ROOT) : s;
 			}

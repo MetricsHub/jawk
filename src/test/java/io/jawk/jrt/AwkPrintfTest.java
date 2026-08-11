@@ -841,6 +841,10 @@ public class AwkPrintfTest {
 	public void testLocaleDecimalSeparator() {
 		assertSprintf("3,14", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%.2f", 3.14159);
 		assertSprintf("3,14159", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%g", 3.14159);
+		// The '#' decimal point follows the locale as well.
+		assertSprintf("1,", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#.0f", 1);
+		assertSprintf("1,e+04", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#.0e", 12345);
+		assertSprintf("1,e+04", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#.1g", 12345);
 	}
 
 	@Test
