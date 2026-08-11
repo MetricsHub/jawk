@@ -97,6 +97,14 @@ public final class AppendableAwkSink extends AwkSink {
 	}
 
 	@Override
+	public void printfWithConvFmt(String ofs, String ors, String ofmt, String convfmt, String format, Object... values)
+			throws IOException {
+		synchronized (lock) {
+			appendable.append(sprintfWithConvFmt(convfmt, format, values));
+		}
+	}
+
+	@Override
 	public void flush() throws IOException {
 		printStream.flush();
 		if (appendable instanceof Flushable) {

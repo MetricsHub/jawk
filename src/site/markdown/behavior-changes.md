@@ -20,7 +20,41 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
-_No user-visible behavior changes recorded yet._
+- `printf` and `sprintf` are now implemented natively with POSIX AWK / gawk semantics instead of
+  delegating to the Printf4J library, which emulated glibc's `printf()`
+  ([#528](https://github.com/jawkio/jawk/issues/528)):
+    - `%s` converts numeric values with AWK's number-to-string rules: integral values print
+      without a fractional part (`printf "%s", i` after `i++` now prints `1`, not `1.0`), and
+      non-integral values honor the script's current `CONVFMT` value.
+    - `%c` prints the character for a numeric code point (`printf "%c", 65` prints `A`,
+      previously `A` only for literal numbers, not for numeric strings or fields), or the first
+      character of a string value.
+    - Dynamic precision (`%.*f`) is now supported in addition to dynamic width (`%*d`), including
+      negative values (negative width left-justifies, negative precision means no precision), as
+      are gawk positional specifiers (`%2$s`) and the `'` grouping flag (`%'d`).
+    - Out-of-range integer conversions follow gawk: negative values wrap to unsigned 64-bit for
+      `%u`/`%o`/`%x`/`%X`, values beyond 64 bits print the full decimal expansion for `%d`/`%i`
+      and fall back to `%g` notation for `%u`/`%o`/`%x`/`%X`.
+    - NaN and infinities print as `nan`, `inf`, and `-inf` (previously Java's `NaN` /
+      `Infinity`), in `print`, `printf`, and number-to-string conversions.
+    - `%e`, `%f`, and `%g` round halfway cases to even like the C library used by gawk
+      (`printf "%.0f", 2.5` prints `2`, previously `3`), and `%g` strips trailing zeros before
+      padding (previously only when no padding applied).
+    - `printf` with too few arguments is now a fatal error, as in gawk (previously the leftover
+      specifiers were printed verbatim).
+    - Unknown conversion specifiers (including `%n`, which Printf4J turned into a newline, and
+      invalid length modifiers such as `ll` or `hh`) are printed verbatim without consuming an
+      argument, as in gawk; a single `h`, `l`, or `L` length modifier is accepted and ignored.
+- Integral values beyond the 64-bit range are no longer saturated to 2^63-1: `print 2^100` now
+  prints the full decimal expansion `1267650600228229401496703205376` (previously
+  `9223372036854775807`), and `int()` preserves such values
+  ([#528](https://github.com/jawkio/jawk/issues/528)).
+- For Java embedders: `AwkSink` gains `printfWithConvFmt(...)` and `sprintfWithConvFmt(...)`,
+  which receive the script's current `CONVFMT` value; the runtime now routes `printf` and
+  `sprintf` through these methods. Custom sinks that overrode `sprintf(String, Object...)` to
+  customize formatting should override `sprintfWithConvFmt(String, String, Object...)` instead.
+  The `org.metricshub:printf4j` dependency has been removed; its formatting logic now lives in
+  `io.jawk.jrt.AwkPrintf` ([#528](https://github.com/jawkio/jawk/issues/528)).
 
 ## [v7.0.01](https://github.com/jawkio/jawk/releases/tag/v7.0.01) (2026-07-31)
 

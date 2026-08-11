@@ -97,12 +97,6 @@
 	<dependencies>
 
 		<dependency>
-			<groupId>org.metricshub</groupId>
-			<artifactId>printf4j</artifactId>
-			<version>0.9.08</version>
-		</dependency>
-
-		<dependency>
 			<groupId>com.github.stefanbirkner</groupId>
 			<artifactId>system-rules</artifactId>
 			<version>1.19.0</version>

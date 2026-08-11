@@ -27,7 +27,6 @@ import java.io.OutputStream;
 import java.io.PrintStream;
 import java.math.BigDecimal;
 import java.util.Locale;
-import org.metricshub.printf4j.Printf4J;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
@@ -91,6 +90,29 @@ public abstract class AwkSink {
 	 */
 	public abstract void printf(String ofs, String ors, String ofmt, String format, Object... values)
 			throws IOException;
+
+	/**
+	 * Writes one AWK {@code printf} operation, with the current {@code CONVFMT}
+	 * value so that {@code %s} can convert numeric values the way AWK does.
+	 * <p>
+	 * The default implementation ignores {@code convfmt} and delegates to
+	 * {@link #printf(String, String, String, String, Object...)}, which keeps
+	 * existing custom sinks working unchanged. The built-in sinks override this
+	 * method so that {@code %s} honors the script's {@code CONVFMT} value.
+	 * </p>
+	 *
+	 * @param ofs output field separator
+	 * @param ors output record separator
+	 * @param ofmt numeric output format available to the sink
+	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
+	 * @param format format string passed to {@code printf}
+	 * @param values arguments supplied after the format string
+	 * @throws IOException if the sink cannot write the output
+	 */
+	public void printfWithConvFmt(String ofs, String ors, String ofmt, String convfmt, String format, Object... values)
+			throws IOException {
+		printf(ofs, ors, ofmt, format, values);
+	}
 
 	/**
 	 * Flushes any buffered output held by this sink.
@@ -282,13 +304,14 @@ public abstract class AwkSink {
 	}
 
 	/**
-	 * Formats a string in the same way as AWK's {@code sprintf()} built-in.
+	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
+	 * using the default {@code CONVFMT} value ({@code "%.6g"}).
 	 * <p>
-	 * Subclasses may override this method to customize formatting. The default
-	 * implementation delegates to {@link Printf4J#sprintf(Locale, String, Object...)}.
-	 * Because {@link #printf(String, String, String, String, Object...)} uses this
-	 * method internally, overriding it ensures that both {@code printf} and
-	 * {@code sprintf} produce consistent output.
+	 * The default implementation delegates to
+	 * {@link #sprintfWithConvFmt(String, String, Object...)}. To customize
+	 * formatting for both {@code printf} and {@code sprintf}, override
+	 * {@link #sprintfWithConvFmt(String, String, Object...)}, which is the
+	 * method the runtime invokes.
 	 * </p>
 	 *
 	 * @param format format string
@@ -296,8 +319,29 @@ public abstract class AwkSink {
 	 * @return formatted text
 	 */
 	public String sprintf(String format, Object... values) {
+		return sprintfWithConvFmt(AwkPrintf.DEFAULT_CONVFMT, format, values);
+	}
+
+	/**
+	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
+	 * converting numeric {@code %s} operands with the supplied {@code CONVFMT}
+	 * value.
+	 * <p>
+	 * Subclasses may override this method to customize formatting. The default
+	 * implementation delegates to
+	 * {@link AwkPrintf#sprintf(Locale, String, String, Object...)}. Because the
+	 * runtime routes both {@code printf} and {@code sprintf} through this
+	 * method, overriding it ensures that both produce consistent output.
+	 * </p>
+	 *
+	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
+	 * @param format format string
+	 * @param values arguments supplied after the format string
+	 * @return formatted text
+	 */
+	public String sprintfWithConvFmt(String convfmt, String format, Object... values) {
 		Object[] safeValues = values == null ? new Object[0] : values;
-		return Printf4J.sprintf(locale, format, safeValues);
+		return AwkPrintf.sprintf(locale, convfmt, format, safeValues);
 	}
 
 	/**
@@ -320,33 +364,6 @@ public abstract class AwkSink {
 	 * @return textual output for {@code value}
 	 */
 	public static String formatOutputValue(Object value, String ofmt, Locale locale) {
-		if (value == null) {
-			return "";
-		}
-		if (!(value instanceof Number)) {
-			return value.toString();
-		}
-
-		double number = ((Number) value).doubleValue();
-		if (JRT.isActuallyLong(number)) {
-			return Long.toString((long) Math.rint(number));
-		}
-
-		try {
-			String rendered = String.format(locale, ofmt, number);
-			if ((rendered.indexOf('.') > -1 || rendered.indexOf(',') > -1)
-					&& rendered.indexOf('e') == -1
-					&& rendered.indexOf('E') == -1) {
-				while (rendered.endsWith("0")) {
-					rendered = rendered.substring(0, rendered.length() - 1);
-				}
-				if (rendered.endsWith(".") || rendered.endsWith(",")) {
-					rendered = rendered.substring(0, rendered.length() - 1);
-				}
-			}
-			return rendered;
-		} catch (java.util.UnknownFormatConversionException e) {
-			return "";
-		}
+		return AwkPrintf.toAwkString(value, ofmt, locale);
 	}
 }

@@ -103,6 +103,11 @@ public final class OutputStreamAwkSink extends AwkSink {
 	}
 
 	@Override
+	public void printfWithConvFmt(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
+		printStream.print(sprintfWithConvFmt(convfmt, format, values));
+	}
+
+	@Override
 	public void flush() {
 		printStream.flush();
 	}

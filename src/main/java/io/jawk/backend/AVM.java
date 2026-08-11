@@ -1785,7 +1785,7 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case INTFUNC: {
 					// stack[0] = arg to int() function
-					push((long) JRT.toDouble(pop()));
+					push(JRT.truncateToScalar(JRT.toDouble(pop())));
 					position.next();
 					break;
 				}
@@ -3003,7 +3003,7 @@ public class AVM implements VariableManager, Closeable {
 			return jrt.index(jrt.toAwkString(args[0]), jrt.toAwkString(args[1]));
 		case INT:
 			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
-			return Long.valueOf((long) JRT.toDouble(args[0]));
+			return JRT.truncateToScalar(JRT.toDouble(args[0]));
 		case LENGTH:
 			requireIndirectArgumentCount(builtin, args, 0, 1, lineNumber);
 			return args.length == 0 ? Integer.valueOf(jrt.jrtGetInputField(0).toString().length()) : lengthOf(args[0]);
@@ -3030,7 +3030,8 @@ public class AVM implements VariableManager, Closeable {
 			requireIndirectArgumentCount(builtin, args, 1, Integer.MAX_VALUE, lineNumber);
 			return jrt
 					.getAwkSink()
-					.sprintf(
+					.sprintfWithConvFmt(
+							jrt.getCONVFMTString(),
 							jrt.toAwkString(args[0]),
 							Arrays.copyOfRange(args, 1, args.length));
 		case SQRT:
@@ -3784,7 +3785,7 @@ public class AVM implements VariableManager, Closeable {
 	private String sprintfFunction(long numArgs) {
 		Object[] argArray = popArguments(numArgs - 1);
 		String fmt = jrt.toAwkString(pop());
-		return jrt.getAwkSink().sprintf(fmt, argArray);
+		return jrt.getAwkSink().sprintfWithConvFmt(jrt.getCONVFMTString(), fmt, argArray);
 	}
 
 	private void setNumOnJRT(long fieldNum, double num) {

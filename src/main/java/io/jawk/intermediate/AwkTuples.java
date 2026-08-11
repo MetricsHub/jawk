@@ -2383,55 +2383,37 @@ public class AwkTuples implements Serializable {
 			double d1 = JRT.toDouble(left);
 			double d2 = JRT.toDouble(right);
 			double ans = d1 + d2;
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case SUBTRACT: {
 			double d1 = JRT.toDouble(left);
 			double d2 = JRT.toDouble(right);
 			double ans = d1 - d2;
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case MULTIPLY: {
 			double d1 = JRT.toDouble(left);
 			double d2 = JRT.toDouble(right);
 			double ans = d1 * d2;
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case DIVIDE: {
 			double d1 = JRT.toDouble(left);
 			double d2 = JRT.toDouble(right);
 			double ans = d1 / d2;
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case MOD: {
 			double d1 = JRT.toDouble(left);
 			double d2 = JRT.toDouble(right);
 			double ans = d1 % d2;
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case POW: {
 			double d1 = JRT.toDouble(left);
 			double d2 = JRT.toDouble(right);
 			double ans = Math.pow(d1, d2);
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case CMP_EQ:
 		case CMP_LT:
@@ -2462,17 +2444,11 @@ public class AwkTuples implements Serializable {
 		case NEGATE: {
 			double value = JRT.toDouble(literal);
 			double ans = -value;
-			if (JRT.isActuallyLong(ans)) {
-				return Long.valueOf((long) Math.rint(ans));
-			}
-			return Double.valueOf(ans);
+			return JRT.toScalarNumber(ans);
 		}
 		case UNARY_PLUS: {
 			double value = JRT.toDouble(literal);
-			if (JRT.isActuallyLong(value)) {
-				return Long.valueOf((long) Math.rint(value));
-			}
-			return Double.valueOf(value);
+			return JRT.toScalarNumber(value);
 		}
 		default:
 			return null;
@@ -2488,11 +2464,11 @@ public class AwkTuples implements Serializable {
 		} else if (value instanceof Double) {
 			tuple = new Tuple.PushDoubleTuple(((Double) value).doubleValue());
 		} else if (value instanceof Number) {
-			double d = ((Number) value).doubleValue();
-			if (JRT.isActuallyLong(d)) {
-				tuple = new Tuple.PushLongTuple((long) Math.rint(d));
+			Object scalar = JRT.toScalarNumber(((Number) value).doubleValue());
+			if (scalar instanceof Long) {
+				tuple = new Tuple.PushLongTuple(((Long) scalar).longValue());
 			} else {
-				tuple = new Tuple.PushDoubleTuple(d);
+				tuple = new Tuple.PushDoubleTuple(((Double) scalar).doubleValue());
 			}
 		} else if (value instanceof String) {
 			tuple = new Tuple.PushStringTuple((String) value);

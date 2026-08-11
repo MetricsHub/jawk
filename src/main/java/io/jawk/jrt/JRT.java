@@ -662,6 +662,45 @@ public class JRT {
 		return Math.abs(d - r) < Math.ulp(d);
 	}
 
+	/** 2^63 as a double: the first value beyond the signed 64-bit range. */
+	private static final double TWO_POW_63 = 9.223372036854775808e18;
+
+	/**
+	 * Converts a computed double to the canonical AWK scalar: a {@link Long}
+	 * when the value is integral and representable as a signed 64-bit integer,
+	 * and the {@link Double} itself otherwise. Values beyond the 64-bit range
+	 * stay doubles so they are not silently saturated to
+	 * {@link Long#MAX_VALUE}.
+	 *
+	 * @param d the computed value
+	 * @return {@code d} as a {@link Long} when exactly representable, or as a
+	 *         {@link Double}
+	 */
+	public static Object toScalarNumber(double d) {
+		if (isActuallyLong(d)) {
+			double rounded = Math.rint(d);
+			if (rounded >= -TWO_POW_63 && rounded < TWO_POW_63) {
+				return Long.valueOf((long) rounded);
+			}
+		}
+		return Double.valueOf(d);
+	}
+
+	/**
+	 * Truncates a double toward zero, as AWK's {@code int()} does, returning a
+	 * {@link Long} when the result is representable and a {@link Double}
+	 * otherwise.
+	 *
+	 * @param d the value to truncate
+	 * @return the truncated value as a canonical AWK scalar
+	 */
+	public static Object truncateToScalar(double d) {
+		if (Double.isNaN(d) || Double.isInfinite(d)) {
+			return Double.valueOf(d);
+		}
+		return toScalarNumber(d < 0 ? Math.ceil(d) : Math.floor(d));
+	}
+
 	/**
 	 * Convert a String, Long, or Double to Long.
 	 *
@@ -855,10 +894,7 @@ public class JRT {
 			return value.toString();
 		}
 		if (value instanceof Double || value instanceof Float) {
-			double number = ((Number) value).doubleValue();
-			if (isActuallyLong(number)) {
-				return Long.valueOf((long) Math.rint(number));
-			}
+			return toScalarNumber(((Number) value).doubleValue());
 		}
 		return value;
 	}
@@ -2484,7 +2520,7 @@ public class JRT {
 	 * @throws IOException if the sink cannot be written to
 	 */
 	public void printfDefault(String format, Object[] values) throws IOException {
-		awkSink.printf(ofs, ors, ofmt, format, values);
+		awkSink.printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values);
 	}
 
 	/**
@@ -2499,7 +2535,7 @@ public class JRT {
 	public void printfToFile(String fileNameParam, boolean append, String format, Object[] values)
 			throws IOException {
 		AwkSink sink = getFileAwkSink(fileNameParam, append);
-		sink.printf(ofs, ors, ofmt, format, values);
+		sink.printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values);
 	}
 
 	/**
@@ -2512,7 +2548,7 @@ public class JRT {
 	 */
 	public void printfToProcess(String cmd, String format, Object[] values) throws IOException {
 		AwkSink sink = getPipeAwkSink(cmd);
-		sink.printf(ofs, ors, ofmt, format, values);
+		sink.printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values);
 		sink.flush();
 	}
 
