@@ -324,7 +324,10 @@ public final class AwkPrintf {
 				int starArgEnd = starPositionEnd(i);
 				long dynamicWidth;
 				if (starArgEnd > i) {
-					dynamicWidth = (long) JRT.toDouble(argAt(parseInt(format, i, starArgEnd - 1)));
+					int starPosition = parseInt(format, i, starArgEnd - 1);
+					// gawk treats a zero-indexed star operand ("%*0$d") as
+					// the value zero, without consuming an argument.
+					dynamicWidth = starPosition == 0 ? 0 : (long) JRT.toDouble(argAt(starPosition));
 					i = starArgEnd;
 				} else {
 					// A sequential star operand pins the format to sequential
@@ -357,7 +360,9 @@ public final class AwkPrintf {
 					int starArgEnd = starPositionEnd(i);
 					long dynamicPrecision;
 					if (starArgEnd > i) {
-						dynamicPrecision = (long) JRT.toDouble(argAt(parseInt(format, i, starArgEnd - 1)));
+						int starPosition = parseInt(format, i, starArgEnd - 1);
+						// Same zero-index rule as the width operand.
+						dynamicPrecision = starPosition == 0 ? 0 : (long) JRT.toDouble(argAt(starPosition));
 						i = starArgEnd;
 					} else {
 						// Same sequential-mode tracking as the width operand.

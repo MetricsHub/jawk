@@ -198,6 +198,11 @@ public class AwkPrintfTest {
 		assertSprintfThrows(AwkRuntimeException.class, "%2$%", 1);
 		assertSprintfThrows(AwkRuntimeException.class, "%2$q", 1);
 		assertSprintfThrows(AwkRuntimeException.class, "%1$%");
+		// gawk-verified: a zero-indexed star operand means the value zero
+		// without consuming an argument, while an out-of-range one is fatal.
+		assertSprintf("7|42", "%*0$d|%d", 7, 42);
+		assertSprintf("3|42", "%.*0$f|%d", 3.14159, 42);
+		assertSprintfThrows(AwkRuntimeException.class, "%*5$d|%d", 7, 42);
 	}
 
 	@Test
