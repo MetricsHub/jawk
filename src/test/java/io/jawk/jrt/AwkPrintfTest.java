@@ -554,6 +554,12 @@ public class AwkPrintfTest {
 		// pair, like gawk in a multibyte locale.
 		assertSprintf("😀", "%.1s", "😀x");
 		assertSprintf("😀x", "%.2s", "😀x");
+		// The field width also counts characters: a supplementary character
+		// fills one column (gawk pads %s the same way; its %c padding counts
+		// bytes, a C-locale artifact that Jawk does not reproduce).
+		assertSprintf("  😀", "%3s", "😀");
+		assertSprintf("😀  ", "%-3s", "😀");
+		assertSprintf("  😀", "%3c", 0x1F600);
 	}
 
 	// Was @Disabled in Printf4J; expected values verified against gawk 5.
@@ -703,6 +709,10 @@ public class AwkPrintfTest {
 		assertSprintfThrows(AwkRuntimeException.class, "%2$s %s", "a", "b");
 		// A zero positional index is fatal, like gawk.
 		assertSprintfThrows(AwkRuntimeException.class, "%0$s", "a");
+		// gawk-verified: an explicitly positioned star operand may accompany
+		// sequential conversions.
+		assertSprintf("    a|5", "%*2$s|%s", "a", 5);
+		assertSprintf("a      5", "%1$s %2$*3$d", "a", 5, 6);
 	}
 
 	@Test

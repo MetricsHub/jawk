@@ -379,6 +379,7 @@ public final class AwkPrintf {
 			i++;
 
 			Flags flags = new Flags(leftJustify, plusSign, spaceSign, zeroPad, alternate, grouping);
+			recordArgumentMode(argPosition > 0);
 			Object arg = argPosition > 0 ? argAt(argPosition) : nextArg();
 			render(conversion, flags, width, precision, arg);
 			return i;
@@ -401,8 +402,6 @@ public final class AwkPrintf {
 		}
 
 		private Object nextArg() {
-			sawSequential = true;
-			rejectMixedArgumentModes();
 			if (argIndex >= args.length) {
 				throw new AwkRuntimeException("not enough arguments to satisfy format string `" + format + "'");
 			}
@@ -410,8 +409,6 @@ public final class AwkPrintf {
 		}
 
 		private Object argAt(int position) {
-			sawPositional = true;
-			rejectMixedArgumentModes();
 			if (position <= 0) {
 				throw new AwkRuntimeException("argument index with `$' must be > 0 in `" + format + "'");
 			}
@@ -422,10 +419,20 @@ public final class AwkPrintf {
 		}
 
 		/**
-		 * Rejects format strings that mix positional ({@code n$}) and
-		 * sequential argument references, like gawk.
+		 * Records how one conversion selects its value argument and rejects
+		 * format strings that mix positional ({@code n$}) and sequential
+		 * conversions, like gawk. Star width and precision operands are not
+		 * tracked: gawk allows an explicitly positioned star operand
+		 * ({@code %*2$s}) alongside sequential conversions.
+		 *
+		 * @param positional whether the conversion used an {@code n$} index
 		 */
-		private void rejectMixedArgumentModes() {
+		private void recordArgumentMode(boolean positional) {
+			if (positional) {
+				sawPositional = true;
+			} else {
+				sawSequential = true;
+			}
 			if (sawPositional && sawSequential) {
 				throw new AwkRuntimeException("must use `count$' on all formats or none in `" + format + "'");
 			}
@@ -811,11 +818,14 @@ public final class AwkPrintf {
 		}
 
 		private void appendPadded(String body, boolean leftJustify, boolean zeroPad, int width) {
-			if (width <= body.length()) {
+			// The field width counts characters (code points), so that a
+			// supplementary character fills one column, not two.
+			int bodyLength = body.codePointCount(0, body.length());
+			if (width <= bodyLength) {
 				out.append(body);
 				return;
 			}
-			int padLength = width - body.length();
+			int padLength = width - bodyLength;
 			if (leftJustify) {
 				out.append(body);
 				appendSpaces(padLength);

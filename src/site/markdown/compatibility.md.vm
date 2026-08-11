@@ -203,7 +203,9 @@ A few edge cases follow Java's platform rules rather than the C library's:
 
 - `%c` is locale-independent: a numeric argument selects the Unicode code point (so
   `printf "%c", 233` always prints `é`), where C-locale gawk emits the raw byte. Values that are
-  not valid code points are truncated to a UTF-16 char.
+  not valid code points are truncated to a UTF-16 char. Field widths and `%s` precision count
+  characters (code points) regardless of locale, like gawk in a multibyte locale — except that
+  gawk pads `%c` by bytes, which Jawk does not reproduce.
 - `%a`/`%A` use Java's hexadecimal floating-point notation (`0x1.0p0` where glibc prints
   `0x1p+0`); gawk itself documents these conversions as C-library dependent.
 - NaN always prints as `nan`: Java does not track the sign of NaN, so gawk's occasional `-nan`
