@@ -192,6 +192,16 @@ public final class AwkPrintf {
 			this.alternate = alternate;
 			this.grouping = grouping;
 		}
+
+		/**
+		 * Returns these flags with the {@code '} grouping flag cleared, for
+		 * conversions that gawk never groups (octal and hexadecimal).
+		 *
+		 * @return an equivalent flag set without grouping
+		 */
+		Flags withoutGrouping() {
+			return grouping ? new Flags(leftJustify, plusSign, spaceSign, zeroPad, alternate, false) : this;
+		}
 	}
 
 	/**
@@ -546,7 +556,7 @@ public final class AwkPrintf {
 			}
 
 			String sign = negative ? "-" : flags.plusSign ? "+" : flags.spaceSign ? " " : "";
-			appendInteger(sign, "", magnitude, flags, width, precision, isZeroMagnitude(magnitude), true);
+			appendInteger(sign, "", magnitude, flags, width, precision, isZeroMagnitude(magnitude));
 		}
 
 		private void renderUnsignedInteger(char conversion, Flags flags, int width, int precision, Object arg) {
@@ -602,16 +612,15 @@ public final class AwkPrintf {
 					prefix = "0";
 				}
 			}
-			appendInteger("", prefix, magnitude, flags, width, actualPrecision, zeroMagnitude, conversion == 'u');
+			// gawk's ' flag groups decimal output only, never octal or
+			// hexadecimal.
+			Flags integerFlags = conversion == 'u' ? flags : flags.withoutGrouping();
+			appendInteger("", prefix, magnitude, integerFlags, width, actualPrecision, zeroMagnitude);
 		}
 
 		/**
 		 * Applies precision, grouping, and width to an integer body and
 		 * appends it to the output.
-		 *
-		 * @param groupable whether the {@code '} flag may group this
-		 *        conversion: gawk groups decimal output only, never octal or
-		 *        hexadecimal
 		 */
 		private void appendInteger(
 				String sign,
@@ -620,8 +629,7 @@ public final class AwkPrintf {
 				Flags flags,
 				int width,
 				int precision,
-				boolean zeroMagnitude,
-				boolean groupable) {
+				boolean zeroMagnitude) {
 			String digits = magnitude;
 			if (precision == 0 && zeroMagnitude) {
 				// C: a zero value with an explicit zero precision prints no
@@ -632,7 +640,7 @@ public final class AwkPrintf {
 			if (precision > digits.length()) {
 				digits = zeros(precision - digits.length()) + digits;
 			}
-			if (flags.grouping && groupable) {
+			if (flags.grouping) {
 				digits = groupDigits(digits);
 			}
 			String body = sign + prefix + digits;
