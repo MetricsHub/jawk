@@ -164,8 +164,8 @@ public final class AwkPrintf {
 			if (rounded >= -TWO_POW_63 && rounded < TWO_POW_63) {
 				return Long.toString((long) rounded);
 			}
-			return new BigDecimal(rounded).toBigInteger().toString(); // NOPMD - the exact binary value of the double is
-																																// intended
+			// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+			return new BigDecimal(rounded).toBigInteger().toString(); // NOPMD
 		}
 		String fmt = conversionFormat == null || conversionFormat.isEmpty() ? DEFAULT_CONVFMT : conversionFormat;
 		return sprintf(locale, DEFAULT_CONVFMT, fmt, Double.valueOf(number));
@@ -207,6 +207,12 @@ public final class AwkPrintf {
 
 		/** Index of the next sequential argument to consume. */
 		private int argIndex;
+
+		/** Whether a positional ({@code n$}) argument reference was seen. */
+		private boolean sawPositional;
+
+		/** Whether a sequential argument reference was seen. */
+		private boolean sawSequential;
 
 		AwkPrintfFormatter(Locale locale, String convfmt, String format, Object[] args) {
 			this.locale = locale;
@@ -392,6 +398,8 @@ public final class AwkPrintf {
 		}
 
 		private Object nextArg() {
+			sawSequential = true;
+			rejectMixedArgumentModes();
 			if (argIndex >= args.length) {
 				throw new AwkRuntimeException("not enough arguments to satisfy format string `" + format + "'");
 			}
@@ -399,10 +407,22 @@ public final class AwkPrintf {
 		}
 
 		private Object argAt(int position) {
+			sawPositional = true;
+			rejectMixedArgumentModes();
 			if (position <= 0 || position > args.length) {
 				throw new AwkRuntimeException("not enough arguments to satisfy format string `" + format + "'");
 			}
 			return args[position - 1];
+		}
+
+		/**
+		 * Rejects format strings that mix positional ({@code n$}) and
+		 * sequential argument references, like gawk.
+		 */
+		private void rejectMixedArgumentModes() {
+			if (sawPositional && sawSequential) {
+				throw new AwkRuntimeException("must use `count$' on all formats or none in `" + format + "'");
+			}
 		}
 
 		private void render(char conversion, Flags flags, int width, int precision, Object arg) {
@@ -487,7 +507,8 @@ public final class AwkPrintf {
 			} else {
 				// Out of 64-bit range: print the full decimal expansion of the
 				// (integral) double, like gawk.
-				BigInteger bi = new BigDecimal(d).toBigInteger(); // NOPMD - the exact binary value of the double is intended
+				// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+				BigInteger bi = new BigDecimal(d).toBigInteger(); // NOPMD
 				negative = bi.signum() < 0;
 				magnitude = bi.abs().toString();
 			}
@@ -509,17 +530,15 @@ public final class AwkPrintf {
 			} else if (d >= -TWO_POW_63 && d < TWO_POW_63) {
 				magnitude = Long.toUnsignedString((long) d, radix);
 			} else {
-				BigInteger bi = new BigDecimal(d).toBigInteger(); // NOPMD - the exact binary value of the double is intended
+				// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+				BigInteger bi = new BigDecimal(d).toBigInteger(); // NOPMD
 				if (bi.signum() >= 0 && bi.compareTo(TWO_POW_64) < 0) {
 					magnitude = bi.toString(radix);
 				} else {
 					// Out of the unsigned 64-bit range: fall back to %g
-					// notation, like gawk.
-					appendPadded(
-							floatBody('g', new Flags(false, false, false, false, false, false), -1, d),
-							flags.leftJustify,
-							false,
-							width);
+					// notation with the original sign, flags, precision, and
+					// width, like gawk.
+					renderFloat('g', flags, width, precision, Double.valueOf(d));
 					return;
 				}
 			}
@@ -529,9 +548,11 @@ public final class AwkPrintf {
 
 			boolean zeroMagnitude = isZeroMagnitude(magnitude);
 			int actualPrecision = precision;
-			if (flags.alternate && zeroMagnitude && precision == 0 && conversion != 'u') {
-				// gawk prints "0" for a zero value with '#' and an explicit
-				// zero precision on %o, %x, and %X.
+			if (zeroMagnitude && precision == 0 && (flags.alternate || d != 0)) {
+				// gawk prints "0" rather than nothing for a zero magnitude
+				// with an explicit zero precision when the '#' flag is given,
+				// or when the original value is nonzero and merely truncates
+				// to zero.
 				actualPrecision = 1;
 			}
 			String prefix = "";
@@ -623,8 +644,8 @@ public final class AwkPrintf {
 			case 'f':
 			case 'F': {
 				int p = precision < 0 ? 6 : precision;
-				String s = decimalString(new BigDecimal(abs).setScale(p, RoundingMode.HALF_EVEN)); // NOPMD - exact binary value
-																																														// intended
+				// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+				String s = decimalString(new BigDecimal(abs).setScale(p, RoundingMode.HALF_EVEN)); // NOPMD
 				if (flags.alternate && p == 0) {
 					s = s + ".";
 				}
@@ -692,21 +713,16 @@ public final class AwkPrintf {
 			if (abs == 0) {
 				return alternate ? "0." + zeros(precision - 1) : "0";
 			}
-			BigDecimal rounded = new BigDecimal(abs).round(new MathContext(precision, RoundingMode.HALF_EVEN)); // NOPMD -
-																																																					// exact
-																																																					// binary
-																																																					// value
-																																																					// intended
+			// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+			BigDecimal rounded = new BigDecimal(abs).round(new MathContext(precision, RoundingMode.HALF_EVEN)); // NOPMD
 			int exponent = rounded.precision() - rounded.scale() - 1;
 			if (exponent >= -4 && exponent < precision) {
 				String s = decimalString(rounded.setScale(precision - 1 - exponent, RoundingMode.UNNECESSARY));
-				return alternate ? s : stripTrailingFractionZeros(s);
+				return alternate ? forceDecimalSeparator(s) : stripTrailingFractionZeros(s);
 			}
 			String mantissa = decimalString(
 					rounded.movePointLeft(exponent).setScale(precision - 1, RoundingMode.UNNECESSARY));
-			if (!alternate) {
-				mantissa = stripTrailingFractionZeros(mantissa);
-			}
+			mantissa = alternate ? forceDecimalSeparator(mantissa) : stripTrailingFractionZeros(mantissa);
 			return mantissa + "e" + (exponent < 0 ? "-" : "+") + exponentDigits(Math.abs(exponent));
 		}
 
@@ -760,6 +776,16 @@ public final class AwkPrintf {
 			}
 			sb.append(s, end, s.length());
 			return sb.toString();
+		}
+
+		/**
+		 * Appends the locale decimal separator when {@code s} has none, as
+		 * the '#' flag requires for {@code %g} results without fractional
+		 * digits.
+		 */
+		private String forceDecimalSeparator(String s) {
+			char decimalSeparator = DecimalFormatSymbols.getInstance(locale).getDecimalSeparator();
+			return s.indexOf(decimalSeparator) < 0 ? s + decimalSeparator : s;
 		}
 
 		private String stripTrailingFractionZeros(String s) {

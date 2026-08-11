@@ -161,6 +161,15 @@ public class PrintfTest {
 	}
 
 	@Test
+	public void testMixedPositionalSpecifiersAreFatal() throws Exception {
+		AwkTestSupport
+				.awkTest("printf mixing positional and sequential specifiers is fatal")
+				.script("BEGIN { printf \"%2$s %s\\n\", \"a\", \"b\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testGroupingFlag() throws Exception {
 		AwkTestSupport
 				.awkTest("printf apostrophe flag groups thousands")

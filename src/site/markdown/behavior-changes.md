@@ -31,7 +31,8 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
       character of a string value.
     - Dynamic precision (`%.*f`) is now supported in addition to dynamic width (`%*d`), including
       negative values (negative width left-justifies, negative precision means no precision), as
-      are gawk positional specifiers (`%2$s`) and the `'` grouping flag (`%'d`).
+      are gawk positional specifiers (`%2$s`) and the `'` grouping flag (`%'d`); mixing
+      positional and sequential specifiers in one format string is a fatal error, as in gawk.
     - Out-of-range integer conversions follow gawk: negative values wrap to unsigned 64-bit for
       `%u`/`%o`/`%x`/`%X`, values beyond 64 bits print the full decimal expansion for `%d`/`%i`
       and fall back to `%g` notation for `%u`/`%o`/`%x`/`%X`.

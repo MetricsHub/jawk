@@ -121,6 +121,75 @@ public final class AwkTestSupport {
 	}
 
 	/**
+	 * Asserts that AWK's {@code sprintf()} formatting engine
+	 * ({@link io.jawk.jrt.AwkPrintf}) produces the expected text with the
+	 * default {@link Locale#US} locale and default {@code CONVFMT}. This is the
+	 * standard helper for formatter-level unit tests, mirroring what a script
+	 * calling {@code sprintf(format, args...)} would produce.
+	 *
+	 * @param expected the expected formatted text
+	 * @param format AWK format string
+	 * @param args arguments supplied after the format string
+	 */
+	public static void assertSprintf(String expected, String format, Object... args) {
+		org.junit.Assert
+				.assertEquals(
+						"sprintf(\"" + format + "\")",
+						expected,
+						io.jawk.jrt.AwkPrintf.sprintf(format, args));
+	}
+
+	/**
+	 * Asserts that AWK's {@code sprintf()} formatting engine
+	 * ({@link io.jawk.jrt.AwkPrintf}) produces the expected text with an
+	 * explicit locale and {@code CONVFMT} value.
+	 *
+	 * @param expected the expected formatted text
+	 * @param locale locale used for numeric formatting
+	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
+	 * @param format AWK format string
+	 * @param args arguments supplied after the format string
+	 */
+	public static void assertSprintf(String expected, Locale locale, String convfmt, String format, Object... args) {
+		org.junit.Assert
+				.assertEquals(
+						"sprintf(\"" + format + "\") with locale " + locale + " and CONVFMT \"" + convfmt + "\"",
+						expected,
+						io.jawk.jrt.AwkPrintf.sprintf(locale, convfmt, format, args));
+	}
+
+	/**
+	 * Asserts that AWK's {@code sprintf()} formatting engine raises the given
+	 * exception, as it does for a format string with too few arguments.
+	 *
+	 * @param expectedThrowable the exception type expected from the call
+	 * @param format AWK format string
+	 * @param args arguments supplied after the format string
+	 */
+	public static void assertSprintfThrows(
+			Class<? extends Throwable> expectedThrowable,
+			String format,
+			Object... args) {
+		org.junit.Assert.assertThrows(expectedThrowable, () -> io.jawk.jrt.AwkPrintf.sprintf(format, args));
+	}
+
+	/**
+	 * Asserts AWK's number-to-string conversion
+	 * ({@link io.jawk.jrt.AwkPrintf#toAwkString(Object, String, Locale)}) with
+	 * the default {@link Locale#US} locale and default {@code CONVFMT}.
+	 *
+	 * @param expected the expected AWK string value
+	 * @param value the value to convert
+	 */
+	public static void assertToAwkString(String expected, Object value) {
+		org.junit.Assert
+				.assertEquals(
+						"toAwkString(" + value + ")",
+						expected,
+						io.jawk.jrt.AwkPrintf.toAwkString(value, io.jawk.jrt.AwkPrintf.DEFAULT_CONVFMT, Locale.US));
+	}
+
+	/**
 	 * Represents a fully configured test case produced by one of the builders.
 	 * Implementations know how to prepare the execution environment, run the
 	 * script, and assert expectations.
