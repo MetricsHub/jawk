@@ -161,6 +161,25 @@ public class PrintfTest {
 	}
 
 	@Test
+	public void testPosixModeRejectsPositionalSpecifiers() throws Exception {
+		AwkTestSupport
+				.cliTest("printf positional specifiers are rejected in POSIX mode")
+				.argument("--posix")
+				.script("BEGIN { printf \"%2$s %1$s\\n\", \"world\", \"hello\" }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUnterminatedStarPositionIsFatal() throws Exception {
+		AwkTestSupport
+				.awkTest("printf digits after star without dollar are fatal")
+				.script("BEGIN { printf \"%*2d\\n\", 5, 42 }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
 	public void testMixedPositionalSpecifiersAreFatal() throws Exception {
 		AwkTestSupport
 				.awkTest("printf mixing positional and sequential specifiers is fatal")

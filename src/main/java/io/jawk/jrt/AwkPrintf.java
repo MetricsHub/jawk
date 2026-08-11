@@ -125,6 +125,52 @@ public final class AwkPrintf {
 	}
 
 	/**
+	 * Returns whether a format string uses gawk positional argument
+	 * references ({@code %n$} or {@code *n$}), which strict POSIX mode must
+	 * reject: {@code gawk --posix} fails with
+	 * <code>`$' is not permitted in awk formats</code>.
+	 *
+	 * @param format AWK format string
+	 * @return {@code true} when the format references arguments by position
+	 */
+	public static boolean usesPositionalArguments(final String format) {
+		int length = format.length();
+		int i = 0;
+		while (i < length) {
+			if (format.charAt(i) != '%') {
+				i++;
+				continue;
+			}
+			i++;
+			if (i < length && format.charAt(i) == '%') {
+				i++;
+				continue;
+			}
+			// Inside a specifier, a positional reference can appear right
+			// after '%' or right after '*'.
+			boolean positionAllowed = true;
+			while (i < length) {
+				char c = format.charAt(i);
+				if (positionAllowed && isAsciiDigit(c)) {
+					int digitsEnd = i;
+					while (digitsEnd < length && isAsciiDigit(format.charAt(digitsEnd))) {
+						digitsEnd++;
+					}
+					if (digitsEnd < length && format.charAt(digitsEnd) == '$') {
+						return true;
+					}
+				}
+				positionAllowed = c == '*';
+				if (c == '%' || CONVERSION_CHARS.indexOf(c) >= 0) {
+					break;
+				}
+				i++;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Converts a value to a string using AWK's number-to-string rules.
 	 * <p>
 	 * Non-numeric values are converted with {@code toString()}. Numeric values
@@ -322,6 +368,7 @@ public final class AwkPrintf {
 			if (i < length && format.charAt(i) == '*') {
 				i++;
 				int starArgEnd = starPositionEnd(i);
+				requireStarPositionTerminated(i, starArgEnd);
 				long dynamicWidth;
 				if (starArgEnd > i) {
 					int starPosition = parseInt(format, i, starArgEnd - 1);
@@ -358,6 +405,7 @@ public final class AwkPrintf {
 				if (i < length && format.charAt(i) == '*') {
 					i++;
 					int starArgEnd = starPositionEnd(i);
+					requireStarPositionTerminated(i, starArgEnd);
 					long dynamicPrecision;
 					if (starArgEnd > i) {
 						int starPosition = parseInt(format, i, starArgEnd - 1);
@@ -431,6 +479,17 @@ public final class AwkPrintf {
 			Object arg = argPosition > 0 ? argAt(argPosition) : nextArg();
 			render(conversion, flags, width, precision, arg);
 			return i;
+		}
+
+		/**
+		 * Rejects digits after a star operand that are not terminated by
+		 * {@code $}, like gawk: {@code %*2d} is fatal rather than literal.
+		 */
+		private void requireStarPositionTerminated(int i, int starArgEnd) {
+			if (starArgEnd == i && i < format.length() && isAsciiDigit(format.charAt(i))) {
+				throw new AwkRuntimeException(
+						"no `$' supplied for positional field width or precision in `" + format + "'");
+			}
 		}
 
 		/**
