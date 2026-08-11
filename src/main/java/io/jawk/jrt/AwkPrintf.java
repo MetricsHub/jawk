@@ -371,6 +371,14 @@ public final class AwkPrintf {
 				i++;
 			}
 
+			if (i < length && format.charAt(i) == '%') {
+				// A percent conversion reached through flags, width, or
+				// precision prints a plain '%' and ignores them all, like
+				// gawk ("%5%" prints "%").
+				out.append('%');
+				return i + 1;
+			}
+
 			if (i >= length || CONVERSION_CHARS.indexOf(format.charAt(i)) < 0) {
 				// Unknown or unterminated conversion: print the specifier
 				// verbatim (including the offending character) without
@@ -538,7 +546,7 @@ public final class AwkPrintf {
 			}
 
 			String sign = negative ? "-" : flags.plusSign ? "+" : flags.spaceSign ? " " : "";
-			appendInteger(sign, "", magnitude, flags, width, precision, isZeroMagnitude(magnitude));
+			appendInteger(sign, "", magnitude, flags, width, precision, isZeroMagnitude(magnitude), true);
 		}
 
 		private void renderUnsignedInteger(char conversion, Flags flags, int width, int precision, Object arg) {
@@ -594,12 +602,16 @@ public final class AwkPrintf {
 					prefix = "0";
 				}
 			}
-			appendInteger("", prefix, magnitude, flags, width, actualPrecision, zeroMagnitude);
+			appendInteger("", prefix, magnitude, flags, width, actualPrecision, zeroMagnitude, conversion == 'u');
 		}
 
 		/**
 		 * Applies precision, grouping, and width to an integer body and
 		 * appends it to the output.
+		 *
+		 * @param groupable whether the {@code '} flag may group this
+		 *        conversion: gawk groups decimal output only, never octal or
+		 *        hexadecimal
 		 */
 		private void appendInteger(
 				String sign,
@@ -608,7 +620,8 @@ public final class AwkPrintf {
 				Flags flags,
 				int width,
 				int precision,
-				boolean zeroMagnitude) {
+				boolean zeroMagnitude,
+				boolean groupable) {
 			String digits = magnitude;
 			if (precision == 0 && zeroMagnitude) {
 				// C: a zero value with an explicit zero precision prints no
@@ -619,7 +632,7 @@ public final class AwkPrintf {
 			if (precision > digits.length()) {
 				digits = zeros(precision - digits.length()) + digits;
 			}
-			if (flags.grouping) {
+			if (flags.grouping && groupable) {
 				digits = groupDigits(digits);
 			}
 			String body = sign + prefix + digits;
@@ -695,7 +708,7 @@ public final class AwkPrintf {
 			case 'g':
 			case 'G': {
 				int p = precision < 0 ? 6 : precision == 0 ? 1 : precision;
-				String s = generalFloat(abs, p, flags.alternate);
+				String s = generalFloat(abs, p, flags.alternate, flags.grouping);
 				return conversion == 'G' ? s.toUpperCase(Locale.ROOT) : s;
 			}
 			case 'a':
@@ -738,7 +751,7 @@ public final class AwkPrintf {
 		}
 
 		/** Formats {@code abs >= 0} in C's {@code %g} notation. */
-		private String generalFloat(double abs, int precision, boolean alternate) {
+		private String generalFloat(double abs, int precision, boolean alternate, boolean grouping) {
 			if (abs == 0) {
 				return alternate ? "0." + zeros(precision - 1) : "0";
 			}
@@ -747,7 +760,10 @@ public final class AwkPrintf {
 			int exponent = rounded.precision() - rounded.scale() - 1;
 			if (exponent >= -4 && exponent < precision) {
 				String s = decimalString(rounded.setScale(precision - 1 - exponent, RoundingMode.UNNECESSARY));
-				return alternate ? forceDecimalSeparator(s) : stripTrailingFractionZeros(s);
+				s = alternate ? forceDecimalSeparator(s) : stripTrailingFractionZeros(s);
+				// gawk groups %g in fixed notation, like %f, but never in
+				// exponential notation.
+				return grouping ? groupDigits(s) : s;
 			}
 			String mantissa = decimalString(
 					rounded.movePointLeft(exponent).setScale(precision - 1, RoundingMode.UNNECESSARY));

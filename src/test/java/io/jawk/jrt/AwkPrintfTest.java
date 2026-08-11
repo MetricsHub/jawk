@@ -185,6 +185,11 @@ public class AwkPrintfTest {
 		assertSprintf("1234ABCD", "%X", 305441741);
 		assertSprintf("EDCB5433", "%X", 3989525555L);
 		assertSprintf("%", "%%");
+		// gawk-verified: a percent conversion ignores flags, width, and
+		// precision.
+		assertSprintf("%", "%5%");
+		assertSprintf("%", "%-3%");
+		assertSprintf("%", "%0.2%");
 	}
 
 	@Test
@@ -833,8 +838,16 @@ public class AwkPrintfTest {
 	@Test
 	public void testGroupingFlag() {
 		assertSprintf("1,234,567", "%'d", 1234567);
+		assertSprintf("1,234,567", "%'u", 1234567);
 		assertSprintf("1,234,567.89", "%'.2f", 1234567.891);
 		assertSprintf("1.234.567", Locale.GERMANY, AwkPrintf.DEFAULT_CONVFMT, "%'d", 1234567);
+		// gawk-verified: %g groups in fixed notation only, and octal and
+		// hexadecimal output is never grouped.
+		assertSprintf("12,345", "%'g", 12345);
+		assertSprintf("1,234,567.25", "%'.10g", 1234567.25);
+		assertSprintf("1.234567e+06", "%'e", 1234567);
+		assertSprintf("2540be400", "%'x", 10000000000L);
+		assertSprintf("1747", "%'o", 999);
 	}
 
 	@Test
