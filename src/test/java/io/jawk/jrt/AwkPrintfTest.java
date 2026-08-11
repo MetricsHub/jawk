@@ -884,6 +884,46 @@ public class AwkPrintfTest {
 	}
 
 	@Test
+	public void testLegacySprintfOverrideIsPreserved() {
+		// A sink that overrides the historical sprintf(String, Object...)
+		// customization point keeps working when the runtime routes through
+		// sprintfWithConvFmt.
+		AwkSink legacySink = new AwkSink() {
+
+			@Override
+			public void print(String ofs, String ors, String ofmt, Object... values) {
+				// not needed for this test
+			}
+
+			@Override
+			public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+				// not needed for this test
+			}
+
+			@Override
+			public String sprintf(String format, Object... values) {
+				return "custom:" + format;
+			}
+		};
+		assertEquals("custom:%s", legacySink.sprintfWithConvFmt("%.2g", "%s", 1.5));
+
+		// A sink without the legacy override uses the CONVFMT-aware engine.
+		AwkSink plainSink = new AwkSink() {
+
+			@Override
+			public void print(String ofs, String ors, String ofmt, Object... values) {
+				// not needed for this test
+			}
+
+			@Override
+			public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+				// not needed for this test
+			}
+		};
+		assertEquals("3.1", plainSink.sprintfWithConvFmt("%.2g", "%s", 3.14159265));
+	}
+
+	@Test
 	public void testToAwkString() {
 		assertToAwkString("", null);
 		assertToAwkString("text", "text");

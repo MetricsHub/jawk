@@ -333,6 +333,14 @@ public abstract class AwkSink {
 	 * runtime routes both {@code printf} and {@code sprintf} through this
 	 * method, overriding it ensures that both produce consistent output.
 	 * </p>
+	 * <p>
+	 * For compatibility, a sink class that overrides the historical
+	 * {@link #sprintf(String, Object...)} method but not this one keeps its
+	 * customization: the default implementation detects such overrides and
+	 * routes through them. {@code CONVFMT} cannot reach that legacy signature,
+	 * so those sinks convert {@code %s} operands with the default
+	 * {@code CONVFMT}.
+	 * </p>
 	 *
 	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
 	 * @param format format string
@@ -341,7 +349,33 @@ public abstract class AwkSink {
 	 */
 	public String sprintfWithConvFmt(String convfmt, String format, Object... values) {
 		Object[] safeValues = values == null ? new Object[0] : values;
+		if (overridesLegacySprintf()) {
+			return sprintf(format, safeValues);
+		}
 		return AwkPrintf.sprintf(locale, convfmt, format, safeValues);
+	}
+
+	/**
+	 * Lazily computed flag: whether this sink's class overrides the historical
+	 * {@link #sprintf(String, Object...)} customization point.
+	 */
+	private volatile Boolean legacySprintfOverride;
+
+	private boolean overridesLegacySprintf() {
+		Boolean overridden = legacySprintfOverride;
+		if (overridden == null) {
+			try {
+				overridden = Boolean
+						.valueOf(
+								getClass()
+										.getMethod("sprintf", String.class, Object[].class)
+										.getDeclaringClass() != AwkSink.class);
+			} catch (NoSuchMethodException e) {
+				overridden = Boolean.FALSE;
+			}
+			legacySprintfOverride = overridden;
+		}
+		return overridden.booleanValue();
 	}
 
 	/**

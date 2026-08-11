@@ -53,8 +53,10 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   ([#528](https://github.com/jawkio/jawk/issues/528)).
 - For Java embedders: `AwkSink` gains `printfWithConvFmt(...)` and `sprintfWithConvFmt(...)`,
   which receive the script's current `CONVFMT` value; the runtime now routes `printf` and
-  `sprintf` through these methods. Custom sinks that overrode `sprintf(String, Object...)` to
-  customize formatting should override `sprintfWithConvFmt(String, String, Object...)` instead.
+  `sprintf` through these methods. Custom sinks that override the historical
+  `sprintf(String, Object...)` keep their customization (the default `sprintfWithConvFmt`
+  detects and routes through such overrides); override
+  `sprintfWithConvFmt(String, String, Object...)` to also receive the script's `CONVFMT`.
   The `org.metricshub:printf4j` dependency has been removed; its formatting logic now lives in
   `io.jawk.jrt.AwkPrintf` ([#528](https://github.com/jawkio/jawk/issues/528)).
 
