@@ -45,7 +45,8 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
       specifiers were printed verbatim).
     - Unknown conversion specifiers (including `%n`, which Printf4J turned into a newline, and
       invalid length modifiers such as `ll` or `hh`) are printed verbatim without consuming an
-      argument, as in gawk; a single `h`, `l`, or `L` length modifier is accepted and ignored.
+      argument, as in gawk; the `h`, `j`, `l`, `L`, `t`, and `z` length modifiers are each
+      accepted at most once and ignored.
 - Integral values beyond the 64-bit range are no longer saturated to 2^63-1: `print 2^100` now
   prints the full decimal expansion `1267650600228229401496703205376` (previously
   `9223372036854775807`), and `int()` preserves such values

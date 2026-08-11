@@ -190,6 +190,9 @@ public class AwkPrintfTest {
 		assertSprintf("%", "%5%");
 		assertSprintf("%", "%-3%");
 		assertSprintf("%", "%0.2%");
+		// ...but an explicit position still pins the format to positional
+		// mode, so mixing with a sequential conversion is fatal, like gawk.
+		assertSprintfThrows(AwkRuntimeException.class, "%1$%|%s", "a");
 	}
 
 	@Test
@@ -503,9 +506,8 @@ public class AwkPrintfTest {
 		assertSprintf("30", "%li", 30L);
 		assertSprintf("-2147483647", "%li", -2147483647L);
 		assertSprintf("2147483647", "%li", 2147483647L);
-		// Doubled modifiers ("ll", "hh") and the "q", "j", "z", and "t"
-		// modifiers are not valid in gawk: the specifier prints verbatim and
-		// consumes no argument.
+		// Doubled modifiers ("ll", "hh") and the "q" modifier are not valid
+		// in gawk: the specifier prints verbatim and consumes no argument.
 		assertSprintf("%lli", "%lli", 30L);
 		assertSprintf("%lli", "%lli", -9223372036854775807L);
 		assertSprintf("%lli", "%lli", 9223372036854775807L);
@@ -513,9 +515,15 @@ public class AwkPrintfTest {
 		assertSprintf("4294967295", "%lu", 0xFFFFFFFFL);
 		assertSprintf("%llu", "%llu", 281474976710656L);
 		assertSprintf("%llu", "%llu", Long.parseUnsignedLong("18446744073709551615"));
-		assertSprintf("%zu", "%zu", 2147483647L);
-		assertSprintf("%zd", "%zd", 2147483647L);
-		assertSprintf("%zi", "%zi", -2147483647L);
+		// Single j, z, and t modifiers are accepted and ignored, like h, l,
+		// and L (gawk 5.2+).
+		assertSprintf("2147483647", "%zu", 2147483647L);
+		assertSprintf("2147483647", "%zd", 2147483647L);
+		assertSprintf("-2147483647", "%zi", -2147483647L);
+		assertSprintf("5", "%jd", 5);
+		assertSprintf("6", "%td", 6);
+		// Distinct modifiers may stack; only repeats are invalid.
+		assertSprintf("42", "%lhd", 42);
 		// %b is not an AWK conversion: printed verbatim, like gawk.
 		assertSprintf("%b", "%b", 60000);
 		assertSprintf("%lb", "%lb", 12345678L);
@@ -858,6 +866,7 @@ public class AwkPrintfTest {
 		assertSprintf("1,", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#.0f", 1);
 		assertSprintf("1,e+04", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#.0e", 12345);
 		assertSprintf("1,e+04", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#.1g", 12345);
+		assertSprintf("0,00000", Locale.FRANCE, AwkPrintf.DEFAULT_CONVFMT, "%#g", 0);
 	}
 
 	@Test

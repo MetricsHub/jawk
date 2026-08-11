@@ -73,7 +73,7 @@ public final class AwkPrintf {
 	private static final String CONVERSION_CHARS = "diouxXeEfFgGaAcs";
 
 	/** Length modifier characters accepted (and ignored) like gawk. */
-	private static final String LENGTH_MODIFIERS = "hlL";
+	private static final String LENGTH_MODIFIERS = "hjlLtz";
 
 	/** A one-character string holding the NUL character, printed by {@code %c} for empty values. */
 	private static final String NUL_STRING = Character.toString((char) 0);
@@ -374,17 +374,27 @@ public final class AwkPrintf {
 				}
 			}
 
-			// A single length modifier (h, l, or L) is accepted and ignored,
-			// like gawk. Doubled modifiers such as "ll" or "hh" make the
-			// whole specifier invalid, also like gawk.
-			if (i < length && LENGTH_MODIFIERS.indexOf(format.charAt(i)) >= 0) {
+			// Length modifiers (h, j, l, L, t, z) are each accepted at most
+			// once and ignored, like gawk. A repeated modifier such as "ll"
+			// or "hh" makes the whole specifier invalid, also like gawk.
+			int modifierMask = 0;
+			while (i < length) {
+				int modifierIndex = LENGTH_MODIFIERS.indexOf(format.charAt(i));
+				if (modifierIndex < 0 || (modifierMask & 1 << modifierIndex) != 0) {
+					break;
+				}
+				modifierMask |= 1 << modifierIndex;
 				i++;
 			}
 
 			if (i < length && format.charAt(i) == '%') {
 				// A percent conversion reached through flags, width, or
 				// precision prints a plain '%' and ignores them all, like
-				// gawk ("%5%" prints "%").
+				// gawk ("%5%" prints "%"). An explicit position still pins
+				// the format to positional mode, also like gawk.
+				if (argPosition > 0) {
+					recordArgumentMode(true);
+				}
 				out.append('%');
 				return i + 1;
 			}
@@ -761,7 +771,7 @@ public final class AwkPrintf {
 		/** Formats {@code abs >= 0} in C's {@code %g} notation. */
 		private String generalFloat(double abs, int precision, boolean alternate, boolean grouping) {
 			if (abs == 0) {
-				return alternate ? "0." + zeros(precision - 1) : "0";
+				return alternate ? forceDecimalSeparator("0") + zeros(precision - 1) : "0";
 			}
 			// The exact binary value of the double is intended: it makes rounding match gawk's C library.
 			BigDecimal rounded = new BigDecimal(abs).round(new MathContext(precision, RoundingMode.HALF_EVEN)); // NOPMD
