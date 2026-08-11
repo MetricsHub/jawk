@@ -117,7 +117,9 @@ public final class AwkPrintf {
 	 */
 	public static String sprintf(final Locale locale, final String convfmt, final String format, final Object... args) {
 		Locale actualLocale = locale == null ? Locale.US : locale;
-		String actualConvfmt = convfmt == null || convfmt.isEmpty() ? DEFAULT_CONVFMT : convfmt;
+		// An explicitly empty CONVFMT stays empty, like gawk; only a null
+		// (absent) format selects the default.
+		String actualConvfmt = convfmt == null ? DEFAULT_CONVFMT : convfmt;
 		Object[] actualArgs = args == null ? new Object[0] : args;
 		return new AwkPrintfFormatter(actualLocale, actualConvfmt, format, actualArgs).format();
 	}
@@ -167,7 +169,9 @@ public final class AwkPrintf {
 			// The exact binary value of the double is intended: it makes rounding match gawk's C library.
 			return new BigDecimal(rounded).toBigInteger().toString(); // NOPMD
 		}
-		String fmt = conversionFormat == null || conversionFormat.isEmpty() ? DEFAULT_CONVFMT : conversionFormat;
+		// An explicitly empty CONVFMT/OFMT stays empty, like gawk; only a
+		// null (absent) format selects the default.
+		String fmt = conversionFormat == null ? DEFAULT_CONVFMT : conversionFormat;
 		return sprintf(locale, DEFAULT_CONVFMT, fmt, Double.valueOf(number));
 	}
 
@@ -394,6 +398,7 @@ public final class AwkPrintf {
 				// the format to positional mode, also like gawk.
 				if (argPosition > 0) {
 					recordArgumentMode(true);
+					requireArgumentIndex(argPosition);
 				}
 				out.append('%');
 				return i + 1;
@@ -406,6 +411,7 @@ public final class AwkPrintf {
 				// still pins the format to positional mode, also like gawk.
 				if (argPosition > 0) {
 					recordArgumentMode(true);
+					requireArgumentIndex(argPosition);
 				}
 				int end = i < length ? i + 1 : length;
 				out.append(format, start, end);
@@ -446,13 +452,24 @@ public final class AwkPrintf {
 		}
 
 		private Object argAt(int position) {
+			requireArgumentIndex(position);
+			return args[position - 1];
+		}
+
+		/**
+		 * Validates a positional ({@code n$}) argument index against the
+		 * supplied arguments, like gawk, which checks the index even for
+		 * conversions that do not consume the referenced value.
+		 */
+		private void requireArgumentIndex(int position) {
 			if (position <= 0) {
 				throw new AwkRuntimeException("argument index with `$' must be > 0 in `" + format + "'");
 			}
 			if (position > args.length) {
-				throw new AwkRuntimeException("not enough arguments to satisfy format string `" + format + "'");
+				throw new AwkRuntimeException(
+						"argument index " + position + " greater than total number of supplied arguments in `"
+								+ format + "'");
 			}
-			return args[position - 1];
 		}
 
 		/**

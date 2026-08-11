@@ -193,6 +193,11 @@ public class AwkPrintfTest {
 		// ...but an explicit position still pins the format to positional
 		// mode, so mixing with a sequential conversion is fatal, like gawk.
 		assertSprintfThrows(AwkRuntimeException.class, "%1$%|%s", "a");
+		// gawk validates the index of a positioned conversion even when it
+		// consumes no argument.
+		assertSprintfThrows(AwkRuntimeException.class, "%2$%", 1);
+		assertSprintfThrows(AwkRuntimeException.class, "%2$q", 1);
+		assertSprintfThrows(AwkRuntimeException.class, "%1$%");
 	}
 
 	@Test
@@ -685,6 +690,10 @@ public class AwkPrintfTest {
 		assertSprintf("3.1", Locale.US, "%.2g", "%s", 3.14159265);
 		// CONVFMT that is not a %g-style format is honored verbatim.
 		assertSprintf("3.14", Locale.US, "%.2f", "%s", 3.14159265);
+		// An explicitly empty CONVFMT converts non-integral numbers to the
+		// empty string, like gawk; integral values still print as integers.
+		assertSprintf("", Locale.US, "", "%s", 1.5);
+		assertSprintf("1", Locale.US, "", "%s", 1.0);
 		// Integral values beyond the 64-bit range print in full.
 		assertSprintf("100000000000000000000", "%s", 1e20);
 		// Exact long values are preserved.
