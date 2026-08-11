@@ -264,6 +264,9 @@ public final class AwkPrintf {
 			}
 			if (digitsEnd > i && digitsEnd < length && format.charAt(digitsEnd) == '$') {
 				argPosition = parseInt(format, i, digitsEnd);
+				if (argPosition <= 0) {
+					throw new AwkRuntimeException("argument index with `$' must be > 0 in `" + format + "'");
+				}
 				i = digitsEnd + 1;
 			}
 
@@ -409,7 +412,10 @@ public final class AwkPrintf {
 		private Object argAt(int position) {
 			sawPositional = true;
 			rejectMixedArgumentModes();
-			if (position <= 0 || position > args.length) {
+			if (position <= 0) {
+				throw new AwkRuntimeException("argument index with `$' must be > 0 in `" + format + "'");
+			}
+			if (position > args.length) {
 				throw new AwkRuntimeException("not enough arguments to satisfy format string `" + format + "'");
 			}
 			return args[position - 1];
@@ -432,8 +438,10 @@ public final class AwkPrintf {
 				break;
 			case 's':
 				String s = toAwkString(arg, convfmt, locale);
-				if (precision >= 0 && s.length() > precision) {
-					s = s.substring(0, precision);
+				if (precision >= 0 && s.codePointCount(0, s.length()) > precision) {
+					// The precision counts characters (code points), so it
+					// can never split a surrogate pair.
+					s = s.substring(0, s.offsetByCodePoints(0, precision));
 				}
 				appendPadded(s, flags.leftJustify, false, width);
 				break;
@@ -546,30 +554,29 @@ public final class AwkPrintf {
 				magnitude = magnitude.toUpperCase(Locale.ROOT);
 			}
 
+			boolean zeroValue = d == 0;
 			boolean zeroMagnitude = isZeroMagnitude(magnitude);
 			int actualPrecision = precision;
-			if (zeroMagnitude && precision == 0 && (flags.alternate || d != 0)) {
+			if (zeroMagnitude && precision == 0 && (flags.alternate || !zeroValue)) {
 				// gawk prints "0" rather than nothing for a zero magnitude
 				// with an explicit zero precision when the '#' flag is given,
 				// or when the original value is nonzero and merely truncates
 				// to zero.
 				actualPrecision = 1;
 			}
+			// The '#' prefix depends on the original value, not the truncated
+			// magnitude: gawk prints "0x0" for %#.0x with 0.1. For %o, gawk
+			// always adds the alternate leading zero in addition to any
+			// precision padding: %#.5o of 1 prints "000001".
 			String prefix = "";
-			if (flags.alternate && !zeroMagnitude) {
+			if (flags.alternate && !zeroValue) {
 				if (conversion == 'x') {
 					prefix = "0x";
 				} else if (conversion == 'X') {
 					prefix = "0X";
+				} else if (conversion == 'o') {
+					prefix = "0";
 				}
-			}
-			if (flags.alternate
-					&& conversion == 'o'
-					&& !magnitude.startsWith("0")
-					&& (precision < 0 || precision <= magnitude.length())) {
-				// '#' with %o forces one leading zero unless the precision
-				// already provides it.
-				magnitude = "0" + magnitude;
 			}
 			appendInteger("", prefix, magnitude, flags, width, actualPrecision, zeroMagnitude);
 		}

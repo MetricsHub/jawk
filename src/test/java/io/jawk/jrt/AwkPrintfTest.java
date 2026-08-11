@@ -155,6 +155,17 @@ public class AwkPrintfTest {
 		// Was commented out in Printf4J ("binary is not supported for now"):
 		// %b is not an AWK conversion, so gawk prints the specifier verbatim.
 		assertSprintf("%#b", "%#b", 6);
+		// gawk-verified: the '#' prefix depends on the original value, so a
+		// nonzero fraction that truncates to zero keeps the prefix.
+		assertSprintf("0x0", "%#.0x", 0.1);
+		assertSprintf("0x0", "%#x", 0.5);
+		// gawk-verified: '#' with %o always adds its leading zero on nonzero
+		// values, in addition to any precision padding.
+		assertSprintf("00", "%#o", 0.5);
+		assertSprintf("00", "%#.0o", 0.2);
+		assertSprintf("000001", "%#.5o", 1);
+		assertSprintf("0010", "%#.3o", 8);
+		assertSprintf("010", "%#o", 8);
 	}
 
 	@Test
@@ -539,6 +550,10 @@ public class AwkPrintfTest {
 		// verbatim.
 		assertSprintf("%.4.2s", "%.4.2s", "123456");
 		assertSprintf("123", "%.*s", 3, "123456");
+		// The precision counts characters, so it never splits a surrogate
+		// pair, like gawk in a multibyte locale.
+		assertSprintf("😀", "%.1s", "😀x");
+		assertSprintf("😀x", "%.2s", "😀x");
 	}
 
 	// Was @Disabled in Printf4J; expected values verified against gawk 5.
@@ -686,6 +701,8 @@ public class AwkPrintfTest {
 		assertSprintf("a b a", "%1$s %2$s %1$s", "a", "b");
 		// Mixing positional and sequential specifiers is fatal, like gawk.
 		assertSprintfThrows(AwkRuntimeException.class, "%2$s %s", "a", "b");
+		// A zero positional index is fatal, like gawk.
+		assertSprintfThrows(AwkRuntimeException.class, "%0$s", "a");
 	}
 
 	@Test
