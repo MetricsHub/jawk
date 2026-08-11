@@ -313,6 +313,9 @@ public final class AwkPrintf {
 					dynamicWidth = (long) JRT.toDouble(argAt(parseInt(format, i, starArgEnd - 1)));
 					i = starArgEnd;
 				} else {
+					// A sequential star operand pins the format to sequential
+					// mode; an explicitly positioned one is neutral.
+					recordArgumentMode(false);
 					dynamicWidth = (long) JRT.toDouble(nextArg());
 				}
 				if (dynamicWidth < 0) {
@@ -343,6 +346,8 @@ public final class AwkPrintf {
 						dynamicPrecision = (long) JRT.toDouble(argAt(parseInt(format, i, starArgEnd - 1)));
 						i = starArgEnd;
 					} else {
+						// Same sequential-mode tracking as the width operand.
+						recordArgumentMode(false);
 						dynamicPrecision = (long) JRT.toDouble(nextArg());
 					}
 					// A negative dynamic precision means "no precision" in C.
@@ -369,7 +374,11 @@ public final class AwkPrintf {
 			if (i >= length || CONVERSION_CHARS.indexOf(format.charAt(i)) < 0) {
 				// Unknown or unterminated conversion: print the specifier
 				// verbatim (including the offending character) without
-				// consuming an argument, like gawk.
+				// consuming an argument, like gawk. An explicit position
+				// still pins the format to positional mode, also like gawk.
+				if (argPosition > 0) {
+					recordArgumentMode(true);
+				}
 				int end = i < length ? i + 1 : length;
 				out.append(format, start, end);
 				return end;
@@ -629,16 +638,22 @@ public final class AwkPrintf {
 			if (renderNonFinite(conversion, flags, width, d)) {
 				return;
 			}
-			String body = floatBody(conversion, flags, precision, d);
-			if (body == null) {
+			String magnitude = floatBody(conversion, flags, precision, d);
+			if (magnitude == null) {
 				return;
 			}
 			boolean negative = d < 0 || (d == 0 && Double.doubleToRawLongBits(d) != 0L);
 			String sign = negative ? "-" : flags.plusSign ? "+" : flags.spaceSign ? " " : "";
-			String magnitude = body.startsWith("-") ? body.substring(1) : body;
-			String full = sign + magnitude;
+			// The hexadecimal prefix of %a/%A stays ahead of any zero padding,
+			// like an integer prefix.
+			String prefix = "";
+			if (magnitude.startsWith("0x") || magnitude.startsWith("0X")) {
+				prefix = magnitude.substring(0, 2);
+				magnitude = magnitude.substring(2);
+			}
+			String full = sign + prefix + magnitude;
 			if (width > full.length() && flags.zeroPad && !flags.leftJustify) {
-				out.append(sign);
+				out.append(sign).append(prefix);
 				out.append(zeros(width - full.length()));
 				out.append(magnitude);
 				return;

@@ -713,6 +713,12 @@ public class AwkPrintfTest {
 		// sequential conversions.
 		assertSprintf("    a|5", "%*2$s|%s", "a", 5);
 		assertSprintf("a      5", "%1$s %2$*3$d", "a", 5, 6);
+		// gawk-verified: a sequential star operand with a positional
+		// conversion is a mixed-mode fatal error...
+		assertSprintfThrows(AwkRuntimeException.class, "%2$*d", 5, 12);
+		// ...and an explicitly positioned unknown specifier pins the format
+		// to positional mode even though it prints verbatim.
+		assertSprintfThrows(AwkRuntimeException.class, "%2$q|%d", 5, 12);
 	}
 
 	@Test
@@ -779,6 +785,15 @@ public class AwkPrintfTest {
 		assertSprintf("1.26765e+30", "%x", Math.pow(2, 100));
 		assertSprintf("1.26765e+30", "%u", Math.pow(2, 100));
 		assertSprintf("1.26765e+30", "%o", Math.pow(2, 100));
+	}
+
+	@Test
+	public void testHexFloat() {
+		// %a uses Java's hexadecimal float notation (gawk documents %a as
+		// C-library dependent); the 0x prefix stays ahead of zero padding.
+		assertSprintf("0x1.34ap10", "%a", 1234.5);
+		assertSprintf("0x00000000001.34ap10", "%020a", 1234.5);
+		assertSprintf("-0x1.34ap10", "%a", -1234.5);
 	}
 
 	@Test
