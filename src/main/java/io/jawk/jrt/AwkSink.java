@@ -307,11 +307,11 @@ public abstract class AwkSink {
 	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
 	 * using the default {@code CONVFMT} value ({@code "%.6g"}).
 	 * <p>
-	 * The default implementation delegates to
-	 * {@link #sprintfWithConvFmt(String, String, Object...)}. To customize
-	 * formatting for both {@code printf} and {@code sprintf}, override
-	 * {@link #sprintfWithConvFmt(String, String, Object...)}, which is the
-	 * method the runtime invokes.
+	 * The default implementation invokes the built-in formatting engine
+	 * directly, so an override may safely decorate {@code super.sprintf(...)}
+	 * results. The runtime routes script {@code printf}/{@code sprintf} calls
+	 * through {@link #sprintfWithConvFmt(String, String, Object...)}, which
+	 * honors overrides of either method.
 	 * </p>
 	 *
 	 * @param format format string
@@ -319,7 +319,8 @@ public abstract class AwkSink {
 	 * @return formatted text
 	 */
 	public String sprintf(String format, Object... values) {
-		return sprintfWithConvFmt(AwkPrintf.DEFAULT_CONVFMT, format, values);
+		Object[] safeValues = values == null ? new Object[0] : values;
+		return AwkPrintf.sprintf(locale, AwkPrintf.DEFAULT_CONVFMT, format, safeValues);
 	}
 
 	/**

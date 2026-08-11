@@ -907,6 +907,27 @@ public class AwkPrintfTest {
 		};
 		assertEquals("custom:%s", legacySink.sprintfWithConvFmt("%.2g", "%s", 1.5));
 
+		// A legacy override that decorates super.sprintf(...) must reach the
+		// base formatter without being redispatched into itself.
+		AwkSink decoratingSink = new AwkSink() {
+
+			@Override
+			public void print(String ofs, String ors, String ofmt, Object... values) {
+				// not needed for this test
+			}
+
+			@Override
+			public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+				// not needed for this test
+			}
+
+			@Override
+			public String sprintf(String format, Object... values) {
+				return "[" + super.sprintf(format, values) + "]";
+			}
+		};
+		assertEquals("[1.5]", decoratingSink.sprintfWithConvFmt("%.2g", "%s", 1.5));
+
 		// A sink without the legacy override uses the CONVFMT-aware engine.
 		AwkSink plainSink = new AwkSink() {
 
