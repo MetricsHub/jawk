@@ -51,13 +51,12 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   prints the full decimal expansion `1267650600228229401496703205376` (previously
   `9223372036854775807`), and `int()` preserves such values
   ([#528](https://github.com/jawkio/jawk/issues/528)).
-- For Java embedders: `AwkSink` gains `printfWithConvFmt(...)` and `sprintfWithConvFmt(...)`,
-  which receive the script's current `CONVFMT` value; the runtime now routes `printf` and
-  `sprintf` through these methods. Custom sinks that override the historical
-  `sprintf(String, Object...)` keep their customization (the default `sprintfWithConvFmt`
-  detects and routes through such overrides); override
-  `sprintfWithConvFmt(String, String, Object...)` to also receive the script's `CONVFMT`.
-  The `org.metricshub:printf4j` dependency has been removed; its formatting logic now lives in
+- Breaking change for Java embedders: `AwkSink.printf(...)` now receives the script's current
+  `CONVFMT` value as a parameter (between `ofmt` and `format`), just like it already received
+  `OFMT`, and `AwkSink.sprintf(...)` now takes `CONVFMT` as its first parameter
+  (`sprintf(convfmt, format, values...)`). Custom sinks must be updated to the new signatures;
+  overriding `sprintf` still customizes both `printf` and `sprintf` output. The
+  `org.metricshub:printf4j` dependency has been removed; its formatting logic now lives in
   `io.jawk.jrt.AwkPrintf` ([#528](https://github.com/jawkio/jawk/issues/528)).
 
 ## [v7.0.01](https://github.com/jawkio/jawk/releases/tag/v7.0.01) (2026-07-31)

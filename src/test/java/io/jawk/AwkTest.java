@@ -2052,7 +2052,7 @@ public class AwkTest {
 		}
 
 		@Override
-		public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+		public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
 			printfFormats.add(format);
 			printfValues.add(Arrays.asList(Arrays.copyOf(values, values.length)));
 		}

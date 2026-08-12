@@ -3030,9 +3030,7 @@ public class AVM implements VariableManager, Closeable {
 		case SPRINTF:
 			requireIndirectArgumentCount(builtin, args, 1, Integer.MAX_VALUE, lineNumber);
 			return jrt
-					.getAwkSink()
-					.sprintfWithConvFmt(
-							jrt.getCONVFMTString(),
+					.sprintf(
 							checkPosixFormat(jrt.toAwkString(args[0])),
 							Arrays.copyOfRange(args, 1, args.length));
 		case SQRT:
@@ -3786,7 +3784,7 @@ public class AVM implements VariableManager, Closeable {
 	private String sprintfFunction(long numArgs) {
 		Object[] argArray = popArguments(numArgs - 1);
 		String fmt = checkPosixFormat(jrt.toAwkString(pop()));
-		return jrt.getAwkSink().sprintfWithConvFmt(jrt.getCONVFMTString(), fmt, argArray);
+		return jrt.sprintf(fmt, argArray);
 	}
 
 	/**

@@ -66,7 +66,7 @@ public final class CollectingSink extends AwkSink {
     }
 
     @Override
-    public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+    public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
         // store format + values however your application wants
     }
 
@@ -100,14 +100,9 @@ public final class CollectingSink extends AwkSink {
 >   | `ofs` | `OFS` | Output Field Separator, inserted between values |
 >   | `ors` | `ORS` | Output Record Separator, appended after the record |
 >   | `ofmt` | `OFMT` | Default numeric output format |
->   | `convfmt` | `CONVFMT` | Number-to-string conversion format used by `%s` (only in `printfWithConvFmt(...)`) |
+>   | `convfmt` | `CONVFMT` | Number-to-string conversion format used by `%s` |
 >   | `format` | — | The AWK format string |
 >   | `values` | — | The AWK values to be formatted |
->
-> The runtime invokes `printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values...)`, whose
-> default implementation drops `convfmt` and delegates to `printf(...)`, so existing sinks keep
-> working. Override `printfWithConvFmt(...)` when your sink formats output itself and should
-> honor the script's `CONVFMT` value.
 
 ### getPrintStream
 

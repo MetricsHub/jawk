@@ -84,35 +84,14 @@ public abstract class AwkSink {
 	 * @param ofs output field separator
 	 * @param ors output record separator
 	 * @param ofmt numeric output format available to the sink
+	 * @param convfmt number-to-string conversion format ({@code CONVFMT}),
+	 *        used by {@code %s} to convert numeric values the way AWK does
 	 * @param format format string passed to {@code printf}
 	 * @param values arguments supplied after the format string
 	 * @throws IOException if the sink cannot write the output
 	 */
-	public abstract void printf(String ofs, String ors, String ofmt, String format, Object... values)
+	public abstract void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values)
 			throws IOException;
-
-	/**
-	 * Writes one AWK {@code printf} operation, with the current {@code CONVFMT}
-	 * value so that {@code %s} can convert numeric values the way AWK does.
-	 * <p>
-	 * The default implementation ignores {@code convfmt} and delegates to
-	 * {@link #printf(String, String, String, String, Object...)}, which keeps
-	 * existing custom sinks working unchanged. The built-in sinks override this
-	 * method so that {@code %s} honors the script's {@code CONVFMT} value.
-	 * </p>
-	 *
-	 * @param ofs output field separator
-	 * @param ors output record separator
-	 * @param ofmt numeric output format available to the sink
-	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
-	 * @param format format string passed to {@code printf}
-	 * @param values arguments supplied after the format string
-	 * @throws IOException if the sink cannot write the output
-	 */
-	public void printfWithConvFmt(String ofs, String ors, String ofmt, String convfmt, String format, Object... values)
-			throws IOException {
-		printf(ofs, ors, ofmt, format, values);
-	}
 
 	/**
 	 * Flushes any buffered output held by this sink.
@@ -146,7 +125,7 @@ public abstract class AwkSink {
 	 * <p>
 	 * This singleton is safe to share across all JRT/AVM instances because
 	 * its {@link #print(String, String, String, Object...)},
-	 * {@link #printf(String, String, String, String, Object...)}, and
+	 * {@link #printf(String, String, String, String, String, Object...)}, and
 	 * {@link #flush()} operations are all no-ops.
 	 */
 	public static final AwkSink NOP_SINK = new NoOpAwkSink();
@@ -163,7 +142,7 @@ public abstract class AwkSink {
 		}
 
 		@Override
-		public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+		public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
 			// discard
 		}
 	}
@@ -305,42 +284,14 @@ public abstract class AwkSink {
 
 	/**
 	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
-	 * using the default {@code CONVFMT} value ({@code "%.6g"}).
-	 * <p>
-	 * The default implementation invokes the built-in formatting engine
-	 * directly, so an override may safely decorate {@code super.sprintf(...)}
-	 * results. The runtime routes script {@code printf}/{@code sprintf} calls
-	 * through {@link #sprintfWithConvFmt(String, String, Object...)}, which
-	 * honors overrides of either method.
-	 * </p>
-	 *
-	 * @param format format string
-	 * @param values arguments supplied after the format string
-	 * @return formatted text
-	 */
-	public String sprintf(String format, Object... values) {
-		Object[] safeValues = values == null ? new Object[0] : values;
-		return AwkPrintf.sprintf(locale, AwkPrintf.DEFAULT_CONVFMT, format, safeValues);
-	}
-
-	/**
-	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
 	 * converting numeric {@code %s} operands with the supplied {@code CONVFMT}
 	 * value.
 	 * <p>
 	 * Subclasses may override this method to customize formatting. The default
 	 * implementation delegates to
-	 * {@link AwkPrintf#sprintf(Locale, String, String, Object...)}. Because the
-	 * runtime routes both {@code printf} and {@code sprintf} through this
-	 * method, overriding it ensures that both produce consistent output.
-	 * </p>
-	 * <p>
-	 * For compatibility, a sink class that overrides the historical
-	 * {@link #sprintf(String, Object...)} method but not this one keeps its
-	 * customization: the default implementation detects such overrides and
-	 * routes through them. {@code CONVFMT} cannot reach that legacy signature,
-	 * so those sinks convert {@code %s} operands with the default
-	 * {@code CONVFMT}.
+	 * {@link AwkPrintf#sprintf(Locale, String, String, Object...)}. The
+	 * built-in sinks render {@code printf} output through this method, so
+	 * overriding it keeps {@code printf} and {@code sprintf} consistent.
 	 * </p>
 	 *
 	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
@@ -348,46 +299,9 @@ public abstract class AwkSink {
 	 * @param values arguments supplied after the format string
 	 * @return formatted text
 	 */
-	public String sprintfWithConvFmt(String convfmt, String format, Object... values) {
+	public String sprintf(String convfmt, String format, Object... values) {
 		Object[] safeValues = values == null ? new Object[0] : values;
-		if (overridesLegacySprintf()) {
-			return sprintf(format, safeValues);
-		}
 		return AwkPrintf.sprintf(locale, convfmt, format, safeValues);
-	}
-
-	/**
-	 * Lazily computed flag: whether this sink's class overrides the historical
-	 * {@link #sprintf(String, Object...)} customization point.
-	 */
-	private volatile Boolean legacySprintfOverride;
-
-	private boolean overridesLegacySprintf() {
-		Boolean overridden = legacySprintfOverride;
-		if (overridden == null) {
-			try {
-				overridden = Boolean
-						.valueOf(
-								getClass()
-										.getMethod("sprintf", String.class, Object[].class)
-										.getDeclaringClass() != AwkSink.class);
-			} catch (NoSuchMethodException e) {
-				overridden = Boolean.FALSE;
-			}
-			legacySprintfOverride = overridden;
-		}
-		return overridden.booleanValue();
-	}
-
-	/**
-	 * Formats one {@code printf} result string using this sink's locale.
-	 *
-	 * @param format format string passed to {@code printf}
-	 * @param values arguments supplied after the format string
-	 * @return formatted text
-	 */
-	protected final String formatPrintfResult(String format, Object... values) {
-		return sprintf(format, values);
 	}
 
 	/**

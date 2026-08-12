@@ -2520,7 +2520,20 @@ public class JRT {
 	 * @throws IOException if the sink cannot be written to
 	 */
 	public void printfDefault(String format, Object[] values) throws IOException {
-		awkSink.printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values);
+		awkSink.printf(ofs, ors, ofmt, convfmt, format, values);
+	}
+
+	/**
+	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
+	 * through the default output sink and with the current {@code CONVFMT}
+	 * value.
+	 *
+	 * @param format format string passed to {@code sprintf}
+	 * @param values arguments supplied after the format string
+	 * @return formatted text
+	 */
+	public String sprintf(String format, Object... values) {
+		return awkSink.sprintf(convfmt, format, values);
 	}
 
 	/**
@@ -2535,7 +2548,7 @@ public class JRT {
 	public void printfToFile(String fileNameParam, boolean append, String format, Object[] values)
 			throws IOException {
 		AwkSink sink = getFileAwkSink(fileNameParam, append);
-		sink.printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values);
+		sink.printf(ofs, ors, ofmt, convfmt, format, values);
 	}
 
 	/**
@@ -2548,7 +2561,7 @@ public class JRT {
 	 */
 	public void printfToProcess(String cmd, String format, Object[] values) throws IOException {
 		AwkSink sink = getPipeAwkSink(cmd);
-		sink.printfWithConvFmt(ofs, ors, ofmt, convfmt, format, values);
+		sink.printf(ofs, ors, ofmt, convfmt, format, values);
 		sink.flush();
 	}
 
