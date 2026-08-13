@@ -65,9 +65,13 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
       and fall back to `%g` notation for `%u`/`%o`/`%x`/`%X`.
     - NaN and infinities print as `nan`, `inf`, and `-inf` (previously Java's `NaN` /
       `Infinity`), in `print`, `printf`, and number-to-string conversions.
-    - `%e`, `%f`, and `%g` round halfway cases to even like the C library used by gawk
-      (`printf "%.0f", 2.5` prints `2`, previously `3`), and `%g` strips trailing zeros before
-      padding (previously only when no padding applied).
+    - `%e`, `%f`, and `%g` round the exact binary value of the double, with halfway cases to
+      even, like the C library used by gawk (`printf "%.0f", 2.5` prints `2`, previously `3`),
+      and `%g` strips trailing zeros before padding (previously only when no padding applied).
+      The same rounding applies to number-to-string conversions through `CONVFMT` and `OFMT`:
+      with `CONVFMT="%.3f"`, `1.2345 ""` is `1.234` (previously `1.235`, from rounding the
+      shortest decimal representation instead of the exact binary value, which is slightly
+      below the halfway point) ([#546](https://github.com/jawkio/jawk/issues/546)).
     - `printf` with too few arguments is now a fatal error, as in gawk (previously the leftover
       specifiers were printed verbatim).
     - Unknown conversion specifiers (including `%n`, which Printf4J turned into a newline, and
