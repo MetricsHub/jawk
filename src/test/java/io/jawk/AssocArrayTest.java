@@ -436,6 +436,17 @@ public class AssocArrayTest {
 	}
 
 	@Test
+	public void testOutOfLongRangeIntegralSubscriptKeysAsExactDigits() throws Exception {
+		AwkTestSupport
+				.awkTest("integral subscript beyond the signed 64-bit range keys as its exact digits")
+				.script(
+						"BEGIN { a[2^63] = 1; for (i in a) print i; print (2^63 in a);"
+								+ " CONVFMT = \"%.0f\"; print (2^63 in a) }")
+				.expectLines("9223372036854775808", "1", "1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testIntegralSubscriptsUnaffectedByConvfmt() throws Exception {
 		AwkTestSupport
 				.awkTest("integral subscripts are not affected by CONVFMT")
