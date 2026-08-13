@@ -358,6 +358,20 @@ public class AssocArrayTest {
 	}
 
 	@Test
+	public void testInjectMapVariableKeepsIntegralDoubleKeys() throws Exception {
+		Map<Object, Object> data = new LinkedHashMap<>();
+		data.put(Double.valueOf(1.0), "one");
+
+		AwkTestSupport
+				.awkTest("injected Map Double keys stay reachable with a Double subscript")
+				.script("BEGIN{ print arr[idx], (idx in arr) }")
+				.preassign("arr", data)
+				.preassign("idx", Double.valueOf(1.0))
+				.expectLines("one 1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testSingleDimensionSubscriptKeyFixedAtCreationTime() throws Exception {
 		AwkTestSupport
 				.awkTest("single-dimension subscript keeps its key after CONVFMT changes")

@@ -3682,9 +3682,10 @@ public class AVM implements VariableManager, Closeable {
 
 	/**
 	 * Converts a single-dimension subscript to the key form the associative
-	 * arrays store. Integral numbers are kept as numbers: the array
-	 * implementations canonicalize them to {@code Long} anyway, and skipping
-	 * the string round-trip keeps integer-indexed loops fast. Every other
+	 * arrays store. Integral numbers pass through unchanged: the array
+	 * implementations canonicalize them to {@code Long}, so skipping the
+	 * string round-trip keeps integer-indexed loops fast, and injected plain
+	 * {@code Map} variables keep their exact key semantics. Every other
 	 * scalar is converted to a string with the CONVFMT currently in effect,
 	 * fixing the key from that point on.
 	 */
@@ -3692,11 +3693,8 @@ public class AVM implements VariableManager, Closeable {
 		if (value instanceof Long || value instanceof Integer) {
 			return value;
 		}
-		if (value instanceof Double) {
-			Object scalar = JRT.toScalarNumber((Double) value);
-			if (scalar instanceof Long) {
-				return scalar;
-			}
+		if (value instanceof Double && JRT.toScalarNumber((Double) value) instanceof Long) {
+			return value;
 		}
 		return jrt.toAwkString(value);
 	}
