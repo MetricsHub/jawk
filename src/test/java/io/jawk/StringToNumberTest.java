@@ -111,6 +111,31 @@ public class StringToNumberTest {
 	}
 
 	@Test
+	public void testSubstrLengthAcceptsEveryNumericForm() throws Exception {
+		AwkTestSupport
+				.awkTest("An exponent-notation length is not truncated to its first digit")
+				.script("BEGIN { print substr(\"abcdefgh\", 1, \"1e1\"); print substr(\"abcdefgh\", 1, \"2e1\") }")
+				.expectLines("abcdefgh", "abcdefgh")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A length beyond the integer range yields the rest of the string")
+				.script("BEGIN { print substr(\"abcdefgh\", 1, \"1e300\"); print substr(\"abcdefgh\", 1, 1e300) }")
+				.expectLines("abcdefgh", "abcdefgh")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A fractional or padded length truncates toward zero")
+				.script("BEGIN { print substr(\"abcdefgh\", 1, \"3.9\"); print substr(\"abcdefgh\", 1, \" 3\") }")
+				.expectLines("abc", "abc")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A non-numeric or negative length yields the empty string")
+				.script(
+						"BEGIN { print \"[\" substr(\"abcdefgh\", 1, \"abc\") \"]\"; print \"[\" substr(\"abcdefgh\", 1, -1) \"]\" }")
+				.expectLines("[]", "[]")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testInputFieldsStillCompareAsNumericStrings() throws Exception {
 		AwkTestSupport
 				.awkTest("Input fields keep strnum semantics")

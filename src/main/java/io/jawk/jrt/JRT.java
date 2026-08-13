@@ -651,7 +651,8 @@ public class JRT {
 		if (end == start) {
 			return 0;
 		}
-		return Double.parseDouble(s.substring(start, end));
+		// Copying is only needed when the number is a strict prefix of the text.
+		return Double.parseDouble(start == 0 && end == length ? s : s.substring(start, end));
 	}
 
 	/**
@@ -724,28 +725,42 @@ public class JRT {
 			return (long) ((Character) o).charValue();
 		}
 
-		// Try to convert the string to a number.
+		// Whole numbers, by far the most common case here, are accumulated
+		// directly. Anything else -- a fractional part, an exponent, or more
+		// digits than a long holds -- goes through the same conversion as
+		// everywhere else and truncates toward zero, so that "1e1" converts to
+		// 10 rather than 1. Values beyond the 64-bit range saturate.
 		String s = o.toString();
 		int length = s.length();
-
-		// Optimization: We don't need to handle strings that are longer than 20 chars
-		// because a Long cannot be longer than 20 chars when converted to String.
-		if (length > 20) {
-			length = 20;
+		int index = 0;
+		while (index < length && Character.isWhitespace(s.charAt(index))) {
+			index++;
 		}
-
-		// Loop:
-		// If convervsion fails, try with one character less.
-		// 25fix will convert to 25 (any numeric prefix will work)
-		while (length > 0) {
-			try {
-				return Long.parseLong(s.substring(0, length));
-			} catch (NumberFormatException nfe) {
-				length--;
-			}
+		boolean negative = index < length && s.charAt(index) == '-';
+		if (index < length && (negative || s.charAt(index) == '+')) {
+			index++;
 		}
-		// Failed (not even with one char)
-		return 0;
+		int firstDigit = index;
+		long value = 0;
+		while (index < length && isAsciiDigit(s.charAt(index)) && index - firstDigit < MAX_LONG_DIGITS) {
+			value = value * 10 + s.charAt(index) - '0';
+			index++;
+		}
+		if (index > firstDigit && (index == length || !continuesNumber(s.charAt(index)))) {
+			return negative ? -value : value;
+		}
+		return (long) toDouble(o);
+	}
+
+	/** Decimal digits that always fit in a signed 64-bit integer. */
+	private static final int MAX_LONG_DIGITS = 18;
+
+	/**
+	 * Returns whether the character can extend a run of digits into a number
+	 * that no longer converts to the same integer.
+	 */
+	private static boolean continuesNumber(char c) {
+		return isAsciiDigit(c) || c == '.' || c == 'e' || c == 'E';
 	}
 
 	/**

@@ -36,6 +36,14 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   an unsigned `"inf"` remains `0`). Conversions that AWK already defined are unchanged, including
   numeric prefixes (`"25fix" + 0` is `25`), leading whitespace, and incomplete exponents
   (`"1e" + 0` is `1`).
+- Numeric strings convert the same way wherever a whole number is expected, so `substr()`'s
+  length argument now accepts every AWK number form: `substr("abcdefgh", 1, "1e1")` yields
+  `abcdefgh` (previously `a`, because the length was parsed as an integer and silently truncated
+  at the `e`). A length beyond the integer range yields the rest of the string instead of an
+  empty one, and a padded length such as `" 3"` is honored.
+- An integer literal too large for a 64-bit integer is a floating-point constant, as in gawk,
+  instead of aborting the run: `print 99999999999999999999999` prints `99999999999999991611392`
+  (previously the parser failed with `NumberFormatException`).
 - `printf` and `sprintf` are now implemented natively with POSIX AWK / gawk semantics instead of
   delegating to the Printf4J library, which emulated glibc's `printf()`
   ([#528](https://github.com/jawkio/jawk/issues/528)):

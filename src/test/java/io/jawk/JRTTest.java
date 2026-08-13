@@ -152,6 +152,24 @@ public class JRTTest {
 	}
 
 	@Test
+	public void testToLongUsesTheSameNumericConversionAsToDouble() {
+		// Fractional and exponent forms convert, then truncate toward zero.
+		assertEquals(10L, JRT.toLong("1e1"));
+		assertEquals(20L, JRT.toLong("2e1"));
+		assertEquals(3L, JRT.toLong("3.9"));
+		assertEquals(-3L, JRT.toLong("-3.9"));
+		assertEquals(100L, JRT.toLong("1e2"));
+		assertEquals(1L, JRT.toLong("1e"));
+		// Leading whitespace and numeric prefixes behave as in toDouble.
+		assertEquals(3L, JRT.toLong(" 3"));
+		assertEquals(25L, JRT.toLong("25fix"));
+		assertEquals(0L, JRT.toLong("abc"));
+		// A value beyond the 64-bit range saturates rather than wrapping.
+		assertEquals(Long.MAX_VALUE, JRT.toLong("99999999999999999999999"));
+		assertEquals(Long.MIN_VALUE, JRT.toLong("-99999999999999999999999"));
+	}
+
+	@Test
 	public void testCompare2Uninitialized() {
 		// Uninitialized ==
 		assertTrue(JRT.compare2(new UninitializedObject(), new UninitializedObject(), 0));

@@ -3228,16 +3228,24 @@ public class AVM implements VariableManager, Closeable {
 	private Object substring(Object value, Object start, Object requestedLength) {
 		String s = jrt.toAwkString(value);
 		int startPos = (int) JRT.toDouble(start);
-		int length = requestedLength == null ?
-				s.length() - startPos + 1 : (int) JRT.toLong(requestedLength);
 		if (startPos <= 0) {
 			startPos = 1;
 		}
-		if (length <= 0 || startPos > s.length()) {
+		if (startPos > s.length()) {
 			return BLANK;
 		}
-		return startPos + length > s.length() ?
-				s.substring(startPos - 1) : s.substring(startPos - 1, startPos + length - 1);
+		int available = s.length() - startPos + 1;
+		// The requested length is kept as a long and clamped to what the string
+		// can supply: a length beyond the int range would otherwise wrap around
+		// and turn "the rest of the string" into an empty result.
+		long length = requestedLength == null ? available : JRT.toLong(requestedLength);
+		if (length <= 0) {
+			return BLANK;
+		}
+		if (length > available) {
+			length = available;
+		}
+		return s.substring(startPos - 1, startPos - 1 + (int) length);
 	}
 
 	private void execSetNumGlobals(CountTuple tuple) {

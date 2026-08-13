@@ -94,6 +94,30 @@ public class NumericLiteralTest {
 	}
 
 	@Test
+	public void testLiteralsBeyondTheLongRangeAreFloatingPointConstants() throws Exception {
+		AwkTestSupport
+				.awkTest("An integer literal too large for 64 bits is accepted as a number")
+				.script("BEGIN { print 99999999999999999999999 }")
+				.expectLines("99999999999999991611392")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("The first literal beyond the signed 64-bit range is accepted")
+				.script("BEGIN { print 9223372036854775808 }")
+				.expectLines("9223372036854775808")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A huge literal takes part in arithmetic")
+				.script("BEGIN { print 123456789012345678901234567890 + 0 }")
+				.expectLines("123456789012345677877719597056")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("The largest exactly representable integer literal keeps its value")
+				.script("BEGIN { print 9223372036854775807 }")
+				.expectLines("9223372036854775807")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testIntegralValuesBeyondLongRangePrintAllDigits() throws Exception {
 		AwkTestSupport
 				.awkTest("1e20 must print all its digits, not clamp to the long range")

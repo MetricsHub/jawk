@@ -6574,7 +6574,13 @@ public class AwkParser {
 		// can report accurate line numbers upon errors
 
 		AST addINTEGER(String integer) {
-			return new IntegerAst(Long.parseLong(integer));
+			try {
+				return new IntegerAst(Long.parseLong(integer));
+			} catch (NumberFormatException beyondLongRange) {
+				// A literal too large for a 64-bit integer is a floating-point
+				// constant, as in gawk, rather than a parse error.
+				return new DoubleAst(Double.parseDouble(integer));
+			}
 		}
 
 		AST addDOUBLE(String dbl) {
