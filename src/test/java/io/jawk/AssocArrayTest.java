@@ -437,6 +437,28 @@ public class AssocArrayTest {
 	}
 
 	@Test
+	public void testInOperatorJoinsMultidimKeyAfterArrayOperandEvaluation() throws Exception {
+		AwkTestSupport
+				.awkTest("in operator joins a multi-dimensional key after the array operand is evaluated")
+				.script(
+						"function f() { CONVFMT = \"%.0f\"; return \"x\" }"
+								+ " BEGIN { outer[\"x\"][1.2, 2.3] = 1; CONVFMT = \"%.6g\";"
+								+ " print ((1.2, 2.3) in outer[f()]) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testNonIntegralFloatSubscriptConvertsAtCreation() throws Exception {
+		AwkTestSupport
+				.awkTest("non-integral Float subscript keys as its CONVFMT string at creation")
+				.script("BEGIN { a[f] = 1; CONVFMT = \"%.0f\"; for (k in a) print k; print (12.153 in a) }")
+				.preassign("f", Float.valueOf(12.153f))
+				.expectLines("12.153", "0")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testDeleteConvertsKeyWithCurrentConvfmt() throws Exception {
 		AwkTestSupport
 				.awkTest("delete converts its key with the current CONVFMT")

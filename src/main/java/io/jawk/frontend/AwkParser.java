@@ -1583,6 +1583,10 @@ public class AwkParser {
 			boolean allowInKeyword,
 			boolean allowMultidimIndices)
 			throws IOException {
+		// Captured before parsing: if the expression turns out to be the first
+		// component of a multi-dimensional subscript group, the group's line is
+		// where this component starts.
+		int startLineNo = currentSourceLineNumber();
 		AST ternaryExpression = TERNARY_EXPRESSION(left, allowComparison, allowInKeyword, allowMultidimIndices);
 		AST result = ternaryExpression;
 		if (token == Token.EQUALS
@@ -1612,12 +1616,12 @@ public class AwkParser {
 		if (allowMultidimIndices && token == Token.COMMA) {
 			lexer();
 			optNewline();
+			int restLineNo = currentSourceLineNumber();
 			AST rest = ASSIGNMENT_EXPRESSION(null, allowComparison, allowInKeyword, true);
-			int lineNo = currentSourceLineNumber();
 			if (rest instanceof ArrayIndexAst) {
-				return new ArrayIndexAst(lineNo, result, rest);
+				return new ArrayIndexAst(startLineNo, result, rest);
 			}
-			return new ArrayIndexAst(lineNo, result, new ArrayIndexAst(lineNo, rest, null));
+			return new ArrayIndexAst(startLineNo, result, new ArrayIndexAst(restLineNo, rest, null));
 		}
 		return result;
 	}
@@ -4221,25 +4225,23 @@ public class AwkParser {
 				throw new SemanticException("Expecting an array for rhs of IN. Got an expression.");
 			}
 
+			// The key is joined and converted with the SUBSEP and CONVFMT in
+			// effect when the operator executes, i.e. after the array operand
+			// has been evaluated (it may have side effects), just like gawk.
 			AST keyAst = getAst1();
-			boolean singleKey = !(keyAst instanceof ArrayIndexAst) || keyAst.getAst2() == null;
-			if (singleKey) {
-				// A single key is converted with the CONVFMT in effect when the
-				// operator executes, i.e. after the array operand has been
-				// evaluated (it may have side effects), just like gawk: evaluate
-				// the raw key, evaluate the array operand, then convert the key
-				// underneath it.
-				AST rawKeyAst = keyAst instanceof ArrayIndexAst ? keyAst.getAst1() : keyAst;
-				rawKeyAst.populateTuples(tuples);
+			if (keyAst instanceof ArrayIndexAst) {
+				ArrayIndexAst indexAst = (ArrayIndexAst) keyAst;
+				int count = indexAst.populateComponentTuples(tuples);
 				populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
-				tuples.swap();
-				tuples.applySubsep(1);
-				tuples.swap();
+				// Errors while converting the key report where the subscript
+				// starts.
+				indexAst.pushSourceLineNumber(tuples);
+				tuples.applySubsepUnderTop(count);
+				indexAst.popSourceLineNumber(tuples);
 			} else {
-				// A multi-dimensional key joins its components with SUBSEP as it
-				// is built, before the array operand is evaluated.
 				keyAst.populateTuples(tuples);
 				populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
+				tuples.applySubsepUnderTop(1);
 			}
 			tuples.isIn();
 
@@ -4487,6 +4489,21 @@ public class AwkParser {
 		@Override
 		public int populateTuples(AwkTuples tuples) {
 			pushSourceLineNumber(tuples);
+			int cnt = populateComponentTuples(tuples);
+			// Convert the subscript to its string form now, with the CONVFMT in
+			// effect at this point of the execution: a later CONVFMT change must
+			// not retroactively alter existing keys.
+			tuples.applySubsep(cnt);
+			popSourceLineNumber(tuples);
+			return 1;
+		}
+
+		/**
+		 * Evaluates the raw subscript components without joining or converting
+		 * them, and returns how many were pushed. The "in" operator uses this
+		 * to delay the conversion until its array operand has been evaluated.
+		 */
+		private int populateComponentTuples(AwkTuples tuples) {
 			AST ptr = this;
 			int cnt = 0;
 			while (ptr != null) {
@@ -4494,12 +4511,7 @@ public class AwkParser {
 				++cnt;
 				ptr = ptr.getAst2();
 			}
-			// Convert the subscript to its string form now, with the CONVFMT in
-			// effect at this point of the execution: a later CONVFMT change must
-			// not retroactively alter existing keys.
-			tuples.applySubsep(cnt);
-			popSourceLineNumber(tuples);
-			return 1;
+			return cnt;
 		}
 	}
 

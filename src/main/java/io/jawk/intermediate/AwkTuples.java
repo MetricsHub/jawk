@@ -1793,6 +1793,17 @@ public class AwkTuples implements Serializable {
 
 	/**
 	 * <p>
+	 * applySubsepUnderTop.
+	 * </p>
+	 *
+	 * @param count a int
+	 */
+	public void applySubsepUnderTop(int count) {
+		queue.add(new Tuple.CountTuple(Opcode.APPLY_SUBSEP_UNDER_TOP, count));
+	}
+
+	/**
+	 * <p>
 	 * deleteArrayElement.
 	 * </p>
 	 *

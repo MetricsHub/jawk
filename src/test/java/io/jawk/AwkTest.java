@@ -1091,6 +1091,21 @@ public class AwkTest {
 	}
 
 	@Test
+	public void testMultilineGroupedInKeyReportsSubscriptStartLineNumber() throws Exception {
+		assertRuntimeExceptionLineNumber(
+				"multi-line grouped in key reports the line where the subscript starts",
+				5,
+				"Attempting to use an array in a scalar context.",
+				"BEGIN {", // 1
+				"  a[1] = 1", // 2
+				"  b[1, 2] = 2", // 3
+				"", // 4
+				"  if ((a,", // 5
+				"       1) in b) print \"member\"", // 6
+				"}"); // 7
+	}
+
+	@Test
 	public void testArraysOfArraysReadAutovivifiesMissingParentSubarray() throws Exception {
 		AwkTestSupport
 				.awkTest("arrays of arrays read autovivifies missing parent subarray")

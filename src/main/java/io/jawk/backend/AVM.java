@@ -25,6 +25,7 @@ package io.jawk.backend;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.math.BigInteger;
 import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.Arrays;
@@ -2358,6 +2359,15 @@ public class AVM implements VariableManager, Closeable {
 					position.next();
 					break;
 				}
+				case APPLY_SUBSEP_UNDER_TOP: {
+					// stack[0] = value to keep on top (the "in" array operand)
+					// stack[1..count] = array indices to convert
+					Object top = pop();
+					execApplySubsep((CountTuple) tuple);
+					push(top);
+					position.next();
+					break;
+				}
 				case DELETE_ARRAY_ELEMENT: {
 					// arg[0] = offset
 					// arg[1] = isGlobal
@@ -3682,24 +3692,28 @@ public class AVM implements VariableManager, Closeable {
 
 	/**
 	 * Converts a single-dimension subscript to the key form the associative
-	 * arrays store. A non-integral {@code Double} — the only floating-point
-	 * type AWK code can produce — is converted to a string with the CONVFMT
-	 * currently in effect, fixing the key from that point on, and so is any
-	 * non-numeric scalar. Every other {@code Number} passes through
-	 * unchanged: integral values are canonicalized to {@code Long} by the
-	 * array implementations (skipping the string round-trip keeps
-	 * integer-indexed loops fast), and the remaining {@code Number} types
-	 * can only be bound by Java callers, whose injected plain {@code Map}
-	 * variables keep their exact key semantics.
+	 * arrays store. Integral numbers pass through unchanged — recognized by
+	 * type for the integer classes ({@code Long}, {@code Integer},
+	 * {@code Short}, {@code Byte}, {@code BigInteger}, so no value is ever
+	 * misjudged through {@code double} projection), and by value for the
+	 * floating-point classes. The array implementations canonicalize them to
+	 * {@code Long} (skipping the string round-trip keeps integer-indexed
+	 * loops fast), and Java callers' injected plain {@code Map} variables
+	 * keep their exact key semantics. Every non-integral number (a computed
+	 * {@code Double}, or a {@code Float}/{@code BigDecimal}/... returned by
+	 * an extension or bound by a Java caller) and every non-numeric scalar
+	 * is converted to a string with the CONVFMT currently in effect, fixing
+	 * the key from that point on.
 	 */
 	private Object toSubscriptKey(Object value) {
-		if (value instanceof Long || value instanceof Integer) {
+		if (value instanceof Long
+				|| value instanceof Integer
+				|| value instanceof Short
+				|| value instanceof Byte
+				|| value instanceof BigInteger) {
 			return value;
 		}
-		if (value instanceof Double) {
-			return JRT.toScalarNumber(((Double) value).doubleValue()) instanceof Long ? value : jrt.toAwkString(value);
-		}
-		if (value instanceof Number) {
+		if (value instanceof Number && JRT.toScalarNumber(((Number) value).doubleValue()) instanceof Long) {
 			return value;
 		}
 		return jrt.toAwkString(value);
