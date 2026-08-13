@@ -96,6 +96,25 @@ public interface AssocArray extends Map<Object, Object> {
 	}
 
 	/**
+	 * Returns whether a subscript value is an integral number that
+	 * {@link #normalizeKey(Object)} canonicalizes to the same {@code Long}
+	 * key as its AWK string form. Such a subscript can be used as a key
+	 * directly, without the CONVFMT string conversion that every other
+	 * scalar goes through: the resulting key is identical, and skipping the
+	 * string round-trip keeps integer-indexed loops fast.
+	 *
+	 * @param value the subscript value to examine
+	 * @return {@code true} if the value can be used as a key without string
+	 *         conversion
+	 */
+	static boolean isIntegralNumberKey(Object value) {
+		if (value instanceof Long || value instanceof Integer) {
+			return true;
+		}
+		return value instanceof Double && JRT.toScalarNumber((Double) value) instanceof Long;
+	}
+
+	/**
 	 * Attempts to parse the key as a {@code Long}.
 	 *
 	 * @param key the key to parse (must not be {@code null})

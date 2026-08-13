@@ -25,7 +25,6 @@ package io.jawk.backend;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.math.BigDecimal;
 import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.Arrays;
@@ -3673,78 +3672,27 @@ public class AVM implements VariableManager, Closeable {
 		if (count == 1) {
 			Object value = pop();
 			checkScalar(value);
-			push(toSubscriptKey(value));
+			// An integral number is already in the form the array
+			// implementations canonicalize to a Long key, so it skips the
+			// CONVFMT string round-trip; every other scalar converts to a
+			// string with the CONVFMT currently in effect, fixing the key
+			// from that point on.
+			push(AssocArray.isIntegralNumberKey(value) ? value : jrt.toAwkString(value));
 			return;
 		}
 		StringBuilder sb = new StringBuilder();
 		Object value = pop();
 		checkScalar(value);
-		sb.append(toSubscriptComponentString(value));
+		sb.append(jrt.toAwkString(value));
 		String subsep = jrt.toAwkString(jrt.getSUBSEPVar());
 		for (int i = 1; i < count; i++) {
 			sb.insert(0, subsep);
 			value = pop();
 			checkScalar(value);
-			sb.insert(0, toSubscriptComponentString(value));
+			sb.insert(0, jrt.toAwkString(value));
 		}
 		push(sb.toString());
 	}
-
-	/**
-	 * Converts one component of a multi-dimensional subscript to the string
-	 * joined with SUBSEP, applying the same rules as {@link #toSubscriptKey}
-	 * so beyond-range integral values keep their exact digits.
-	 */
-	private String toSubscriptComponentString(Object value) {
-		Object key = toSubscriptKey(value);
-		return key instanceof String ? (String) key : jrt.toAwkString(key);
-	}
-
-	/**
-	 * Converts a single-dimension subscript to the key form the associative
-	 * arrays store. Numbers whose value is integral and fits a signed 64-bit
-	 * integer pass through unchanged: the array implementations canonicalize
-	 * them to {@code Long} (skipping the string round-trip keeps
-	 * integer-indexed loops fast), and Java callers' injected plain
-	 * {@code Map} variables keep their exact key semantics. Every other
-	 * number (a non-integral or out-of-range {@code Double}, or a
-	 * {@code Float}/{@code BigDecimal}/... returned by an extension or bound
-	 * by a Java caller) and every non-numeric scalar is converted to a
-	 * string with the CONVFMT currently in effect, fixing the key from that
-	 * point on. Integrality is tested by type for the integer classes and by
-	 * exact decimal value for everything else, so no boundary value is ever
-	 * misjudged through {@code double} projection.
-	 */
-	private Object toSubscriptKey(Object value) {
-		if (value instanceof Long || value instanceof Integer || value instanceof Short || value instanceof Byte) {
-			return value;
-		}
-		if (value instanceof Double) {
-			return JRT.toScalarNumber(((Double) value).doubleValue()) instanceof Long ? value : jrt.toAwkString(value);
-		}
-		if (value instanceof Number) {
-			try {
-				BigDecimal decimal = new BigDecimal(value.toString());
-				if (decimal.stripTrailingZeros().scale() <= 0) {
-					if (decimal.compareTo(MIN_LONG_SUBSCRIPT) >= 0 && decimal.compareTo(MAX_LONG_SUBSCRIPT) <= 0) {
-						return value;
-					}
-					// An integral value beyond the signed 64-bit range keys as
-					// its exact digits, without a double round-trip that would
-					// collide nearby values.
-					return decimal.toBigInteger().toString();
-				}
-			} catch (NumberFormatException e) { // NOPMD - EmptyCatchBlock: NaN/infinity converts as a string
-			}
-		}
-		return jrt.toAwkString(value);
-	}
-
-	/** Smallest subscript value that {@link #toSubscriptKey} passes through as a number. */
-	private static final BigDecimal MIN_LONG_SUBSCRIPT = BigDecimal.valueOf(Long.MIN_VALUE);
-
-	/** Largest subscript value that {@link #toSubscriptKey} passes through as a number. */
-	private static final BigDecimal MAX_LONG_SUBSCRIPT = BigDecimal.valueOf(Long.MAX_VALUE);
 
 	private long beforeProfiledTuple(Tuple tuple, Opcode opcode) {
 		long now = System.nanoTime();

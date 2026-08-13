@@ -24,8 +24,6 @@ package io.jawk;
 
 import static org.junit.Assert.*;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -38,6 +36,20 @@ import io.jawk.jrt.AssocArray;
 import io.jawk.jrt.AwkRuntimeException;
 
 public class AssocArrayTest {
+
+	@Test
+	public void testIsIntegralNumberKey() {
+		assertTrue(AssocArray.isIntegralNumberKey(Long.valueOf(5L)));
+		assertTrue(AssocArray.isIntegralNumberKey(Integer.valueOf(5)));
+		assertTrue(AssocArray.isIntegralNumberKey(Double.valueOf(5.0)));
+		assertTrue(AssocArray.isIntegralNumberKey(Double.valueOf(-0.0)));
+		assertFalse(AssocArray.isIntegralNumberKey(Double.valueOf(5.5)));
+		assertFalse(AssocArray.isIntegralNumberKey(Double.valueOf(0x1p63)));
+		assertFalse(AssocArray.isIntegralNumberKey(Double.valueOf(Double.NaN)));
+		assertFalse(AssocArray.isIntegralNumberKey(Float.valueOf(5.0f)));
+		assertFalse(AssocArray.isIntegralNumberKey("5"));
+		assertFalse(AssocArray.isIntegralNumberKey(null));
+	}
 
 	@Test
 	public void testInOperatorWithNumericAndStringKeys() {
@@ -360,41 +372,16 @@ public class AssocArrayTest {
 	}
 
 	@Test
-	public void testInjectMapVariableKeepsNumberKeys() throws Exception {
+	public void testInjectMapVariableKeepsIntegralDoubleKeys() throws Exception {
 		Map<Object, Object> data = new LinkedHashMap<>();
 		data.put(Double.valueOf(1.0), "one");
-		data.put(Float.valueOf(2.0f), "two");
-		data.put(Short.valueOf((short) 3), "three");
-		data.put(BigInteger.valueOf(Long.MAX_VALUE), "big");
-		data.put(BigDecimal.valueOf(Long.MAX_VALUE), "bigdec");
 
 		AwkTestSupport
-				.awkTest("injected Map Number keys stay reachable with same-typed subscripts")
-				.script(
-						"BEGIN{ print arr[d], (d in arr), arr[f], (f in arr), arr[s], (s in arr),"
-								+ " arr[b], (b in arr), arr[bd], (bd in arr) }")
+				.awkTest("injected Map Double keys stay reachable with a Double subscript")
+				.script("BEGIN{ print arr[idx], (idx in arr) }")
 				.preassign("arr", data)
-				.preassign("d", Double.valueOf(1.0))
-				.preassign("f", Float.valueOf(2.0f))
-				.preassign("s", Short.valueOf((short) 3))
-				.preassign("b", BigInteger.valueOf(Long.MAX_VALUE))
-				.preassign("bd", BigDecimal.valueOf(Long.MAX_VALUE))
-				.expectLines("one 1 two 1 three 1 big 1 bigdec 1")
-				.runAndAssert();
-	}
-
-	@Test
-	public void testArbitraryPrecisionIntegerSubscriptsKeepExactDigits() throws Exception {
-		AwkTestSupport
-				.awkTest("arbitrary-precision integer subscripts key as their exact digits")
-				.script(
-						"BEGIN { a[n1] = 1; a[n2] = 2; print length(a),"
-								+ " (\"9223372036854775808\" in a), (\"9223372036854775809\" in a);"
-								+ " b[n1, 0] = 1; b[n2, 0] = 2; print length(b),"
-								+ " ((\"9223372036854775808\" SUBSEP \"0\") in b) }")
-				.preassign("n1", new BigInteger("9223372036854775808"))
-				.preassign("n2", new BigInteger("9223372036854775809"))
-				.expectLines("2 1 1", "2 1")
+				.preassign("idx", Double.valueOf(1.0))
+				.expectLines("one 1")
 				.runAndAssert();
 	}
 
