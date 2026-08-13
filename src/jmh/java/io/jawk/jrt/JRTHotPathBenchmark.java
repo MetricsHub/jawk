@@ -58,6 +58,8 @@ public class JRTHotPathBenchmark {
 	private Object integerString;
 	private Object decimalString;
 	private Object exponentString;
+	private Object longNumericString;
+	private Object numericPrefixString;
 	private Object nonNumericString;
 	private Object emptyString;
 	private Object zeroLong;
@@ -85,6 +87,8 @@ public class JRTHotPathBenchmark {
 		this.integerString = "123456789";
 		this.decimalString = "12345.75";
 		this.exponentString = "1.25e6";
+		this.longNumericString = "123456789012345678901234567890123456789";
+		this.numericPrefixString = "12345fix";
 		this.nonNumericString = "not-a-number";
 		this.emptyString = "";
 		this.zeroLong = Long.valueOf(0L);
@@ -160,6 +164,28 @@ public class JRTHotPathBenchmark {
 	@Benchmark
 	public double toDoubleExponentString() {
 		return JRT.toDouble(this.exponentString);
+	}
+
+	/**
+	 * Measures {@link JRT#toDouble(Object)} for a numeric string longer than a
+	 * {@code double}'s textual form.
+	 *
+	 * @return converted value
+	 */
+	@Benchmark
+	public double toDoubleLongNumericString() {
+		return JRT.toDouble(this.longNumericString);
+	}
+
+	/**
+	 * Measures {@link JRT#toDouble(Object)} for a string whose numeric prefix is
+	 * followed by text.
+	 *
+	 * @return converted value
+	 */
+	@Benchmark
+	public double toDoubleNumericPrefixString() {
+		return JRT.toDouble(this.numericPrefixString);
 	}
 
 	/**
@@ -262,6 +288,17 @@ public class JRTHotPathBenchmark {
 	@Benchmark
 	public long toLongExponentString() {
 		return JRT.toLong(this.exponentString);
+	}
+
+	/**
+	 * Measures {@link JRT#toLong(Object)} for a numeric string longer than a
+	 * {@code long}'s textual form.
+	 *
+	 * @return converted value
+	 */
+	@Benchmark
+	public long toLongLongNumericString() {
+		return JRT.toLong(this.longNumericString);
 	}
 
 	/**

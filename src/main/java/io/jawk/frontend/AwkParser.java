@@ -385,6 +385,46 @@ public class AwkParser {
 	}
 
 	/**
+	 * Consumes the exponent part of a numeric constant ({@code e} or {@code E},
+	 * an optional sign, and at least one digit) when the current character
+	 * starts one. When the characters after the {@code e}/{@code E} do not form
+	 * a valid exponent, nothing is consumed, so the {@code e}/{@code E} starts
+	 * the next token: {@code 1e} is the number {@code 1} followed by the
+	 * identifier {@code e}, as in gawk.
+	 *
+	 * @return whether an exponent part was consumed
+	 * @throws IOException upon an I/O error while reading the script source
+	 */
+	private boolean readExponent() throws IOException {
+		if (c != 'e' && c != 'E') {
+			return false;
+		}
+		// Peek past the 'e'/'E' (and an optional sign) for a digit before
+		// consuming anything: the lexer keeps only one character of lookahead
+		// in c, so the decision must be made without advancing.
+		reader.mark(3);
+		int first = reader.read();
+		boolean validExponent;
+		if (first == '+' || first == '-') {
+			validExponent = Character.isDigit(reader.read());
+		} else {
+			validExponent = Character.isDigit(first);
+		}
+		reader.reset();
+		if (!validExponent) {
+			return false;
+		}
+		read();
+		if (c == '+' || c == '-') {
+			read();
+		}
+		while (c > 0 && Character.isDigit(c)) {
+			read();
+		}
+		return true;
+	}
+
+	/**
 	 * Advances to the next readable source at a token boundary when the current
 	 * reader has reached end-of-file. Deferring this transition until the current
 	 * token is complete preserves the source and namespace used to classify its
@@ -1007,6 +1047,7 @@ public class AwkParser {
 			if (!hit) {
 				throw lexerException("Decimal point encountered with no values on either side.");
 			}
+			readExponent();
 			token = Token.DOUBLE;
 			return token;
 		}
@@ -1021,6 +1062,7 @@ public class AwkParser {
 					while (c > 0 && Character.isDigit(c)) {
 						read();
 					}
+					readExponent();
 					token = Token.DOUBLE;
 					return token;
 				} else if (Character.isDigit(c)) {
@@ -1029,6 +1071,10 @@ public class AwkParser {
 				} else {
 					break;
 				}
+			}
+			if (readExponent()) {
+				token = Token.DOUBLE;
+				return token;
 			}
 			// integer, only
 			token = Token.INTEGER;
@@ -6528,7 +6574,13 @@ public class AwkParser {
 		// can report accurate line numbers upon errors
 
 		AST addINTEGER(String integer) {
-			return new IntegerAst(Long.parseLong(integer));
+			try {
+				return new IntegerAst(Long.parseLong(integer));
+			} catch (NumberFormatException beyondLongRange) {
+				// A literal too large for a 64-bit integer is a floating-point
+				// constant, as in gawk, rather than a parse error.
+				return new DoubleAst(Double.parseDouble(integer));
+			}
 		}
 
 		AST addDOUBLE(String dbl) {

@@ -20,6 +20,33 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- Numeric constants with exponents (`2e3`, `1.5E-2`, `.5e+1`, ...) are now lexed as single
+  numbers, as POSIX requires: `print 2e3` prints `2000` (previously the lexer stopped before the
+  exponent, so `2e3` parsed as `2` concatenated with the uninitialized variable `e3` and printed
+  `2`). As in gawk, an `e`/`E` not followed by a valid exponent is not part of the number:
+  `1e` is the number `1` followed by the variable `e`
+  ([#545](https://github.com/jawkio/jawk/issues/545)).
+- String-to-number conversion keeps all the digits of long numeric strings instead of stopping
+  after 26 characters: `s = sprintf("%d", 10^26); print s + 0` now prints
+  `100000000000000004764729344` (previously `10000000000000000905969664`, a tenth of the value).
+  Conversion now scans the leading numeric prefix rather than retrying progressively shorter
+  prefixes, which also aligns two edge cases with gawk: number forms that only Java understands
+  are no longer accepted (`"Infinity" + 0` and `"0x1p4" + 0` are `0`, previously infinity and
+  `16`), while a complete *signed* infinity or NaN now converts, matched without regard to case
+  (`"-inf" + 0` and `"-INF" + 0` are `-inf`, previously `0`; an unsigned `"inf"`, or a longer
+  word such as `"-inform"`, remains `0`). Conversions that AWK already defined are unchanged, including
+  numeric prefixes (`"25fix" + 0` is `25`), leading whitespace, and incomplete exponents
+  (`"1e" + 0` is `1`) ([#545](https://github.com/jawkio/jawk/issues/545)).
+- Numeric strings convert the same way wherever a whole number is expected, so `substr()`'s
+  length argument now accepts every AWK number form: `substr("abcdefgh", 1, "1e1")` yields
+  `abcdefgh` (previously `a`, because the length was parsed as an integer and silently truncated
+  at the `e`). A length beyond the integer range yields the rest of the string instead of an
+  empty one, and a padded length such as `" 3"` is honored
+  ([#545](https://github.com/jawkio/jawk/issues/545)).
+- An integer literal too large for a 64-bit integer is a floating-point constant, as in gawk,
+  instead of aborting the run: `print 99999999999999999999999` prints `99999999999999991611392`
+  (previously the parser failed with `NumberFormatException`)
+  ([#545](https://github.com/jawkio/jawk/issues/545)).
 - `printf` and `sprintf` are now implemented natively with POSIX AWK / gawk semantics instead of
   delegating to the Printf4J library, which emulated glibc's `printf()`
   ([#528](https://github.com/jawkio/jawk/issues/528)):
