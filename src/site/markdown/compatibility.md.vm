@@ -191,9 +191,11 @@ The date and time functions (`mktime()`, `strftime()`) follow the Java platform'
 ${esc.h}${esc.h}${esc.h} Integer arithmetic
 
 Arithmetic on integral operands (`+`, `-`, `*`, an evenly-dividing `/`, `%`, unary `-` and `+`,
-`++`/`--`, and the corresponding compound assignments) is computed in exact 64-bit integers when
-both operands and the result are 64-bit integers, and comparisons between two such values are
-exact as well. Within ±2^53 this is indistinguishable from gawk; beyond that, Jawk keeps every
+`++`/`--`, and the corresponding compound assignments, on variables, array elements, and fields
+alike) is computed in exact 64-bit integers when both operands and the result are 64-bit
+integers, and comparisons between two such values are exact as well. A compound assignment or
+`++`/`--` on an uninitialized variable, a missing array element, or a missing field starts from
+integer zero, so counters built that way stay exact. Within ±2^53 this is indistinguishable from gawk; beyond that, Jawk keeps every
 digit where gawk — which computes in C doubles unless built with MPFR support and run with
 `-M` — rounds: `print 9007199254740992 + 1` prints `9007199254740993` in Jawk and
 `9007199254740992` in default gawk. A result that overflows 64 bits, an exponentiation (`^`),

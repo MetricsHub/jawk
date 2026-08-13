@@ -96,6 +96,48 @@ public class ExactIntegerArithmeticTest {
 	}
 
 	@Test
+	public void testFieldArithmeticStaysExact() throws Exception {
+		AwkTestSupport
+				.awkTest("+= on a field holding an exact integer must stay exact beyond 2^53")
+				.script("{ $1 = 9007199254740992; $1 += 1; print $1 }")
+				.stdin("x\n")
+				.expectLines("9007199254740993")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("++ on a field holding an exact integer must stay exact beyond 2^53")
+				.script("{ $1 = 9007199254740992; $1++; print $1 }")
+				.stdin("x\n")
+				.expectLines("9007199254740993")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("++ on a field must yield the exact original value")
+				.script("{ $1 = 9007199254740993; print $1++ }")
+				.stdin("x\n")
+				.expectLines("9007199254740993")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("+= on a missing field must start from integer zero")
+				.script("{ $3 += 2; print $3 }")
+				.stdin("a\n")
+				.expectLines("2")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testUninitializedAccumulatorsStayExact() throws Exception {
+		AwkTestSupport
+				.awkTest("+= into an uninitialized variable must start from integer zero")
+				.script("BEGIN { s += 9007199254740992; s += 1; print s }")
+				.expectLines("9007199254740993")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("+= into a missing array element must start from integer zero")
+				.script("BEGIN { a[1] += 9007199254740992; a[1] += 1; print a[1] }")
+				.expectLines("9007199254740993")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testUnaryOperatorsStayExact() throws Exception {
 		AwkTestSupport
 				.awkTest("Unary minus must not round an exact integer")
