@@ -3682,7 +3682,8 @@ public class AVM implements VariableManager, Closeable {
 
 	/**
 	 * Converts a single-dimension subscript to the key form the associative
-	 * arrays store. Integral numbers pass through unchanged: the array
+	 * arrays store. Integral numbers of any {@code Number} type (JSR-223
+	 * callers can bind any of them) pass through unchanged: the array
 	 * implementations canonicalize them to {@code Long}, so skipping the
 	 * string round-trip keeps integer-indexed loops fast, and injected plain
 	 * {@code Map} variables keep their exact key semantics. Every other
@@ -3690,10 +3691,10 @@ public class AVM implements VariableManager, Closeable {
 	 * fixing the key from that point on.
 	 */
 	private Object toSubscriptKey(Object value) {
-		if (value instanceof Long || value instanceof Integer) {
+		if (value instanceof Long || value instanceof Integer || value instanceof Short || value instanceof Byte) {
 			return value;
 		}
-		if (value instanceof Double && JRT.toScalarNumber((Double) value) instanceof Long) {
+		if (value instanceof Number && JRT.toScalarNumber(((Number) value).doubleValue()) instanceof Long) {
 			return value;
 		}
 		return jrt.toAwkString(value);

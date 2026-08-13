@@ -358,16 +358,20 @@ public class AssocArrayTest {
 	}
 
 	@Test
-	public void testInjectMapVariableKeepsIntegralDoubleKeys() throws Exception {
+	public void testInjectMapVariableKeepsIntegralNumberKeys() throws Exception {
 		Map<Object, Object> data = new LinkedHashMap<>();
 		data.put(Double.valueOf(1.0), "one");
+		data.put(Float.valueOf(2.0f), "two");
+		data.put(Short.valueOf((short) 3), "three");
 
 		AwkTestSupport
-				.awkTest("injected Map Double keys stay reachable with a Double subscript")
-				.script("BEGIN{ print arr[idx], (idx in arr) }")
+				.awkTest("injected Map integral Number keys stay reachable with same-typed subscripts")
+				.script("BEGIN{ print arr[d], (d in arr), arr[f], (f in arr), arr[s], (s in arr) }")
 				.preassign("arr", data)
-				.preassign("idx", Double.valueOf(1.0))
-				.expectLines("one 1")
+				.preassign("d", Double.valueOf(1.0))
+				.preassign("f", Float.valueOf(2.0f))
+				.preassign("s", Short.valueOf((short) 3))
+				.expectLines("one 1 two 1 three 1")
 				.runAndAssert();
 	}
 
