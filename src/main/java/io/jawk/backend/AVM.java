@@ -3778,14 +3778,14 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private void setNumOnJRT(long fieldNum, Object num) {
-		String numString = jrt.toAwkString(num);
-
-		// same code as ASSIGN_AS_INPUT_FIELD
+		// same code as ASSIGN_AS_INPUT_FIELD: a field retains the numeric
+		// scalar itself (so an exact integer survives repeated arithmetic),
+		// while $0 is record text and converts with CONVFMT immediately
 		if (fieldNum == 0) {
-			jrt.setInputLine(numString);
+			jrt.setInputLine(jrt.toAwkString(num));
 			jrt.jrtParseFields();
 		} else {
-			jrt.jrtSetInputField(numString, fieldNum);
+			jrt.jrtSetInputField(num, fieldNum);
 		}
 	}
 

@@ -33,6 +33,12 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   zero: with `x = 0`, `1/-x` now prints `inf` (previously `-inf`). Programs precompiled with an
   earlier version are rejected and must be recompiled, since they may carry constants folded in
   floating point ([#537](https://github.com/jawkio/jawk/issues/537)).
+- A field updated with a compound assignment or `++`/`--` now retains its numeric value, like a
+  field assigned with `=` always did, instead of being replaced by its `CONVFMT` string, so
+  repeated updates stay exact and `print $1` shows the full value. When `$0` is reconstituted,
+  numeric field values are now converted with `CONVFMT`, as POSIX requires and gawk does:
+  `{ $1 = 0.1 + 0.2; print }` prints `0.3 ...` (previously `0.30000000000000004 ...`, the raw
+  Java rendering of the double) ([#537](https://github.com/jawkio/jawk/issues/537)).
 - Array subscripts are now converted to their string key with the `CONVFMT` in effect at the
   moment the subscript is used, as POSIX requires and gawk does. Previously a single-dimension
   numeric subscript was stored as a number and converted lazily, so a later `CONVFMT` change

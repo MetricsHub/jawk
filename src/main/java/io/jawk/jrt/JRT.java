@@ -2465,7 +2465,18 @@ public class JRT {
 	}
 
 	private String rebuildRecordTextFromFields(List<Object> fields) {
-		return joinFieldsWithLiteralSeparator(fields, ofs);
+		// A field assigned a numeric value retains the number itself;
+		// reconstituting $0 converts it with CONVFMT, as POSIX requires and
+		// gawk does (a string or input-derived field joins verbatim).
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < fields.size(); i++) {
+			if (i > 0) {
+				sb.append(ofs);
+			}
+			Object field = fields.get(i);
+			sb.append(field == null ? "" : toAwkString(field));
+		}
+		return sb.toString();
 	}
 
 	private final class RecordState {

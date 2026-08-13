@@ -121,6 +121,46 @@ public class ExactIntegerArithmeticTest {
 				.stdin("a\n")
 				.expectLines("2")
 				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A field must retain its numeric scalar across repeated updates")
+				.script("{ $1 = 9007199254740992; $1 += 1; $1 += 1; print $1 }")
+				.stdin("x\n")
+				.expectLines("9007199254740994")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Repeated ++ on a field must stay exact beyond 2^53")
+				.script("{ $1 = 9007199254740992; $1++; $1++; print $1, $0 }")
+				.stdin("x\n")
+				.expectLines("9007199254740994 9007199254740994")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testRecordRebuildConvertsNumericFieldsWithConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("$0 must be rebuilt with CONVFMT, not raw double digits")
+				.script("{ $1 = 0.1 + 0.2; print }")
+				.stdin("x y\n")
+				.expectLines("0.3 y")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A numeric field keeps its full value while $0 shows its CONVFMT form")
+				.script("{ CONVFMT = \"%.2g\"; $1 = 0.123456; print; print $1 }")
+				.stdin("x y\n")
+				.expectLines("0.12 y", "0.123456")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Input-derived fields join back verbatim")
+				.script("{ $3 = \"z\"; print }")
+				.stdin("0.30000000000000004 y w\n")
+				.expectLines("0.30000000000000004 y z")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("$NF++ on an empty record targets $0, which stays record text")
+				.script("{ print $NF++; print $NF }")
+				.stdin("\n")
+				.expectLines("0", "1")
+				.runAndAssert();
 	}
 
 	@Test
