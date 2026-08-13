@@ -385,10 +385,13 @@ public class PosixIT {
 
 	@Test
 	public void spec33OfmtVsConvfmt() throws Exception {
+		// The double nearest 1.2345 is 1.23449999999999993..., strictly below the
+		// halfway point, so rounding the exact binary value to three decimals gives
+		// 1.234 (as gawk does), not the intuitive-looking 1.235.
 		AwkTestSupport
 				.awkTest("33. OFMT vs CONVFMT")
 				.script("BEGIN{OFMT=\"%.2f\"; CONVFMT=\"%.3f\"; x=1.2345; print x; s=x \"\"; print s}")
-				.expectLines("1.23", "1.235")
+				.expectLines("1.23", "1.234")
 				.runAndAssert();
 	}
 
