@@ -726,10 +726,11 @@ public class JRT {
 		}
 
 		// Whole numbers, by far the most common case here, are accumulated
-		// directly. Anything else -- a fractional part, an exponent, or more
-		// digits than a long holds -- goes through the same conversion as
-		// everywhere else and truncates toward zero, so that "1e1" converts to
-		// 10 rather than 1. Values beyond the 64-bit range saturate.
+		// directly so that every value a long can hold converts exactly.
+		// Anything else -- a fractional part, an exponent, or a value beyond
+		// the 64-bit range -- goes through the same conversion as everywhere
+		// else and truncates toward zero, so that "1e1" converts to 10 rather
+		// than 1. Values beyond the 64-bit range saturate.
 		String s = o.toString();
 		int length = s.length();
 		int index = 0;
@@ -742,8 +743,14 @@ public class JRT {
 		}
 		int firstDigit = index;
 		long value = 0;
-		while (index < length && isAsciiDigit(s.charAt(index)) && index - firstDigit < MAX_LONG_DIGITS) {
-			value = value * 10 + s.charAt(index) - '0';
+		while (index < length && isAsciiDigit(s.charAt(index))) {
+			int digit = s.charAt(index) - '0';
+			if (value > (Long.MAX_VALUE - digit) / 10) {
+				// Stop before overflowing: the conversion below then takes over
+				// and saturates, since a digit is necessarily left unconsumed.
+				break;
+			}
+			value = value * 10 + digit;
 			index++;
 		}
 		if (index > firstDigit && (index == length || !continuesNumber(s.charAt(index)))) {
@@ -751,9 +758,6 @@ public class JRT {
 		}
 		return (long) toDouble(o);
 	}
-
-	/** Decimal digits that always fit in a signed 64-bit integer. */
-	private static final int MAX_LONG_DIGITS = 18;
 
 	/**
 	 * Returns whether the text holds nothing but whitespace from {@code index}

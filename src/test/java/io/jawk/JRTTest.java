@@ -174,6 +174,21 @@ public class JRTTest {
 	}
 
 	@Test
+	public void testToLongConvertsEveryInRangeIntegerExactly() {
+		// Values a long can hold convert exactly, including those a double
+		// cannot represent.
+		assertEquals(1000000000000000001L, JRT.toLong("1000000000000000001"));
+		assertEquals(999999999999999999L, JRT.toLong("999999999999999999"));
+		assertEquals(Long.MAX_VALUE, JRT.toLong("9223372036854775807"));
+		assertEquals(Long.MAX_VALUE - 1, JRT.toLong("9223372036854775806"));
+		assertEquals(Long.MIN_VALUE, JRT.toLong("-9223372036854775808"));
+		assertEquals(Long.MIN_VALUE + 1, JRT.toLong("-9223372036854775807"));
+		// Just outside the range, the value saturates instead of wrapping.
+		assertEquals(Long.MAX_VALUE, JRT.toLong("9223372036854775808"));
+		assertEquals(Long.MIN_VALUE, JRT.toLong("-9223372036854775809"));
+	}
+
+	@Test
 	public void testCompare2Uninitialized() {
 		// Uninitialized ==
 		assertTrue(JRT.compare2(new UninitializedObject(), new UninitializedObject(), 0));
