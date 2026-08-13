@@ -4217,6 +4217,11 @@ public class AwkParser {
 			}
 
 			getAst1().populateTuples(tuples);
+			if (!(getAst1() instanceof ArrayIndexAst)) {
+				// A bare scalar key ("x in a") is converted with the current
+				// CONVFMT, just like a bracketed subscript would be.
+				tuples.applySubsep(1);
+			}
 			populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
 			tuples.isIn();
 
@@ -4456,7 +4461,11 @@ public class AwkParser {
 	private final class ArrayIndexAst extends ScalarExpressionAst {
 
 		private ArrayIndexAst(AST exprAst, AST next) {
-			super(exprAst, next);
+			// Anchor to the first subscript expression's line: by the time this
+			// node is built the lexer may have read past the end of the line,
+			// and the APPLY_SUBSEP tuple must report errors where the subscript
+			// starts.
+			super(exprAst.getLineNo(), exprAst, next);
 		}
 
 		@Override
@@ -4469,9 +4478,10 @@ public class AwkParser {
 				++cnt;
 				ptr = ptr.getAst2();
 			}
-			if (cnt > 1) {
-				tuples.applySubsep(cnt);
-			}
+			// Convert the subscript to its string form now, with the CONVFMT in
+			// effect at this point of the execution: a later CONVFMT change must
+			// not retroactively alter existing keys.
+			tuples.applySubsep(cnt);
 			popSourceLineNumber(tuples);
 			return 1;
 		}

@@ -3663,7 +3663,7 @@ public class AVM implements VariableManager, Closeable {
 		if (count == 1) {
 			Object value = pop();
 			checkScalar(value);
-			push(jrt.toAwkString(value));
+			push(toSubscriptKey(value));
 			return;
 		}
 		StringBuilder sb = new StringBuilder();
@@ -3678,6 +3678,27 @@ public class AVM implements VariableManager, Closeable {
 			sb.insert(0, jrt.toAwkString(value));
 		}
 		push(sb.toString());
+	}
+
+	/**
+	 * Converts a single-dimension subscript to the key form the associative
+	 * arrays store. Integral numbers are kept as numbers: the array
+	 * implementations canonicalize them to {@code Long} anyway, and skipping
+	 * the string round-trip keeps integer-indexed loops fast. Every other
+	 * scalar is converted to a string with the CONVFMT currently in effect,
+	 * fixing the key from that point on.
+	 */
+	private Object toSubscriptKey(Object value) {
+		if (value instanceof Long || value instanceof Integer) {
+			return value;
+		}
+		if (value instanceof Double) {
+			Object scalar = JRT.toScalarNumber((Double) value);
+			if (scalar instanceof Long) {
+				return scalar;
+			}
+		}
+		return jrt.toAwkString(value);
 	}
 
 	private long beforeProfiledTuple(Tuple tuple, Opcode opcode) {

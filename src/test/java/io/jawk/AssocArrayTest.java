@@ -358,6 +358,72 @@ public class AssocArrayTest {
 	}
 
 	@Test
+	public void testSingleDimensionSubscriptKeyFixedAtCreationTime() throws Exception {
+		AwkTestSupport
+				.awkTest("single-dimension subscript keeps its key after CONVFMT changes")
+				.script(
+						"BEGIN { a = 12.153; test[a] = \"hi\"; CONVFMT = \"%.0f\"; a = 5;"
+								+ " for (i in test) printf (\"test[%s] = %s\\n\", i, test[i]) }")
+				.expectLines("test[12.153] = hi")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testMultiDimensionSubscriptKeyFixedAtCreationTime() throws Exception {
+		AwkTestSupport
+				.awkTest("multi-dimensional subscript keeps its key after CONVFMT changes")
+				.script(
+						"BEGIN { test[1.5, 2.5] = \"hi\"; CONVFMT = \"%.0f\";"
+								+ " for (i in test) { split(i, parts, SUBSEP); print parts[1], parts[2] } }")
+				.expectLines("1.5 2.5")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testSubscriptKeyUsesConvfmtInEffectAtCreation() throws Exception {
+		AwkTestSupport
+				.awkTest("subscript key is built with the CONVFMT in effect at creation")
+				.script(
+						"BEGIN { CONVFMT = \"%.2f\"; a[3.14159] = 1; CONVFMT = \"%.6g\";"
+								+ " for (k in a) print k }")
+				.expectLines("3.14")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testInOperatorConvertsKeyWithCurrentConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("in operator converts its key with the current CONVFMT")
+				.script(
+						"BEGIN { a[12.153] = 1; print (12.153 in a);"
+								+ " CONVFMT = \"%.0f\"; print (12.153 in a), ((12.153) in a) }")
+				.expectLines("1", "0 0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testDeleteConvertsKeyWithCurrentConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("delete converts its key with the current CONVFMT")
+				.script(
+						"BEGIN { a[12.153] = 1; CONVFMT = \"%.0f\"; delete a[12.153];"
+								+ " print length(a) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testIntegralSubscriptsUnaffectedByConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("integral subscripts are not affected by CONVFMT")
+				.script(
+						"BEGIN { n = split(\"aaa bbb\", arr); CONVFMT = \"%.2f\"; i = 1.0;"
+								+ " print arr[i], arr[2], (2 in arr), (2.0 in arr) }")
+				.expectLines("aaa bbb 1 1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testDeleteArrayKeepsInjectedMapBoundForLaterWrites() throws Exception {
 		Map<Object, Object> data = new LinkedHashMap<>();
 		data.put("a", "alpha");

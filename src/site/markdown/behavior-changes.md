@@ -20,6 +20,14 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- Array subscripts are now converted to their string key with the `CONVFMT` in effect at the
+  moment the subscript is used, as POSIX requires and gawk does. Previously a single-dimension
+  numeric subscript was stored as a number and converted lazily, so a later `CONVFMT` change
+  retroactively altered existing keys: `a = 12.153; test[a] = "hi"; CONVFMT = "%.0f"` now keeps
+  the key `12.153` when iterating with `for (i in test)` (previously the key became `12`). The
+  same conversion now also applies to the key of the `in` operator and `delete`, so after the
+  `CONVFMT` change above, `(12.153 in test)` is `0` because the lookup key converts to `12`.
+  Integer subscripts are unaffected ([#547](https://github.com/jawkio/jawk/issues/547)).
 - Numeric constants with exponents (`2e3`, `1.5E-2`, `.5e+1`, ...) are now lexed as single
   numbers, as POSIX requires: `print 2e3` prints `2000` (previously the lexer stopped before the
   exponent, so `2e3` parsed as `2` concatenated with the uninitialized variable `e3` and printed
