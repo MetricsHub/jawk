@@ -20,7 +20,17 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
-- Array subscripts are now converted to their string key with the `CONVFMT` in effect at the
+- Arithmetic on integral operands is now computed in exact 64-bit integers when the result fits:
+  `+`, `-`, `*`, an evenly-dividing `/`, `%`, unary `-` and `+`, `++`/`--`, and the corresponding
+  compound assignments keep all their digits beyond 2^53, and comparisons between two such values
+  are exact as well. `print 9007199254740992 + 1` now prints `9007199254740993` (previously
+  `9007199254740992`, which is also what gawk prints, as gawk computes in doubles unless run
+  with `-M`). A result that overflows 64 bits still falls back to floating point
+  (`print 9223372036854775806 + 2` prints `9223372036854775808`), and exponentiation and any
+  operation with a fractional or string operand are unchanged. Integer results carry no negative
+  zero: with `x = 0`, `1/-x` now prints `inf` (previously `-inf`). Programs precompiled with an
+  earlier version are rejected and must be recompiled, since they may carry constants folded in
+  floating point ([#537](https://github.com/jawkio/jawk/issues/537)).
   moment the subscript is used, as POSIX requires and gawk does. Previously a single-dimension
   numeric subscript was stored as a number and converted lazily, so a later `CONVFMT` change
   retroactively altered existing keys: `a = 12.153; test[a] = "hi"; CONVFMT = "%.0f"` now keeps
