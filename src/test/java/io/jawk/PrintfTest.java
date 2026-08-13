@@ -207,9 +207,11 @@ public class PrintfTest {
 		// scripts access to Java-only conversions such as %,d grouping.
 		ByteArrayOutputStream output = new ByteArrayOutputStream();
 		new Awk()
-				.script("BEGIN { printf \"%,d|%05.1f|%s\\n\", 1234567, 3.5, \"ok\" }")
+				.script("BEGIN { n = 1234566; printf \"%,d|%05.1f|%s|%s\\n\", n + 1, 3.5, \"ok\", novalue }")
 				.execute(new JavaStringFormatAwkSink(new PrintStream(output, true)));
-		assertEquals("1,234,567|003.5|ok\n", output.toString());
+		// The integral arithmetic result (a double at runtime) reaches
+		// String.format as a Long, and the uninitialized variable as null.
+		assertEquals("1,234,567|003.5|ok|null\n", output.toString());
 	}
 
 	@Test
