@@ -24,6 +24,7 @@ package io.jawk;
 
 import static org.junit.Assert.*;
 
+import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -358,20 +359,24 @@ public class AssocArrayTest {
 	}
 
 	@Test
-	public void testInjectMapVariableKeepsIntegralNumberKeys() throws Exception {
+	public void testInjectMapVariableKeepsNumberKeys() throws Exception {
 		Map<Object, Object> data = new LinkedHashMap<>();
 		data.put(Double.valueOf(1.0), "one");
 		data.put(Float.valueOf(2.0f), "two");
 		data.put(Short.valueOf((short) 3), "three");
+		data.put(BigInteger.valueOf(Long.MAX_VALUE), "big");
 
 		AwkTestSupport
-				.awkTest("injected Map integral Number keys stay reachable with same-typed subscripts")
-				.script("BEGIN{ print arr[d], (d in arr), arr[f], (f in arr), arr[s], (s in arr) }")
+				.awkTest("injected Map Number keys stay reachable with same-typed subscripts")
+				.script(
+						"BEGIN{ print arr[d], (d in arr), arr[f], (f in arr), arr[s], (s in arr),"
+								+ " arr[b], (b in arr) }")
 				.preassign("arr", data)
 				.preassign("d", Double.valueOf(1.0))
 				.preassign("f", Float.valueOf(2.0f))
 				.preassign("s", Short.valueOf((short) 3))
-				.expectLines("one 1 two 1 three 1")
+				.preassign("b", BigInteger.valueOf(Long.MAX_VALUE))
+				.expectLines("one 1 two 1 three 1 big 1")
 				.runAndAssert();
 	}
 

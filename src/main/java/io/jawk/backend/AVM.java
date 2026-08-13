@@ -3682,19 +3682,24 @@ public class AVM implements VariableManager, Closeable {
 
 	/**
 	 * Converts a single-dimension subscript to the key form the associative
-	 * arrays store. Integral numbers of any {@code Number} type (JSR-223
-	 * callers can bind any of them) pass through unchanged: the array
-	 * implementations canonicalize them to {@code Long}, so skipping the
-	 * string round-trip keeps integer-indexed loops fast, and injected plain
-	 * {@code Map} variables keep their exact key semantics. Every other
-	 * scalar is converted to a string with the CONVFMT currently in effect,
-	 * fixing the key from that point on.
+	 * arrays store. A non-integral {@code Double} — the only floating-point
+	 * type AWK code can produce — is converted to a string with the CONVFMT
+	 * currently in effect, fixing the key from that point on, and so is any
+	 * non-numeric scalar. Every other {@code Number} passes through
+	 * unchanged: integral values are canonicalized to {@code Long} by the
+	 * array implementations (skipping the string round-trip keeps
+	 * integer-indexed loops fast), and the remaining {@code Number} types
+	 * can only be bound by Java callers, whose injected plain {@code Map}
+	 * variables keep their exact key semantics.
 	 */
 	private Object toSubscriptKey(Object value) {
-		if (value instanceof Long || value instanceof Integer || value instanceof Short || value instanceof Byte) {
+		if (value instanceof Long || value instanceof Integer) {
 			return value;
 		}
-		if (value instanceof Number && JRT.toScalarNumber(((Number) value).doubleValue()) instanceof Long) {
+		if (value instanceof Double) {
+			return JRT.toScalarNumber(((Double) value).doubleValue()) instanceof Long ? value : jrt.toAwkString(value);
+		}
+		if (value instanceof Number) {
 			return value;
 		}
 		return jrt.toAwkString(value);
