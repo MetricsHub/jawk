@@ -20,10 +20,13 @@ Whenever required, when you add code or when you modify code that is not covered
 
 Compatibility tests are run with `mvn verify` to assess the compatibility with other implementations of AWK. These tests are run with the Maven failsafe plugin and results are stored in the ./target/failsafe-reports directory.
 
-All new or updated unit tests must use the helper methods in
-`org.metricshub.jawk.AwkTestSupport`. The builders in that class encapsulate the
-correct Jawk setup, assertion flow, and temporary file handling, so reusing
-them keeps the test suite consistent and reliable.
+All new or updated unit tests that run AWK scripts must use the helper methods
+in `io.jawk.AwkTestSupport`. The builders in that class encapsulate the correct
+Jawk setup, assertion flow, and temporary file handling, so reusing them keeps
+the test suite consistent and reliable. `AwkTestSupport` is ONLY for running
+AWK scripts and assessing their results: unit tests for regular Java methods
+call those methods directly with plain JUnit assertions, and no non-script
+assertion helpers may be added to `AwkTestSupport`.
 
 ## Code quality reports
 
