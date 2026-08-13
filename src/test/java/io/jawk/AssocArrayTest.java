@@ -425,6 +425,18 @@ public class AssocArrayTest {
 	}
 
 	@Test
+	public void testInOperatorConvertsKeyAfterArrayOperandEvaluation() throws Exception {
+		AwkTestSupport
+				.awkTest("in operator converts its key after the array operand is evaluated")
+				.script(
+						"function f() { CONVFMT = \"%.0f\"; return \"x\" }"
+								+ " BEGIN { outer[\"x\"][12.153] = 1; CONVFMT = \"%.6g\";"
+								+ " print (12.153 in outer[f()]) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testDeleteConvertsKeyWithCurrentConvfmt() throws Exception {
 		AwkTestSupport
 				.awkTest("delete converts its key with the current CONVFMT")

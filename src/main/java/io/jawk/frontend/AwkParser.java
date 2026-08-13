@@ -4216,13 +4216,26 @@ public class AwkParser {
 				throw new SemanticException("Expecting an array for rhs of IN. Got an expression.");
 			}
 
-			getAst1().populateTuples(tuples);
-			if (!(getAst1() instanceof ArrayIndexAst)) {
-				// A bare scalar key ("x in a") is converted with the current
-				// CONVFMT, just like a bracketed subscript would be.
+			AST keyAst = getAst1();
+			boolean singleKey = !(keyAst instanceof ArrayIndexAst) || keyAst.getAst2() == null;
+			if (singleKey) {
+				// A single key is converted with the CONVFMT in effect when the
+				// operator executes, i.e. after the array operand has been
+				// evaluated (it may have side effects), just like gawk: evaluate
+				// the raw key, evaluate the array operand, then convert the key
+				// underneath it.
+				AST rawKeyAst = keyAst instanceof ArrayIndexAst ? keyAst.getAst1() : keyAst;
+				rawKeyAst.populateTuples(tuples);
+				populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
+				tuples.swap();
 				tuples.applySubsep(1);
+				tuples.swap();
+			} else {
+				// A multi-dimensional key joins its components with SUBSEP as it
+				// is built, before the array operand is evaluated.
+				keyAst.populateTuples(tuples);
+				populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
 			}
-			populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
 			tuples.isIn();
 
 			popSourceLineNumber(tuples);
