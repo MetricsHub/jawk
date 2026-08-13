@@ -384,6 +384,19 @@ public class AssocArrayTest {
 	}
 
 	@Test
+	public void testArbitraryPrecisionIntegerSubscriptsKeepExactDigits() throws Exception {
+		AwkTestSupport
+				.awkTest("arbitrary-precision integer subscripts key as their exact digits")
+				.script(
+						"BEGIN { a[n1] = 1; a[n2] = 2; print length(a),"
+								+ " (\"9223372036854775808\" in a), (\"9223372036854775809\" in a) }")
+				.preassign("n1", new BigInteger("9223372036854775808"))
+				.preassign("n2", new BigInteger("9223372036854775809"))
+				.expectLines("2 1 1")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testSingleDimensionSubscriptKeyFixedAtCreationTime() throws Exception {
 		AwkTestSupport
 				.awkTest("single-dimension subscript keeps its key after CONVFMT changes")

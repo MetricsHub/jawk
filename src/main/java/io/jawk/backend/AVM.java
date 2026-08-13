@@ -3715,10 +3715,14 @@ public class AVM implements VariableManager, Closeable {
 		if (value instanceof Number) {
 			try {
 				BigDecimal decimal = new BigDecimal(value.toString());
-				if (decimal.stripTrailingZeros().scale() <= 0
-						&& decimal.compareTo(MIN_LONG_SUBSCRIPT) >= 0
-						&& decimal.compareTo(MAX_LONG_SUBSCRIPT) <= 0) {
-					return value;
+				if (decimal.stripTrailingZeros().scale() <= 0) {
+					if (decimal.compareTo(MIN_LONG_SUBSCRIPT) >= 0 && decimal.compareTo(MAX_LONG_SUBSCRIPT) <= 0) {
+						return value;
+					}
+					// An integral value beyond the signed 64-bit range keys as
+					// its exact digits, without a double round-trip that would
+					// collide nearby values.
+					return decimal.toBigInteger().toString();
 				}
 			} catch (NumberFormatException e) { // NOPMD - EmptyCatchBlock: NaN/infinity converts as a string
 			}
