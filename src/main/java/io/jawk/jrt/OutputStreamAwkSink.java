@@ -32,7 +32,8 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 /**
  * Text {@link AwkSink} backed by a {@link PrintStream}.
  */
-public final class OutputStreamAwkSink extends AwkSink {
+@SuppressFBWarnings(value = "CT_CONSTRUCTOR_THROW", justification = "No security-sensitive state; finalizer attacks are not a concern here.")
+public class OutputStreamAwkSink extends AwkSink {
 
 	private final PrintStream printStream;
 
@@ -98,8 +99,8 @@ public final class OutputStreamAwkSink extends AwkSink {
 	}
 
 	@Override
-	public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
-		printStream.print(formatPrintfResult(format, values));
+	public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
+		printStream.print(sprintf(convfmt, format, values));
 	}
 
 	@Override

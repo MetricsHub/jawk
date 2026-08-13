@@ -119,7 +119,7 @@ Differences with Traditional AWK
 Jawk aims to be a practical AWK implementation for JVM environments, but it is not a byte-for-byte clone of every historical AWK behavior. Some differences are deliberate and come from the way Jawk integrates with Java:
 
 - Regular expression behavior follows Java's regex engine, which may differ from traditional AWK regexes in edge cases. Notably, alternation picks the first matching branch rather than the POSIX longest one, which can affect `match()`, field splitting with `patsplit()`, and similar content-driven matching: order alternatives longest-first.
-- `printf()` and `sprintf()` try to replicate C-style formatting but may have differences due to Java's formatting capabilities and limitations.
+- `printf()` and `sprintf()` implement the POSIX AWK conversions with gawk's semantics, including `CONVFMT`-based `%s` conversion, dynamic `*` width and precision, and gawk's out-of-range integer handling; only a few edge cases (`%a` notation, `%c` locale independence, the sign of NaN) follow Java's platform rules.
 - Some floating-point edge cases may differ due to Java's handling of floating-point arithmetic and representation.
 - Jawk resolves user-defined function calls during compilation. It does not defer all of that work to runtime.
 - The date and time functions (`mktime()`, `strftime()`) follow the Java platform's time zone data and calendar rules rather than the C library's, which differs from gawk in a few edge cases.

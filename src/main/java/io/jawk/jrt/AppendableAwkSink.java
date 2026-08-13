@@ -89,10 +89,10 @@ public final class AppendableAwkSink extends AwkSink {
 	}
 
 	@Override
-	public void printf(String ofs, String ors, String ofmt, String format, Object... values)
+	public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values)
 			throws IOException {
 		synchronized (lock) {
-			appendable.append(formatPrintfResult(format, values));
+			appendable.append(sprintf(convfmt, format, values));
 		}
 	}
 

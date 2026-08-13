@@ -188,6 +188,29 @@ The date and time functions (`mktime()`, `strftime()`) follow the Java platform'
 - A positive `mktime()` DST hint applies the zone's current daylight adjustment; zones without daylight saving time ignore the hint.
 - `strftime()`'s `%Z` prints the zone's current designation (the JDK's time zone data records historical offsets and DST rules, but not historical zone names), and timestamps before the common era use the JDK's year numbering rather than astronomical (negative) years.
 
+${esc.h}${esc.h}${esc.h} printf and sprintf formatting
+
+`printf` and `sprintf` implement the POSIX AWK conversions with gawk's semantics: `%s` converts
+numbers with `CONVFMT` (integral values print without a fractional part), `%c` prints the
+character of a numeric code point or the first character of a string, `%i` is an alias for `%d`,
+dynamic `*` width and precision consume arguments (a negative width left-justifies, a negative
+precision means no precision), gawk positional specifiers (`%2$s`) and the `'` grouping flag are
+honored, out-of-range integers wrap or fall back exactly as in gawk, halfway cases round to even
+(`printf "%.0f", 2.5` prints `2`), too few arguments is a fatal error, and unknown conversion
+specifiers print verbatim without consuming an argument.
+
+A few edge cases follow Java's platform rules rather than the C library's:
+
+- `%c` is locale-independent: a numeric argument selects the Unicode code point (so
+  `printf "%c", 233` always prints `é`), where C-locale gawk emits the raw byte. Values that are
+  not valid code points are truncated to a UTF-16 char. Field widths and `%s` precision count
+  characters (code points) regardless of locale, like gawk in a multibyte locale — except that
+  gawk pads `%c` by bytes, which Jawk does not reproduce.
+- `%a`/`%A` use Java's hexadecimal floating-point notation (`0x1.0p0` where glibc prints
+  `0x1p+0`); gawk itself documents these conversions as C-library dependent.
+- NaN always prints as `nan`: Java does not track the sign of NaN, so gawk's occasional `-nan`
+  is rendered without a sign.
+
 ${esc.h}${esc.h}${esc.h} Range patterns
 
 Range patterns (`begpat, endpat`) evaluate their two conditions lazily, as POSIX requires: the start condition is evaluated only while outside the range, and the end condition only once the range has started — including on the very record that starts it, so a range can begin and end on the same record. Conditions with side effects, such as `a++ == 2, a++ == 5`, therefore behave exactly as in gawk and One True Awk: each condition's side effects run only on the records where that condition is actually tested.

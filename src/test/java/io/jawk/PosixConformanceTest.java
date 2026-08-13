@@ -685,7 +685,6 @@ public class PosixConformanceTest {
 
 	@Test
 	public void posix94PrintfStarWidthPrecision() throws Exception {
-		Assume.assumeTrue("Dynamic width/precision in printf requires printf4j support", false);
 		AwkTestSupport
 				.awkTest("POSIX 9.4 printf star width and precision")
 				.script("BEGIN{ printf \"%*.*f\\n\", 6, 2, 3.14159 }")

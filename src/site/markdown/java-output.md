@@ -66,7 +66,7 @@ public final class CollectingSink extends AwkSink {
     }
 
     @Override
-    public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+    public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
         // store format + values however your application wants
     }
 
@@ -100,6 +100,7 @@ public final class CollectingSink extends AwkSink {
 >   | `ofs` | `OFS` | Output Field Separator, inserted between values |
 >   | `ors` | `ORS` | Output Record Separator, appended after the record |
 >   | `ofmt` | `OFMT` | Default numeric output format |
+>   | `convfmt` | `CONVFMT` | Number-to-string conversion format used by `%s` |
 >   | `format` | — | The AWK format string |
 >   | `values` | — | The AWK values to be formatted |
 
@@ -126,10 +127,22 @@ awk.script("{ print $1, $2 }")
 
 ### Built-In Sink Implementations
 
-Jawk provides two built-in `AwkSink` implementations:
+Jawk provides three built-in `AwkSink` implementations:
 
 - **`AwkSink.from(PrintStream)`** / **`AwkSink.from(PrintStream, Locale)`** creates a sink that renders output to a `PrintStream`. This is the default behavior.
 - **`AwkSink.from(Appendable)`** / **`AwkSink.from(Appendable, Locale)`** renders output to any `Appendable` such as `StringBuilder` or `StringWriter`.
+- **`JavaStringFormatAwkSink`** renders `printf`/`sprintf` with Java's standard
+  `String.format(...)` instead of AWK's formatting rules, giving scripts access to Java-only
+  conversions (`%,d` grouping, `%(d` negative parentheses, `%tY` date/time, etc.) and faster
+  formatting. Conversions must match the value's Java type: AWK integral numbers arrive as
+  `Long`, other numbers as `Double`, and text as `String`, so `%d` requires an integral value
+  and `%f` a floating-point one.
+
+  ```java
+  awk.script("BEGIN { printf \"%,d\\n\", 1234567 }")
+          .execute(new JavaStringFormatAwkSink(System.out));
+  // prints: 1,234,567
+  ```
 
 The overloads without a `Locale` parameter default to `Locale.US`.
 

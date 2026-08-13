@@ -25,9 +25,7 @@ package io.jawk.jrt;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.math.BigDecimal;
 import java.util.Locale;
-import org.metricshub.printf4j.Printf4J;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 /**
@@ -85,11 +83,13 @@ public abstract class AwkSink {
 	 * @param ofs output field separator
 	 * @param ors output record separator
 	 * @param ofmt numeric output format available to the sink
+	 * @param convfmt number-to-string conversion format ({@code CONVFMT}),
+	 *        used by {@code %s} to convert numeric values the way AWK does
 	 * @param format format string passed to {@code printf}
 	 * @param values arguments supplied after the format string
 	 * @throws IOException if the sink cannot write the output
 	 */
-	public abstract void printf(String ofs, String ors, String ofmt, String format, Object... values)
+	public abstract void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values)
 			throws IOException;
 
 	/**
@@ -124,7 +124,7 @@ public abstract class AwkSink {
 	 * <p>
 	 * This singleton is safe to share across all JRT/AVM instances because
 	 * its {@link #print(String, String, String, Object...)},
-	 * {@link #printf(String, String, String, String, Object...)}, and
+	 * {@link #printf(String, String, String, String, String, Object...)}, and
 	 * {@link #flush()} operations are all no-ops.
 	 */
 	public static final AwkSink NOP_SINK = new NoOpAwkSink();
@@ -141,7 +141,7 @@ public abstract class AwkSink {
 		}
 
 		@Override
-		public void printf(String ofs, String ors, String ofmt, String format, Object... values) {
+		public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
 			// discard
 		}
 	}
@@ -249,104 +249,28 @@ public abstract class AwkSink {
 	 * @return the textual representation AWK would print for this operand
 	 */
 	protected final String formatPrintArgument(Object value, String ofmt) {
-		return formatOutputValue(value, ofmt, locale);
+		return AwkPrintf.toAwkString(value, ofmt, locale);
 	}
 
 	/**
-	 * Converts a {@code print} operand that renders as a numeric string into a
-	 * numeric form.
-	 * <p>
-	 * Historical versions of Jawk applied this conversion in plain {@code print},
-	 * which is not what POSIX AWK does: {@code print} outputs string values
-	 * verbatim, and only actual numbers are formatted with {@code OFMT}. The
-	 * built-in sinks therefore no longer call this helper; it is preserved only
-	 * for compatibility with custom sinks compiled against earlier releases.
-	 * </p>
-	 *
-	 * @param value operand to normalize
-	 * @return the normalized value, either unchanged or converted to a numeric form
-	 * @deprecated Plain {@code print} does not numerically coerce string values;
-	 *             use the operand as-is, or {@link #formatPrintArgument(Object, String)}
-	 *             to render it the way {@code print} would.
-	 */
-	@Deprecated
-	protected final Object normalizePrintArgument(Object value) {
-		if (value == null || value instanceof Number) {
-			return value;
-		}
-		try {
-			return Double.valueOf(new BigDecimal(value.toString()).doubleValue());
-		} catch (NumberFormatException e) {
-			return value;
-		}
-	}
-
-	/**
-	 * Formats a string in the same way as AWK's {@code sprintf()} built-in.
+	 * Formats a string in the same way as AWK's {@code sprintf()} built-in,
+	 * converting numeric {@code %s} operands with the supplied {@code CONVFMT}
+	 * value.
 	 * <p>
 	 * Subclasses may override this method to customize formatting. The default
-	 * implementation delegates to {@link Printf4J#sprintf(Locale, String, Object...)}.
-	 * Because {@link #printf(String, String, String, String, Object...)} uses this
-	 * method internally, overriding it ensures that both {@code printf} and
-	 * {@code sprintf} produce consistent output.
+	 * implementation delegates to
+	 * {@link AwkPrintf#sprintf(Locale, String, String, Object...)}. The
+	 * built-in sinks render {@code printf} output through this method, so
+	 * overriding it keeps {@code printf} and {@code sprintf} consistent.
 	 * </p>
 	 *
+	 * @param convfmt number-to-string conversion format ({@code CONVFMT})
 	 * @param format format string
 	 * @param values arguments supplied after the format string
 	 * @return formatted text
 	 */
-	public String sprintf(String format, Object... values) {
+	public String sprintf(String convfmt, String format, Object... values) {
 		Object[] safeValues = values == null ? new Object[0] : values;
-		return Printf4J.sprintf(locale, format, safeValues);
-	}
-
-	/**
-	 * Formats one {@code printf} result string using this sink's locale.
-	 *
-	 * @param format format string passed to {@code printf}
-	 * @param values arguments supplied after the format string
-	 * @return formatted text
-	 */
-	protected final String formatPrintfResult(String format, Object... values) {
-		return sprintf(format, values);
-	}
-
-	/**
-	 * Formats one already-normalized AWK output value.
-	 *
-	 * @param value value to format
-	 * @param ofmt numeric output format
-	 * @param locale locale used for numeric formatting
-	 * @return textual output for {@code value}
-	 */
-	public static String formatOutputValue(Object value, String ofmt, Locale locale) {
-		if (value == null) {
-			return "";
-		}
-		if (!(value instanceof Number)) {
-			return value.toString();
-		}
-
-		double number = ((Number) value).doubleValue();
-		if (JRT.isActuallyLong(number)) {
-			return Long.toString((long) Math.rint(number));
-		}
-
-		try {
-			String rendered = String.format(locale, ofmt, number);
-			if ((rendered.indexOf('.') > -1 || rendered.indexOf(',') > -1)
-					&& rendered.indexOf('e') == -1
-					&& rendered.indexOf('E') == -1) {
-				while (rendered.endsWith("0")) {
-					rendered = rendered.substring(0, rendered.length() - 1);
-				}
-				if (rendered.endsWith(".") || rendered.endsWith(",")) {
-					rendered = rendered.substring(0, rendered.length() - 1);
-				}
-			}
-			return rendered;
-		} catch (java.util.UnknownFormatConversionException e) {
-			return "";
-		}
+		return AwkPrintf.sprintf(locale, convfmt, format, safeValues);
 	}
 }
