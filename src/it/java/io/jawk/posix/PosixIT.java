@@ -859,7 +859,7 @@ public class PosixIT {
 		AwkTestSupport
 				.awkTest("82. Numeric comparison with numeric strings")
 				.script("BEGIN{print (10<\"2\")?\"Y\":\"N\"; print (10<(\" 2\"))?\"Y\":\"N\"}")
-				.expectLines("N", "N")
+				.expectLines("Y", "N")
 				.runAndAssert();
 	}
 
