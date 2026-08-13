@@ -389,10 +389,12 @@ public class AssocArrayTest {
 				.awkTest("arbitrary-precision integer subscripts key as their exact digits")
 				.script(
 						"BEGIN { a[n1] = 1; a[n2] = 2; print length(a),"
-								+ " (\"9223372036854775808\" in a), (\"9223372036854775809\" in a) }")
+								+ " (\"9223372036854775808\" in a), (\"9223372036854775809\" in a);"
+								+ " b[n1, 0] = 1; b[n2, 0] = 2; print length(b),"
+								+ " ((\"9223372036854775808\" SUBSEP \"0\") in b) }")
 				.preassign("n1", new BigInteger("9223372036854775808"))
 				.preassign("n2", new BigInteger("9223372036854775809"))
-				.expectLines("2 1 1")
+				.expectLines("2 1 1", "2 1")
 				.runAndAssert();
 	}
 

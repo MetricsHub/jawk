@@ -3679,15 +3679,25 @@ public class AVM implements VariableManager, Closeable {
 		StringBuilder sb = new StringBuilder();
 		Object value = pop();
 		checkScalar(value);
-		sb.append(jrt.toAwkString(value));
+		sb.append(toSubscriptComponentString(value));
 		String subsep = jrt.toAwkString(jrt.getSUBSEPVar());
 		for (int i = 1; i < count; i++) {
 			sb.insert(0, subsep);
 			value = pop();
 			checkScalar(value);
-			sb.insert(0, jrt.toAwkString(value));
+			sb.insert(0, toSubscriptComponentString(value));
 		}
 		push(sb.toString());
+	}
+
+	/**
+	 * Converts one component of a multi-dimensional subscript to the string
+	 * joined with SUBSEP, applying the same rules as {@link #toSubscriptKey}
+	 * so beyond-range integral values keep their exact digits.
+	 */
+	private String toSubscriptComponentString(Object value) {
+		Object key = toSubscriptKey(value);
+		return key instanceof String ? (String) key : jrt.toAwkString(key);
 	}
 
 	/**
