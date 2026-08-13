@@ -1652,7 +1652,18 @@ public enum Opcode {
 	 * Stack before: ... <br>
 	 * Stack after: ...
 	 */
-	CONDITION_PAIR_LEAVE;
+	CONDITION_PAIR_LEAVE,
+
+	/**
+	 * Convert a list of array indices located under the top stack element to
+	 * their concatenated SUBSEP key, leaving the top element in place. Used by
+	 * the "in" operator, whose key must be converted with the CONVFMT and
+	 * SUBSEP in effect after the array operand has been evaluated.
+	 * <p>
+	 * Stack before: i1, i2, ..., in, top <br>
+	 * Stack after: "i1SUBSEPi2SUBSEP...in", top
+	 */
+	APPLY_SUBSEP_UNDER_TOP;
 
 	private static final Opcode[] VALUES = values();
 

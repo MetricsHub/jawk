@@ -50,7 +50,10 @@ import io.jawk.jrt.JRT;
  */
 public class AwkTuples implements Serializable {
 
-	private static final long serialVersionUID = 3L;
+	// Bumped to 4 when single-dimension subscripts started emitting
+	// APPLY_SUBSEP: older tuple streams lack the conversion and must be
+	// recompiled.
+	private static final long serialVersionUID = 4L;
 
 	/** Address manager */
 	private final AddressManager addressManager = new AddressManager();
@@ -1789,6 +1792,17 @@ public class AwkTuples implements Serializable {
 	 */
 	public void applySubsep(int count) {
 		queue.add(new Tuple.CountTuple(Opcode.APPLY_SUBSEP, count));
+	}
+
+	/**
+	 * <p>
+	 * applySubsepUnderTop.
+	 * </p>
+	 *
+	 * @param count a int
+	 */
+	public void applySubsepUnderTop(int count) {
+		queue.add(new Tuple.CountTuple(Opcode.APPLY_SUBSEP_UNDER_TOP, count));
 	}
 
 	/**

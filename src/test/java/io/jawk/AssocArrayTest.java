@@ -38,6 +38,20 @@ import io.jawk.jrt.AwkRuntimeException;
 public class AssocArrayTest {
 
 	@Test
+	public void testIsIntegralNumberKey() {
+		assertTrue(AssocArray.isIntegralNumberKey(Long.valueOf(5L)));
+		assertTrue(AssocArray.isIntegralNumberKey(Integer.valueOf(5)));
+		assertTrue(AssocArray.isIntegralNumberKey(Double.valueOf(5.0)));
+		assertTrue(AssocArray.isIntegralNumberKey(Double.valueOf(-0.0)));
+		assertFalse(AssocArray.isIntegralNumberKey(Double.valueOf(5.5)));
+		assertFalse(AssocArray.isIntegralNumberKey(Double.valueOf(0x1p63)));
+		assertFalse(AssocArray.isIntegralNumberKey(Double.valueOf(Double.NaN)));
+		assertFalse(AssocArray.isIntegralNumberKey(Float.valueOf(5.0f)));
+		assertFalse(AssocArray.isIntegralNumberKey("5"));
+		assertFalse(AssocArray.isIntegralNumberKey(null));
+	}
+
+	@Test
 	public void testInOperatorWithNumericAndStringKeys() {
 		AssocArray array = AssocArray.createHash();
 		array.put(1L, "one");
@@ -355,6 +369,131 @@ public class AssocArrayTest {
 				.runAndAssert();
 
 		assertTrue(data.isEmpty());
+	}
+
+	@Test
+	public void testInjectMapVariableKeepsIntegralDoubleKeys() throws Exception {
+		Map<Object, Object> data = new LinkedHashMap<>();
+		data.put(Double.valueOf(1.0), "one");
+
+		AwkTestSupport
+				.awkTest("injected Map Double keys stay reachable with a Double subscript")
+				.script("BEGIN{ print arr[idx], (idx in arr) }")
+				.preassign("arr", data)
+				.preassign("idx", Double.valueOf(1.0))
+				.expectLines("one 1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testSingleDimensionSubscriptKeyFixedAtCreationTime() throws Exception {
+		AwkTestSupport
+				.awkTest("single-dimension subscript keeps its key after CONVFMT changes")
+				.script(
+						"BEGIN { a = 12.153; test[a] = \"hi\"; CONVFMT = \"%.0f\"; a = 5;"
+								+ " for (i in test) printf (\"test[%s] = %s\\n\", i, test[i]) }")
+				.expectLines("test[12.153] = hi")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testMultiDimensionSubscriptKeyFixedAtCreationTime() throws Exception {
+		AwkTestSupport
+				.awkTest("multi-dimensional subscript keeps its key after CONVFMT changes")
+				.script(
+						"BEGIN { test[1.5, 2.5] = \"hi\"; CONVFMT = \"%.0f\";"
+								+ " for (i in test) { split(i, parts, SUBSEP); print parts[1], parts[2] } }")
+				.expectLines("1.5 2.5")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testSubscriptKeyUsesConvfmtInEffectAtCreation() throws Exception {
+		AwkTestSupport
+				.awkTest("subscript key is built with the CONVFMT in effect at creation")
+				.script(
+						"BEGIN { CONVFMT = \"%.2f\"; a[3.14159] = 1; CONVFMT = \"%.6g\";"
+								+ " for (k in a) print k }")
+				.expectLines("3.14")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testInOperatorConvertsKeyWithCurrentConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("in operator converts its key with the current CONVFMT")
+				.script(
+						"BEGIN { a[12.153] = 1; print (12.153 in a);"
+								+ " CONVFMT = \"%.0f\"; print (12.153 in a), ((12.153) in a) }")
+				.expectLines("1", "0 0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testInOperatorConvertsKeyAfterArrayOperandEvaluation() throws Exception {
+		AwkTestSupport
+				.awkTest("in operator converts its key after the array operand is evaluated")
+				.script(
+						"function f() { CONVFMT = \"%.0f\"; return \"x\" }"
+								+ " BEGIN { outer[\"x\"][12.153] = 1; CONVFMT = \"%.6g\";"
+								+ " print (12.153 in outer[f()]) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testInOperatorJoinsMultidimKeyAfterArrayOperandEvaluation() throws Exception {
+		AwkTestSupport
+				.awkTest("in operator joins a multi-dimensional key after the array operand is evaluated")
+				.script(
+						"function f() { CONVFMT = \"%.0f\"; return \"x\" }"
+								+ " BEGIN { outer[\"x\"][1.2, 2.3] = 1; CONVFMT = \"%.6g\";"
+								+ " print ((1.2, 2.3) in outer[f()]) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testNonIntegralFloatSubscriptConvertsAtCreation() throws Exception {
+		AwkTestSupport
+				.awkTest("non-integral Float subscript keys as its CONVFMT string at creation")
+				.script("BEGIN { a[f] = 1; CONVFMT = \"%.0f\"; for (k in a) print k; print (12.153 in a) }")
+				.preassign("f", Float.valueOf(12.153f))
+				.expectLines("12.153", "0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testDeleteConvertsKeyWithCurrentConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("delete converts its key with the current CONVFMT")
+				.script(
+						"BEGIN { a[12.153] = 1; CONVFMT = \"%.0f\"; delete a[12.153];"
+								+ " print length(a) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testOutOfLongRangeIntegralSubscriptKeysAsExactDigits() throws Exception {
+		AwkTestSupport
+				.awkTest("integral subscript beyond the signed 64-bit range keys as its exact digits")
+				.script(
+						"BEGIN { a[2^63] = 1; for (i in a) print i; print (2^63 in a);"
+								+ " CONVFMT = \"%.0f\"; print (2^63 in a) }")
+				.expectLines("9223372036854775808", "1", "1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testIntegralSubscriptsUnaffectedByConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("integral subscripts are not affected by CONVFMT")
+				.script(
+						"BEGIN { n = split(\"aaa bbb\", arr); CONVFMT = \"%.2f\"; i = 1.0;"
+								+ " print arr[i], arr[2], (2 in arr), (2.0 in arr) }")
+				.expectLines("aaa bbb 1 1")
+				.runAndAssert();
 	}
 
 	@Test

@@ -2358,6 +2358,15 @@ public class AVM implements VariableManager, Closeable {
 					position.next();
 					break;
 				}
+				case APPLY_SUBSEP_UNDER_TOP: {
+					// stack[0] = value to keep on top (the "in" array operand)
+					// stack[1..count] = array indices to convert
+					Object top = pop();
+					execApplySubsep((CountTuple) tuple);
+					push(top);
+					position.next();
+					break;
+				}
 				case DELETE_ARRAY_ELEMENT: {
 					// arg[0] = offset
 					// arg[1] = isGlobal
@@ -3663,7 +3672,12 @@ public class AVM implements VariableManager, Closeable {
 		if (count == 1) {
 			Object value = pop();
 			checkScalar(value);
-			push(jrt.toAwkString(value));
+			// An integral number is already in the form the array
+			// implementations canonicalize to a Long key, so it skips the
+			// CONVFMT string round-trip; every other scalar converts to a
+			// string with the CONVFMT currently in effect, fixing the key
+			// from that point on.
+			push(AssocArray.isIntegralNumberKey(value) ? value : jrt.toAwkString(value));
 			return;
 		}
 		StringBuilder sb = new StringBuilder();

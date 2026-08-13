@@ -1559,6 +1559,11 @@ public class AwkParser {
 	 *        – false ⇒ disallow “in”
 	 */
 	AST EXPRESSION_LIST(boolean allowComparisons, boolean allowInKeyword) throws IOException {
+		// Captured before parsing: the list node's line is where its first
+		// expression starts, so a parenthesized group rebuilt into a
+		// multi-dimensional subscript reports errors there.
+		int lineNo = currentSourceLineNumber();
+
 		// 1) Parse exactly one assignment expression.
 		// Passing `allowComparisons` will decide if ‘>’/’<’ become comparisons or redirectors.
 		AST expr = ASSIGNMENT_EXPRESSION(null, allowComparisons, allowInKeyword, /* allowMultidim= */ false);
@@ -1570,11 +1575,11 @@ public class AwkParser {
 			optNewline(); // allow newline after comma (AWK style)
 
 			AST rest = EXPRESSION_LIST(allowComparisons, allowInKeyword);
-			return new FunctionCallParamListAst(expr, rest);
+			return new FunctionCallParamListAst(lineNo, expr, rest);
 		}
 
 		// 3) No comma ⇒ this single expression is a one‐element list.
-		return new FunctionCallParamListAst(expr, null);
+		return new FunctionCallParamListAst(lineNo, expr, null);
 	}
 
 	private AST ASSIGNMENT_EXPRESSION(
@@ -1583,6 +1588,10 @@ public class AwkParser {
 			boolean allowInKeyword,
 			boolean allowMultidimIndices)
 			throws IOException {
+		// Captured before parsing: if the expression turns out to be the first
+		// component of a multi-dimensional subscript group, the group's line is
+		// where this component starts.
+		int startLineNo = currentSourceLineNumber();
 		AST ternaryExpression = TERNARY_EXPRESSION(left, allowComparison, allowInKeyword, allowMultidimIndices);
 		AST result = ternaryExpression;
 		if (token == Token.EQUALS
@@ -1612,11 +1621,12 @@ public class AwkParser {
 		if (allowMultidimIndices && token == Token.COMMA) {
 			lexer();
 			optNewline();
+			int restLineNo = currentSourceLineNumber();
 			AST rest = ASSIGNMENT_EXPRESSION(null, allowComparison, allowInKeyword, true);
 			if (rest instanceof ArrayIndexAst) {
-				return new ArrayIndexAst(result, rest);
+				return new ArrayIndexAst(startLineNo, result, rest);
 			}
-			return new ArrayIndexAst(result, new ArrayIndexAst(rest, null));
+			return new ArrayIndexAst(startLineNo, result, new ArrayIndexAst(restLineNo, rest, null));
 		}
 		return result;
 	}
@@ -2091,13 +2101,17 @@ public class AwkParser {
 
 	// ARRAY_INDEX : ASSIGNMENT_EXPRESSION [, ARRAY_INDEX]
 	AST ARRAY_INDEX(boolean allowComparison, boolean allowInKeyword) throws IOException {
+		// Capture the line before parsing the expression: the expression AST can
+		// be a shared identifier node carrying its first occurrence's line, and
+		// by the end of the expression the lexer may have read past the line.
+		int lineNo = currentSourceLineNumber();
 		AST exprAst = ASSIGNMENT_EXPRESSION(null, allowComparison, allowInKeyword, false);
 		if (token == Token.COMMA) {
 			optNewline();
 			lexer();
-			return new ArrayIndexAst(exprAst, ARRAY_INDEX(allowComparison, allowInKeyword));
+			return new ArrayIndexAst(lineNo, exprAst, ARRAY_INDEX(allowComparison, allowInKeyword));
 		} else {
-			return new ArrayIndexAst(exprAst, null);
+			return new ArrayIndexAst(lineNo, exprAst, null);
 		}
 	}
 
@@ -2447,7 +2461,7 @@ public class AwkParser {
 	// it turned out to be, when the parenthesized group is followed by "in"
 	private AST toMultidimIndex(FunctionCallParamListAst list) {
 		AST rest = list.getAst2() == null ? null : toMultidimIndex((FunctionCallParamListAst) list.getAst2());
-		return new ArrayIndexAst(list.getAst1(), rest);
+		return new ArrayIndexAst(list.getLineNo(), list.getAst1(), rest);
 	}
 
 	AST PRINT_STATEMENT() throws IOException {
@@ -4216,8 +4230,24 @@ public class AwkParser {
 				throw new SemanticException("Expecting an array for rhs of IN. Got an expression.");
 			}
 
-			getAst1().populateTuples(tuples);
-			populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
+			// The key is joined and converted with the SUBSEP and CONVFMT in
+			// effect when the operator executes, i.e. after the array operand
+			// has been evaluated (it may have side effects), just like gawk.
+			AST keyAst = getAst1();
+			if (keyAst instanceof ArrayIndexAst) {
+				ArrayIndexAst indexAst = (ArrayIndexAst) keyAst;
+				int count = indexAst.populateComponentTuples(tuples);
+				populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
+				// Errors while converting the key report where the subscript
+				// starts.
+				indexAst.pushSourceLineNumber(tuples);
+				tuples.applySubsepUnderTop(count);
+				indexAst.popSourceLineNumber(tuples);
+			} else {
+				keyAst.populateTuples(tuples);
+				populateArrayOperandTuples(getAst2(), tuples, false, "Expecting an array for rhs of IN. Got a scalar.");
+				tuples.applySubsepUnderTop(1);
+			}
 			tuples.isIn();
 
 			popSourceLineNumber(tuples);
@@ -4455,13 +4485,30 @@ public class AwkParser {
 
 	private final class ArrayIndexAst extends ScalarExpressionAst {
 
-		private ArrayIndexAst(AST exprAst, AST next) {
-			super(exprAst, next);
+		private ArrayIndexAst(int lineNo, AST exprAst, AST next) {
+			// The line is captured where the subscript expression starts, so
+			// the APPLY_SUBSEP tuple reports errors there.
+			super(lineNo, exprAst, next);
 		}
 
 		@Override
 		public int populateTuples(AwkTuples tuples) {
 			pushSourceLineNumber(tuples);
+			int cnt = populateComponentTuples(tuples);
+			// Convert the subscript to its string form now, with the CONVFMT in
+			// effect at this point of the execution: a later CONVFMT change must
+			// not retroactively alter existing keys.
+			tuples.applySubsep(cnt);
+			popSourceLineNumber(tuples);
+			return 1;
+		}
+
+		/**
+		 * Evaluates the raw subscript components without joining or converting
+		 * them, and returns how many were pushed. The "in" operator uses this
+		 * to delay the conversion until its array operand has been evaluated.
+		 */
+		private int populateComponentTuples(AwkTuples tuples) {
 			AST ptr = this;
 			int cnt = 0;
 			while (ptr != null) {
@@ -4469,11 +4516,7 @@ public class AwkParser {
 				++cnt;
 				ptr = ptr.getAst2();
 			}
-			if (cnt > 1) {
-				tuples.applySubsep(cnt);
-			}
-			popSourceLineNumber(tuples);
-			return 1;
+			return cnt;
 		}
 	}
 
@@ -5044,6 +5087,10 @@ public class AwkParser {
 
 		private FunctionCallParamListAst(AST expr, AST rest) {
 			super(expr, rest);
+		}
+
+		private FunctionCallParamListAst(int lineNo, AST expr, AST rest) {
+			super(lineNo, expr, rest);
 		}
 
 		@Override
