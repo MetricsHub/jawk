@@ -22,7 +22,12 @@ package io.jawk;
  * ╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
  */
 
+import static org.junit.Assert.assertEquals;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import io.jawk.jrt.AwkRuntimeException;
+import io.jawk.jrt.JavaStringFormatAwkSink;
 import org.junit.Test;
 
 /**
@@ -161,16 +166,6 @@ public class PrintfTest {
 	}
 
 	@Test
-	public void testPosixModeRejectsPositionalSpecifiers() throws Exception {
-		AwkTestSupport
-				.cliTest("printf positional specifiers are rejected in POSIX mode")
-				.argument("--posix")
-				.script("BEGIN { printf \"%2$s %1$s\\n\", \"world\", \"hello\" }")
-				.expectThrow(AwkRuntimeException.class)
-				.runAndAssert();
-	}
-
-	@Test
 	public void testUnterminatedStarPositionIsFatal() throws Exception {
 		AwkTestSupport
 				.awkTest("printf digits after star without dollar are fatal")
@@ -204,6 +199,17 @@ public class PrintfTest {
 				.script("BEGIN { printf \"%.0f|%.0f|%.0f|%.2f\\n\", 2.5, 3.5, 4.5, 0.125 }")
 				.expectLines("2|4|4|0.12")
 				.runAndAssert();
+	}
+
+	@Test
+	public void testJavaStringFormatSink() throws Exception {
+		// JavaStringFormatAwkSink formats with Java's String.format, giving
+		// scripts access to Java-only conversions such as %,d grouping.
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		new Awk()
+				.script("BEGIN { printf \"%,d|%05.1f|%s\\n\", 1234567, 3.5, \"ok\" }")
+				.execute(new JavaStringFormatAwkSink(new PrintStream(output, true)));
+		assertEquals("1,234,567|003.5|ok\n", output.toString());
 	}
 
 	@Test

@@ -596,7 +596,7 @@ public class JRT {
 	 * @return A String representation of o.
 	 */
 	public String toAwkString(Object o) {
-		return AwkSink.formatOutputValue(o, this.convfmt, this.locale);
+		return AwkPrintf.toAwkString(o, this.convfmt, this.locale);
 	}
 
 	/**

@@ -51,6 +51,10 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   prints the full decimal expansion `1267650600228229401496703205376` (previously
   `9223372036854775807`), and `int()` preserves such values
   ([#528](https://github.com/jawkio/jawk/issues/528)).
+- New `JavaStringFormatAwkSink` for Java embedders: a sink whose `printf`/`sprintf` use Java's
+  standard `String.format(...)` instead of AWK's formatting rules, giving scripts access to
+  Java-only conversions such as `%,d` grouping and `%tY` date/time
+  ([#528](https://github.com/jawkio/jawk/issues/528)).
 - Breaking change for Java embedders: `AwkSink.printf(...)` now receives the script's current
   `CONVFMT` value as a parameter (between `ofmt` and `format`), just like it already received
   `OFMT`, and `AwkSink.sprintf(...)` now takes `CONVFMT` as its first parameter

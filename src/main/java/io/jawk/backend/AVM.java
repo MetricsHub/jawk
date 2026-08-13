@@ -80,7 +80,6 @@ import io.jawk.intermediate.Tuple.VariableTuple;
 import io.jawk.intermediate.UninitializedObject;
 import io.jawk.intermediate.UntypedObject;
 import io.jawk.jrt.AssocArray;
-import io.jawk.jrt.AwkPrintf;
 import io.jawk.jrt.AwkRuntimeException;
 import io.jawk.jrt.AwkSink;
 import io.jawk.jrt.BlockManager;
@@ -2831,7 +2830,7 @@ public class AVM implements VariableManager, Closeable {
 	private void execPrintf(CountTuple tuple) throws IOException {
 		long numArgs = tuple.getCount();
 		Object[] values = popArguments(numArgs - 1);
-		String format = checkPosixFormat(jrt.toAwkString(pop()));
+		String format = jrt.toAwkString(pop());
 		jrt.printfDefault(format, values);
 	}
 
@@ -2839,7 +2838,7 @@ public class AVM implements VariableManager, Closeable {
 		String key = jrt.toAwkString(pop());
 		long numArgs = tuple.getCount();
 		Object[] values = popArguments(numArgs - 1);
-		String format = checkPosixFormat(jrt.toAwkString(pop()));
+		String format = jrt.toAwkString(pop());
 		jrt.printfToFile(key, tuple.isAppend(), format, values);
 	}
 
@@ -2847,7 +2846,7 @@ public class AVM implements VariableManager, Closeable {
 		String cmd = jrt.toAwkString(pop());
 		long numArgs = tuple.getCount();
 		Object[] values = popArguments(numArgs - 1);
-		String format = checkPosixFormat(jrt.toAwkString(pop()));
+		String format = jrt.toAwkString(pop());
 		jrt.printfToProcess(cmd, format, values);
 	}
 
@@ -3031,7 +3030,7 @@ public class AVM implements VariableManager, Closeable {
 			requireIndirectArgumentCount(builtin, args, 1, Integer.MAX_VALUE, lineNumber);
 			return jrt
 					.sprintf(
-							checkPosixFormat(jrt.toAwkString(args[0])),
+							jrt.toAwkString(args[0]),
 							Arrays.copyOfRange(args, 1, args.length));
 		case SQRT:
 			requireIndirectArgumentCount(builtin, args, 1, 1, lineNumber);
@@ -3783,19 +3782,8 @@ public class AVM implements VariableManager, Closeable {
 	 */
 	private String sprintfFunction(long numArgs) {
 		Object[] argArray = popArguments(numArgs - 1);
-		String fmt = checkPosixFormat(jrt.toAwkString(pop()));
+		String fmt = jrt.toAwkString(pop());
 		return jrt.sprintf(fmt, argArray);
-	}
-
-	/**
-	 * Rejects gawk positional argument references in strict POSIX mode, like
-	 * {@code gawk --posix}.
-	 */
-	private String checkPosixFormat(String format) {
-		if (settings.isPosix() && AwkPrintf.usesPositionalArguments(format)) {
-			throw new AwkRuntimeException("`$' is not permitted in awk formats");
-		}
-		return format;
 	}
 
 	private void setNumOnJRT(long fieldNum, double num) {

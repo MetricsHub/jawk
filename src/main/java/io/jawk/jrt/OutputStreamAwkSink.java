@@ -32,7 +32,8 @@ import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 /**
  * Text {@link AwkSink} backed by a {@link PrintStream}.
  */
-public final class OutputStreamAwkSink extends AwkSink {
+@SuppressFBWarnings(value = "CT_CONSTRUCTOR_THROW", justification = "No security-sensitive state; finalizer attacks are not a concern here.")
+public class OutputStreamAwkSink extends AwkSink {
 
 	private final PrintStream printStream;
 

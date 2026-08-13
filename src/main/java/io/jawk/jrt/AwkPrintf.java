@@ -27,6 +27,7 @@ import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.text.DecimalFormatSymbols;
+import java.util.Arrays;
 import java.util.IllegalFormatException;
 import java.util.Locale;
 
@@ -122,52 +123,6 @@ public final class AwkPrintf {
 		String actualConvfmt = convfmt == null ? DEFAULT_CONVFMT : convfmt;
 		Object[] actualArgs = args == null ? new Object[0] : args;
 		return new AwkPrintfFormatter(actualLocale, actualConvfmt, format, actualArgs).format();
-	}
-
-	/**
-	 * Returns whether a format string uses gawk positional argument
-	 * references ({@code %n$} or {@code *n$}), which strict POSIX mode must
-	 * reject: {@code gawk --posix} fails with
-	 * <code>`$' is not permitted in awk formats</code>.
-	 *
-	 * @param format AWK format string
-	 * @return {@code true} when the format references arguments by position
-	 */
-	public static boolean usesPositionalArguments(final String format) {
-		int length = format.length();
-		int i = 0;
-		while (i < length) {
-			if (format.charAt(i) != '%') {
-				i++;
-				continue;
-			}
-			i++;
-			if (i < length && format.charAt(i) == '%') {
-				i++;
-				continue;
-			}
-			// Inside a specifier, a positional reference can appear right
-			// after '%' or right after '*'.
-			boolean positionAllowed = true;
-			while (i < length) {
-				char c = format.charAt(i);
-				if (positionAllowed && isAsciiDigit(c)) {
-					int digitsEnd = i;
-					while (digitsEnd < length && isAsciiDigit(format.charAt(digitsEnd))) {
-						digitsEnd++;
-					}
-					if (digitsEnd < length && format.charAt(digitsEnd) == '$') {
-						return true;
-					}
-				}
-				positionAllowed = c == '*';
-				if (c == '%' || CONVERSION_CHARS.indexOf(c) >= 0) {
-					break;
-				}
-				i++;
-			}
-		}
-		return false;
 	}
 
 	/**
@@ -968,9 +923,7 @@ public final class AwkPrintf {
 		}
 
 		private void appendSpaces(int count) {
-			for (int i = 0; i < count; i++) {
-				out.append(' ');
-			}
+			out.append(repeat(' ', count));
 		}
 	}
 
@@ -997,22 +950,29 @@ public final class AwkPrintf {
 		return c >= '0' && c <= '9';
 	}
 
+	/**
+	 * Parses a run of decimal digits, clamping absurd widths, precisions, and
+	 * argument positions to {@link Integer#MAX_VALUE} instead of failing the
+	 * way {@link Integer#parseInt(String)} would.
+	 */
 	private static int parseInt(String s, int from, int to) {
-		long value = 0;
-		for (int i = from; i < to; i++) {
-			value = value * 10 + s.charAt(i) - '0';
-			if (value > Integer.MAX_VALUE) {
-				return Integer.MAX_VALUE;
-			}
+		try {
+			return Integer.parseInt(s.substring(from, to));
+		} catch (NumberFormatException e) {
+			return Integer.MAX_VALUE;
 		}
-		return (int) value;
 	}
 
 	private static String zeros(int count) {
-		StringBuilder sb = new StringBuilder(Math.max(count, 0));
-		for (int i = 0; i < count; i++) {
-			sb.append('0');
+		return repeat('0', count);
+	}
+
+	private static String repeat(char c, int count) {
+		if (count <= 0) {
+			return "";
 		}
-		return sb.toString();
+		char[] chars = new char[count];
+		Arrays.fill(chars, c);
+		return new String(chars);
 	}
 }

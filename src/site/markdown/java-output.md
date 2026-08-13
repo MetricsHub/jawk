@@ -127,10 +127,22 @@ awk.script("{ print $1, $2 }")
 
 ### Built-In Sink Implementations
 
-Jawk provides two built-in `AwkSink` implementations:
+Jawk provides three built-in `AwkSink` implementations:
 
 - **`AwkSink.from(PrintStream)`** / **`AwkSink.from(PrintStream, Locale)`** creates a sink that renders output to a `PrintStream`. This is the default behavior.
 - **`AwkSink.from(Appendable)`** / **`AwkSink.from(Appendable, Locale)`** renders output to any `Appendable` such as `StringBuilder` or `StringWriter`.
+- **`JavaStringFormatAwkSink`** renders `printf`/`sprintf` with Java's standard
+  `String.format(...)` instead of AWK's formatting rules, giving scripts access to Java-only
+  conversions (`%,d` grouping, `%(d` negative parentheses, `%tY` date/time, etc.) and faster
+  formatting. Conversions must match the value's Java type: AWK integral numbers arrive as
+  `Long`, other numbers as `Double`, and text as `String`, so `%d` requires an integral value
+  and `%f` a floating-point one.
+
+  ```java
+  awk.script("BEGIN { printf \"%,d\\n\", 1234567 }")
+          .execute(new JavaStringFormatAwkSink(System.out));
+  // prints: 1,234,567
+  ```
 
 The overloads without a `Locale` parameter default to `Locale.US`.
 
