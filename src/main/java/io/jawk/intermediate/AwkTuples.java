@@ -50,7 +50,10 @@ import io.jawk.jrt.JRT;
  */
 public class AwkTuples implements Serializable {
 
-	private static final long serialVersionUID = 3L;
+	// Bumped to 4 when single-dimension subscripts started emitting
+	// APPLY_SUBSEP: older tuple streams lack the conversion and must be
+	// recompiled.
+	private static final long serialVersionUID = 4L;
 
 	/** Address manager */
 	private final AddressManager addressManager = new AddressManager();
