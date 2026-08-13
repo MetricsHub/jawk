@@ -25,6 +25,17 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   exponent, so `2e3` parsed as `2` concatenated with the uninitialized variable `e3` and printed
   `2`). As in gawk, an `e`/`E` not followed by a valid exponent is not part of the number:
   `1e` is the number `1` followed by the variable `e`.
+- String-to-number conversion keeps all the digits of long numeric strings instead of stopping
+  after 26 characters: `s = sprintf("%d", 10^26); print s + 0` now prints
+  `100000000000000004764729344` (previously `10000000000000000905969664`, a tenth of the value).
+  Conversion now scans the leading numeric prefix rather than retrying progressively shorter
+  prefixes, which also aligns two edge cases with gawk: number forms that only Java understands
+  are no longer accepted (`"Infinity" + 0` and `"0x1p4" + 0` are `0`, previously infinity and
+  `16`), while a *signed* infinity or NaN now converts, matched case-insensitively on its first
+  three letters (`"-inf" + 0`, `"-INF" + 0`, and `"-infx" + 0` are all `-inf`, previously `0`;
+  an unsigned `"inf"` remains `0`). Conversions that AWK already defined are unchanged, including
+  numeric prefixes (`"25fix" + 0` is `25`), leading whitespace, and incomplete exponents
+  (`"1e" + 0` is `1`).
 - `printf` and `sprintf` are now implemented natively with POSIX AWK / gawk semantics instead of
   delegating to the Printf4J library, which emulated glibc's `printf()`
   ([#528](https://github.com/jawkio/jawk/issues/528)):

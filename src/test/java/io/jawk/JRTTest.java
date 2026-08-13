@@ -60,6 +60,78 @@ public class JRTTest {
 	}
 
 	@Test
+	public void testToDoubleKeepsAllDigitsOfLongNumericStrings() {
+		// A numeric string is converted in full: it is not truncated to the
+		// length of a Double's textual representation.
+		assertEquals(1.0e26, JRT.toDouble("100000000000000004764729344"), 0);
+		assertEquals(1.0e50, JRT.toDouble("1" + new String(new char[50]).replace('\0', '0')), 0);
+		assertEquals(
+				0.00000000000000000000000000001234567890123456789,
+				JRT.toDouble("0.00000000000000000000000000001234567890123456789"),
+				0);
+		// The numeric prefix is still honored, however long the trailing text is.
+		assertEquals(65.0, JRT.toDouble("65fix" + new String(new char[100]).replace('\0', '9')), 0);
+	}
+
+	@Test
+	public void testToDoubleNumericPrefix() {
+		assertEquals(25.0, JRT.toDouble("25fix"), 0);
+		assertEquals(3.14, JRT.toDouble("3.14abc"), 0);
+		assertEquals(0.0, JRT.toDouble("abc"), 0);
+		// Leading whitespace is skipped, trailing text simply ends the prefix.
+		assertEquals(12.0, JRT.toDouble("  12"), 0);
+		assertEquals(12.0, JRT.toDouble("\t\n12"), 0);
+		assertEquals(12.0, JRT.toDouble("12  "), 0);
+		// Signs, and fractional parts on either side of the decimal point.
+		assertEquals(5.0, JRT.toDouble("+5"), 0);
+		assertEquals(-5.0, JRT.toDouble("-5"), 0);
+		assertEquals(0.5, JRT.toDouble(".5"), 0);
+		assertEquals(5.0, JRT.toDouble("5."), 0);
+		assertEquals(-0.5, JRT.toDouble("-.5"), 0);
+		assertEquals(0.0, JRT.toDouble("-"), 0);
+		assertEquals(0.0, JRT.toDouble("."), 0);
+		assertEquals(0.0, JRT.toDouble("+ 5"), 0);
+		// Exponents, including the backtracking cases.
+		assertEquals(1000.0, JRT.toDouble("1e3"), 0);
+		assertEquals(0.001, JRT.toDouble("1E-3"), 0);
+		assertEquals(5000.0, JRT.toDouble("5.e3"), 0);
+		assertEquals(1.0, JRT.toDouble("1e"), 0);
+		assertEquals(1.0, JRT.toDouble("1e+"), 0);
+		assertEquals(1.0, JRT.toDouble("1efoo"), 0);
+		assertEquals(1000.0, JRT.toDouble("1e3foo"), 0);
+		// Java accepts these; AWK does not.
+		assertEquals(0.0, JRT.toDouble("Infinity"), 0);
+		assertEquals(0.0, JRT.toDouble("NaN"), 0);
+		assertEquals(0.0, JRT.toDouble("0x1A"), 0);
+		assertEquals(0.0, JRT.toDouble("0x1p4"), 0);
+		assertEquals(0.0, JRT.toDouble("0x1.8p1"), 0);
+		assertEquals(25.0, JRT.toDouble("25f"), 0);
+		assertEquals(1.0, JRT.toDouble("1d"), 0);
+		// Overflow yields infinity rather than an error, as in gawk.
+		assertTrue(Double.isInfinite(JRT.toDouble("1e400")));
+	}
+
+	@Test
+	public void testToDoubleSignedInfinityAndNaN() {
+		// AWK requires a sign, matches the first three letters without regard to
+		// case, and ignores any trailing text.
+		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-inf"), 0);
+		assertEquals(Double.POSITIVE_INFINITY, JRT.toDouble("+inf"), 0);
+		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-INF"), 0);
+		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-Infinity"), 0);
+		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-infx"), 0);
+		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("  -inf"), 0);
+		assertTrue(Double.isNaN(JRT.toDouble("-nan")));
+		assertTrue(Double.isNaN(JRT.toDouble("+NaN")));
+		// Without a sign, or with anything between the sign and the word, these
+		// are ordinary text and convert to zero.
+		assertEquals(0.0, JRT.toDouble("inf"), 0);
+		assertEquals(0.0, JRT.toDouble("nan"), 0);
+		assertEquals(0.0, JRT.toDouble("- inf"), 0);
+		assertEquals(0.0, JRT.toDouble("-in"), 0);
+	}
+
+	@Test
 	public void testToLong() {
 		assertEquals(65L, JRT.toLong('A'));
 		assertEquals(65L, JRT.toLong(65));

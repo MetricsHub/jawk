@@ -625,29 +625,33 @@ public class JRT {
 			}
 		}
 
-		// Try to convert the string to a number.
+		// Convert the leading numeric prefix, as AWK does: "25fix" yields 25, and
+		// text without a numeric prefix yields 0.
 		String s = o.toString();
 		int length = s.length();
-
-		// Optimization: We don't need to handle strings that are longer than 26 chars
-		// because a Double cannot be longer than 26 chars when converted to String.
-		if (length > 26) {
-			length = 26;
+		int start = 0;
+		while (start < length && Character.isWhitespace(s.charAt(start))) {
+			start++;
 		}
-
-		// Loop:
-		// If convervsion fails, try with one character less.
-		// 25fix will convert to 25 (any numeric prefix will work)
-		while (length > 0) {
-			try {
-				return Double.parseDouble(s.substring(0, length));
-			} catch (NumberFormatException nfe) {
-				length--;
+		// AWK accepts infinities and NaNs only when they carry a sign, matches
+		// them case-insensitively on their first three letters, and ignores
+		// whatever follows: "-Infinity", "-INF", and "-infx" are all -inf.
+		if (start < length) {
+			char sign = s.charAt(start);
+			if (sign == '+' || sign == '-') {
+				if (s.regionMatches(true, start + 1, "inf", 0, 3)) {
+					return sign == '-' ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+				}
+				if (s.regionMatches(true, start + 1, "nan", 0, 3)) {
+					return Double.NaN;
+				}
 			}
 		}
-
-		// Failed (not even with one char)
-		return 0;
+		int end = numericPrefixEnd(s, start, '.');
+		if (end == start) {
+			return 0;
+		}
+		return Double.parseDouble(s.substring(start, end));
 	}
 
 	/**
@@ -927,56 +931,77 @@ public class JRT {
 	}
 
 	static boolean isParseableNumber(String value, char decimalSeparator) {
-		int index = 0;
+		return !value.isEmpty() && numericPrefixEnd(value, 0, decimalSeparator) == value.length();
+	}
+
+	/**
+	 * Scans the AWK numeric constant that starts at {@code start} and returns the
+	 * index just past it, or {@code start} when no number starts there. The
+	 * grammar is an optional sign, decimal digits with an optional fractional
+	 * part, and an optional exponent.
+	 * <p>
+	 * The scan is greedy but backtracks over an exponent marker that is not
+	 * followed by digits, so {@code "1e"} and {@code "1e+"} yield the prefix
+	 * {@code "1"} rather than failing, matching how AWK converts a string with a
+	 * numeric prefix. The caller is responsible for skipping any leading
+	 * whitespace it wants to allow.
+	 * </p>
+	 *
+	 * @param value text to scan
+	 * @param start index at which the number is expected to start
+	 * @param decimalSeparator character separating the integral and fractional
+	 *        parts under the active locale
+	 * @return the index just past the numeric prefix, or {@code start} when
+	 *         {@code value} has no numeric prefix at {@code start}
+	 */
+	private static int numericPrefixEnd(String value, int start, char decimalSeparator) {
 		int length = value.length();
+		int index = start;
 
-		if (length == 0) {
-			return false;
-		}
-
-		char current = value.charAt(index);
-		if (current == '+' || current == '-') {
+		if (index < length && (value.charAt(index) == '+' || value.charAt(index) == '-')) {
 			index++;
-			if (index == length) {
-				return false;
-			}
 		}
 
 		boolean digitFound = false;
-		while (index < length && value.charAt(index) >= '0' && value.charAt(index) <= '9') {
+		while (index < length && isAsciiDigit(value.charAt(index))) {
 			index++;
 			digitFound = true;
 		}
 
 		if (index < length && value.charAt(index) == decimalSeparator) {
 			index++;
-			while (index < length && value.charAt(index) >= '0' && value.charAt(index) <= '9') {
+			while (index < length && isAsciiDigit(value.charAt(index))) {
 				index++;
 				digitFound = true;
 			}
 		}
 
 		if (!digitFound) {
-			return false;
+			return start;
 		}
 
 		if (index < length && (value.charAt(index) == 'e' || value.charAt(index) == 'E')) {
-			index++;
-			if (index < length && (value.charAt(index) == '+' || value.charAt(index) == '-')) {
-				index++;
+			int afterExponent = index + 1;
+			if (afterExponent < length
+					&& (value.charAt(afterExponent) == '+' || value.charAt(afterExponent) == '-')) {
+				afterExponent++;
 			}
-
-			boolean exponentDigitFound = false;
-			while (index < length && value.charAt(index) >= '0' && value.charAt(index) <= '9') {
-				index++;
-				exponentDigitFound = true;
+			int exponentDigits = afterExponent;
+			while (afterExponent < length && isAsciiDigit(value.charAt(afterExponent))) {
+				afterExponent++;
 			}
-			if (!exponentDigitFound) {
-				return false;
+			// Keep the exponent only when it has at least one digit: "1e" is the
+			// number 1 followed by text, not a malformed number.
+			if (afterExponent > exponentDigits) {
+				index = afterExponent;
 			}
 		}
 
-		return index == length;
+		return index;
+	}
+
+	private static boolean isAsciiDigit(char c) {
+		return c >= '0' && c <= '9';
 	}
 
 	static String normalizeNumberForComparison(String value, char decimalSeparator) {
