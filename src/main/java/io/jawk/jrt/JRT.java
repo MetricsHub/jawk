@@ -753,7 +753,7 @@ public class JRT {
 			value = value * 10 + digit;
 			index++;
 		}
-		if (index > firstDigit && (index == length || !continuesNumber(s.charAt(index)))) {
+		if (index > firstDigit && !continuesNumber(s, index)) {
 			return negative ? -value : value;
 		}
 		return (long) toDouble(o);
@@ -773,11 +773,30 @@ public class JRT {
 	}
 
 	/**
-	 * Returns whether the character can extend a run of digits into a number
-	 * that no longer converts to the same integer.
+	 * Returns whether the text at {@code index} extends a run of digits into a
+	 * number that no longer converts to the same integer. An exponent marker
+	 * only does so when digits actually follow it, matching the backtracking in
+	 * {@link #numericPrefixEnd(String, int, char)}: the numeric prefix of
+	 * {@code "12e"} is just {@code "12"}, which is exactly the integer already
+	 * accumulated.
 	 */
-	private static boolean continuesNumber(char c) {
-		return isAsciiDigit(c) || c == '.' || c == 'e' || c == 'E';
+	private static boolean continuesNumber(String value, int index) {
+		if (index >= value.length()) {
+			return false;
+		}
+		char c = value.charAt(index);
+		if (isAsciiDigit(c) || c == '.') {
+			return true;
+		}
+		if (c != 'e' && c != 'E') {
+			return false;
+		}
+		int afterExponent = index + 1;
+		if (afterExponent < value.length()
+				&& (value.charAt(afterExponent) == '+' || value.charAt(afterExponent) == '-')) {
+			afterExponent++;
+		}
+		return afterExponent < value.length() && isAsciiDigit(value.charAt(afterExponent));
 	}
 
 	/**

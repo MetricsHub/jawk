@@ -186,6 +186,17 @@ public class JRTTest {
 		// Just outside the range, the value saturates instead of wrapping.
 		assertEquals(Long.MAX_VALUE, JRT.toLong("9223372036854775808"));
 		assertEquals(Long.MIN_VALUE, JRT.toLong("-9223372036854775809"));
+		// An exponent marker with no digits is not part of the number, so the
+		// prefix is still the bare integer and stays exact.
+		assertEquals(1000000000000000001L, JRT.toLong("1000000000000000001e"));
+		assertEquals(1000000000000000001L, JRT.toLong("1000000000000000001e+"));
+		assertEquals(1000000000000000001L, JRT.toLong("1000000000000000001E"));
+		assertEquals(1000000000000000001L, JRT.toLong("1000000000000000001efoo"));
+		// An exponent with digits does change the value, so it is honored.
+		assertEquals(10L, JRT.toLong("1e1"));
+		assertEquals(10L, JRT.toLong("1e+1"));
+		assertEquals(0L, JRT.toLong("1e-1"));
+		assertEquals(1000L, JRT.toLong("1e3foo"));
 	}
 
 	@Test
