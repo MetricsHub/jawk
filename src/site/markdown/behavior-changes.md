@@ -20,6 +20,11 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- Numeric constants with exponents (`2e3`, `1.5E-2`, `.5e+1`, ...) are now lexed as single
+  numbers, as POSIX requires: `print 2e3` prints `2000` (previously the lexer stopped before the
+  exponent, so `2e3` parsed as `2` concatenated with the uninitialized variable `e3` and printed
+  `2`). As in gawk, an `e`/`E` not followed by a valid exponent is not part of the number:
+  `1e` is the number `1` followed by the variable `e`.
 - `printf` and `sprintf` are now implemented natively with POSIX AWK / gawk semantics instead of
   delegating to the Printf4J library, which emulated glibc's `printf()`
   ([#528](https://github.com/jawkio/jawk/issues/528)):
