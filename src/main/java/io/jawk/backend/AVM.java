@@ -25,7 +25,7 @@ package io.jawk.backend;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.math.BigInteger;
+import java.math.BigDecimal;
 import java.util.AbstractSet;
 import java.util.Iterator;
 import java.util.Arrays;
@@ -3692,32 +3692,45 @@ public class AVM implements VariableManager, Closeable {
 
 	/**
 	 * Converts a single-dimension subscript to the key form the associative
-	 * arrays store. Integral numbers pass through unchanged — recognized by
-	 * type for the integer classes ({@code Long}, {@code Integer},
-	 * {@code Short}, {@code Byte}, {@code BigInteger}, so no value is ever
-	 * misjudged through {@code double} projection), and by value for the
-	 * floating-point classes. The array implementations canonicalize them to
-	 * {@code Long} (skipping the string round-trip keeps integer-indexed
-	 * loops fast), and Java callers' injected plain {@code Map} variables
-	 * keep their exact key semantics. Every non-integral number (a computed
-	 * {@code Double}, or a {@code Float}/{@code BigDecimal}/... returned by
-	 * an extension or bound by a Java caller) and every non-numeric scalar
-	 * is converted to a string with the CONVFMT currently in effect, fixing
-	 * the key from that point on.
+	 * arrays store. Numbers whose value is integral and fits a signed 64-bit
+	 * integer pass through unchanged: the array implementations canonicalize
+	 * them to {@code Long} (skipping the string round-trip keeps
+	 * integer-indexed loops fast), and Java callers' injected plain
+	 * {@code Map} variables keep their exact key semantics. Every other
+	 * number (a non-integral or out-of-range {@code Double}, or a
+	 * {@code Float}/{@code BigDecimal}/... returned by an extension or bound
+	 * by a Java caller) and every non-numeric scalar is converted to a
+	 * string with the CONVFMT currently in effect, fixing the key from that
+	 * point on. Integrality is tested by type for the integer classes and by
+	 * exact decimal value for everything else, so no boundary value is ever
+	 * misjudged through {@code double} projection.
 	 */
 	private Object toSubscriptKey(Object value) {
-		if (value instanceof Long
-				|| value instanceof Integer
-				|| value instanceof Short
-				|| value instanceof Byte
-				|| value instanceof BigInteger) {
+		if (value instanceof Long || value instanceof Integer || value instanceof Short || value instanceof Byte) {
 			return value;
 		}
-		if (value instanceof Number && JRT.toScalarNumber(((Number) value).doubleValue()) instanceof Long) {
-			return value;
+		if (value instanceof Double) {
+			return JRT.toScalarNumber(((Double) value).doubleValue()) instanceof Long ? value : jrt.toAwkString(value);
+		}
+		if (value instanceof Number) {
+			try {
+				BigDecimal decimal = new BigDecimal(value.toString());
+				if (decimal.stripTrailingZeros().scale() <= 0
+						&& decimal.compareTo(MIN_LONG_SUBSCRIPT) >= 0
+						&& decimal.compareTo(MAX_LONG_SUBSCRIPT) <= 0) {
+					return value;
+				}
+			} catch (NumberFormatException e) { // NOPMD - EmptyCatchBlock: NaN/infinity converts as a string
+			}
 		}
 		return jrt.toAwkString(value);
 	}
+
+	/** Smallest subscript value that {@link #toSubscriptKey} passes through as a number. */
+	private static final BigDecimal MIN_LONG_SUBSCRIPT = BigDecimal.valueOf(Long.MIN_VALUE);
+
+	/** Largest subscript value that {@link #toSubscriptKey} passes through as a number. */
+	private static final BigDecimal MAX_LONG_SUBSCRIPT = BigDecimal.valueOf(Long.MAX_VALUE);
 
 	private long beforeProfiledTuple(Tuple tuple, Opcode opcode) {
 		long now = System.nanoTime();

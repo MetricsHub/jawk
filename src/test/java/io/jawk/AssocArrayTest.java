@@ -24,6 +24,7 @@ package io.jawk;
 
 import static org.junit.Assert.*;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
@@ -365,18 +366,20 @@ public class AssocArrayTest {
 		data.put(Float.valueOf(2.0f), "two");
 		data.put(Short.valueOf((short) 3), "three");
 		data.put(BigInteger.valueOf(Long.MAX_VALUE), "big");
+		data.put(BigDecimal.valueOf(Long.MAX_VALUE), "bigdec");
 
 		AwkTestSupport
 				.awkTest("injected Map Number keys stay reachable with same-typed subscripts")
 				.script(
 						"BEGIN{ print arr[d], (d in arr), arr[f], (f in arr), arr[s], (s in arr),"
-								+ " arr[b], (b in arr) }")
+								+ " arr[b], (b in arr), arr[bd], (bd in arr) }")
 				.preassign("arr", data)
 				.preassign("d", Double.valueOf(1.0))
 				.preassign("f", Float.valueOf(2.0f))
 				.preassign("s", Short.valueOf((short) 3))
 				.preassign("b", BigInteger.valueOf(Long.MAX_VALUE))
-				.expectLines("one 1 two 1 three 1 big 1")
+				.preassign("bd", BigDecimal.valueOf(Long.MAX_VALUE))
+				.expectLines("one 1 two 1 three 1 big 1 bigdec 1")
 				.runAndAssert();
 	}
 

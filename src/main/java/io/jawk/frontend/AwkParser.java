@@ -1559,6 +1559,11 @@ public class AwkParser {
 	 *        – false ⇒ disallow “in”
 	 */
 	AST EXPRESSION_LIST(boolean allowComparisons, boolean allowInKeyword) throws IOException {
+		// Captured before parsing: the list node's line is where its first
+		// expression starts, so a parenthesized group rebuilt into a
+		// multi-dimensional subscript reports errors there.
+		int lineNo = currentSourceLineNumber();
+
 		// 1) Parse exactly one assignment expression.
 		// Passing `allowComparisons` will decide if ‘>’/’<’ become comparisons or redirectors.
 		AST expr = ASSIGNMENT_EXPRESSION(null, allowComparisons, allowInKeyword, /* allowMultidim= */ false);
@@ -1570,11 +1575,11 @@ public class AwkParser {
 			optNewline(); // allow newline after comma (AWK style)
 
 			AST rest = EXPRESSION_LIST(allowComparisons, allowInKeyword);
-			return new FunctionCallParamListAst(expr, rest);
+			return new FunctionCallParamListAst(lineNo, expr, rest);
 		}
 
 		// 3) No comma ⇒ this single expression is a one‐element list.
-		return new FunctionCallParamListAst(expr, null);
+		return new FunctionCallParamListAst(lineNo, expr, null);
 	}
 
 	private AST ASSIGNMENT_EXPRESSION(
@@ -5082,6 +5087,10 @@ public class AwkParser {
 
 		private FunctionCallParamListAst(AST expr, AST rest) {
 			super(expr, rest);
+		}
+
+		private FunctionCallParamListAst(int lineNo, AST expr, AST rest) {
+			super(lineNo, expr, rest);
 		}
 
 		@Override
