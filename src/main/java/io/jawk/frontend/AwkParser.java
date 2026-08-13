@@ -1613,10 +1613,11 @@ public class AwkParser {
 			lexer();
 			optNewline();
 			AST rest = ASSIGNMENT_EXPRESSION(null, allowComparison, allowInKeyword, true);
+			int lineNo = currentSourceLineNumber();
 			if (rest instanceof ArrayIndexAst) {
-				return new ArrayIndexAst(result, rest);
+				return new ArrayIndexAst(lineNo, result, rest);
 			}
-			return new ArrayIndexAst(result, new ArrayIndexAst(rest, null));
+			return new ArrayIndexAst(lineNo, result, new ArrayIndexAst(lineNo, rest, null));
 		}
 		return result;
 	}
@@ -2091,13 +2092,17 @@ public class AwkParser {
 
 	// ARRAY_INDEX : ASSIGNMENT_EXPRESSION [, ARRAY_INDEX]
 	AST ARRAY_INDEX(boolean allowComparison, boolean allowInKeyword) throws IOException {
+		// Capture the line before parsing the expression: the expression AST can
+		// be a shared identifier node carrying its first occurrence's line, and
+		// by the end of the expression the lexer may have read past the line.
+		int lineNo = currentSourceLineNumber();
 		AST exprAst = ASSIGNMENT_EXPRESSION(null, allowComparison, allowInKeyword, false);
 		if (token == Token.COMMA) {
 			optNewline();
 			lexer();
-			return new ArrayIndexAst(exprAst, ARRAY_INDEX(allowComparison, allowInKeyword));
+			return new ArrayIndexAst(lineNo, exprAst, ARRAY_INDEX(allowComparison, allowInKeyword));
 		} else {
-			return new ArrayIndexAst(exprAst, null);
+			return new ArrayIndexAst(lineNo, exprAst, null);
 		}
 	}
 
@@ -2447,7 +2452,7 @@ public class AwkParser {
 	// it turned out to be, when the parenthesized group is followed by "in"
 	private AST toMultidimIndex(FunctionCallParamListAst list) {
 		AST rest = list.getAst2() == null ? null : toMultidimIndex((FunctionCallParamListAst) list.getAst2());
-		return new ArrayIndexAst(list.getAst1(), rest);
+		return new ArrayIndexAst(list.getLineNo(), list.getAst1(), rest);
 	}
 
 	AST PRINT_STATEMENT() throws IOException {
@@ -4473,12 +4478,10 @@ public class AwkParser {
 
 	private final class ArrayIndexAst extends ScalarExpressionAst {
 
-		private ArrayIndexAst(AST exprAst, AST next) {
-			// Anchor to the first subscript expression's line: by the time this
-			// node is built the lexer may have read past the end of the line,
-			// and the APPLY_SUBSEP tuple must report errors where the subscript
-			// starts.
-			super(exprAst.getLineNo(), exprAst, next);
+		private ArrayIndexAst(int lineNo, AST exprAst, AST next) {
+			// The line is captured where the subscript expression starts, so
+			// the APPLY_SUBSEP tuple reports errors there.
+			super(lineNo, exprAst, next);
 		}
 
 		@Override
