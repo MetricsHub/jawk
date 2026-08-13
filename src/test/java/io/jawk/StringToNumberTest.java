@@ -90,14 +90,19 @@ public class StringToNumberTest {
 	@Test
 	public void testSignedInfinityAndNaN() throws Exception {
 		AwkTestSupport
-				.awkTest("A signed infinity converts, whatever its case and trailing text")
-				.script("BEGIN { print \"-inf\" + 0; print \"-INF\" + 0; print \"-Infinity\" + 0; print \"-infx\" + 0 }")
-				.expectLines("-inf", "-inf", "-inf", "-inf")
+				.awkTest("A complete signed infinity converts, whatever its case")
+				.script("BEGIN { print \"-inf\" + 0; print \"-INF\" + 0; print \"  -inf  \" + 0 }")
+				.expectLines("-inf", "-inf", "-inf")
 				.runAndAssert();
 		AwkTestSupport
-				.awkTest("A signed NaN converts")
+				.awkTest("A complete signed NaN converts")
 				.script("BEGIN { print \"-nan\" + 0; print \"+NaN\" + 0 }")
 				.expectLines("nan", "nan")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("A word merely starting with a signed inf or nan is ordinary text")
+				.script("BEGIN { print \"-inform\" + 0; print \"-nancy\" + 0; print \"-Infinity\" + 0 }")
+				.expectLines("0", "0", "0")
 				.runAndAssert();
 	}
 

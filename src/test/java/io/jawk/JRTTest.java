@@ -113,18 +113,22 @@ public class JRTTest {
 
 	@Test
 	public void testToDoubleSignedInfinityAndNaN() {
-		// AWK requires a sign, matches the first three letters without regard to
-		// case, and ignores any trailing text.
+		// AWK requires a signed, complete "inf" or "nan", matched without regard
+		// to case and optionally surrounded by whitespace.
 		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-inf"), 0);
 		assertEquals(Double.POSITIVE_INFINITY, JRT.toDouble("+inf"), 0);
 		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-INF"), 0);
-		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-Infinity"), 0);
-		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("-infx"), 0);
-		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("  -inf"), 0);
+		assertEquals(Double.NEGATIVE_INFINITY, JRT.toDouble("  -inf  "), 0);
 		assertTrue(Double.isNaN(JRT.toDouble("-nan")));
 		assertTrue(Double.isNaN(JRT.toDouble("+NaN")));
-		// Without a sign, or with anything between the sign and the word, these
-		// are ordinary text and convert to zero.
+		// Anything more than the bare token is ordinary text: the gawk fixture
+		// inf-nan-torture expects "-inform" and "-nancy" to convert to zero.
+		assertEquals(0.0, JRT.toDouble("-inform"), 0);
+		assertEquals(0.0, JRT.toDouble("-nancy"), 0);
+		assertEquals(0.0, JRT.toDouble("+inform"), 0);
+		assertEquals(0.0, JRT.toDouble("-infx"), 0);
+		assertEquals(0.0, JRT.toDouble("-Infinity"), 0);
+		// So is an unsigned token, or a sign detached from the word.
 		assertEquals(0.0, JRT.toDouble("inf"), 0);
 		assertEquals(0.0, JRT.toDouble("nan"), 0);
 		assertEquals(0.0, JRT.toDouble("- inf"), 0);

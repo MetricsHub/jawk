@@ -633,12 +633,12 @@ public class JRT {
 		while (start < length && Character.isWhitespace(s.charAt(start))) {
 			start++;
 		}
-		// AWK accepts infinities and NaNs only when they carry a sign, matches
-		// them case-insensitively on their first three letters, and ignores
-		// whatever follows: "-Infinity", "-INF", and "-infx" are all -inf.
+		// AWK accepts an infinity or NaN only as a complete signed token, matched
+		// without regard to case: "-inf" and "-INF" are -inf, while "-inform",
+		// "-Infinity", and an unsigned "inf" are ordinary text.
 		if (start < length) {
 			char sign = s.charAt(start);
-			if (sign == '+' || sign == '-') {
+			if ((sign == '+' || sign == '-') && isBlankToEnd(s, start + 4)) {
 				if (s.regionMatches(true, start + 1, "inf", 0, 3)) {
 					return sign == '-' ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
 				}
@@ -754,6 +754,19 @@ public class JRT {
 
 	/** Decimal digits that always fit in a signed 64-bit integer. */
 	private static final int MAX_LONG_DIGITS = 18;
+
+	/**
+	 * Returns whether the text holds nothing but whitespace from {@code index}
+	 * onwards, treating an index past the end as satisfied.
+	 */
+	private static boolean isBlankToEnd(String value, int index) {
+		for (int i = index; i < value.length(); i++) {
+			if (!Character.isWhitespace(value.charAt(i))) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	/**
 	 * Returns whether the character can extend a run of digits into a number
