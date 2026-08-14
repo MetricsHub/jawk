@@ -130,7 +130,18 @@ public interface AssocArray extends Map<Object, Object> {
 	 *         as a long integer
 	 */
 	static Long toLongKey(Object key) {
-		final String str = key.toString();
+		final String str;
+		if (key instanceof String) {
+			str = (String) key;
+		} else {
+			try {
+				str = key.toString();
+			} catch (RuntimeException e) { // NOPMD - EmptyCatchBlock: intentionally ignored
+				// e.g. an AssocArray used as a key throws on toString():
+				// treat such keys as non-numeric
+				return null;
+			}
+		}
 		final int len = str.length();
 		if (len == 0) {
 			return null;

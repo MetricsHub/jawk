@@ -74,6 +74,14 @@ public class AssocArrayToLongKeyTest {
 	}
 
 	@Test
+	public void testReturnsNullWhenKeyToStringThrows() {
+		// Extensions allow associative arrays as keys; their toString()
+		// intentionally throws, and such keys must be treated as non-numeric
+		assertNull(AssocArray.toLongKey(AssocArray.createHash()));
+		assertNull(AssocArray.toLongKey(AssocArray.createSorted()));
+	}
+
+	@Test
 	public void testRejectsOutOfRangeValues() {
 		assertNull(AssocArray.toLongKey("9223372036854775808"));
 		assertNull(AssocArray.toLongKey("-9223372036854775809"));
