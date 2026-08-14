@@ -24,6 +24,7 @@ package io.jawk.jrt;
 
 import java.util.List;
 import java.util.Map;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import io.jawk.intermediate.UninitializedObject;
 import io.jawk.intermediate.UntypedObject;
 
@@ -129,6 +130,7 @@ public interface AssocArray extends Map<Object, Object> {
 	 * @return the {@code Long} value, or {@code null} if the key cannot be parsed
 	 *         as a long integer
 	 */
+	@SuppressFBWarnings(value = "RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE", justification = "Defensive check against contract-violating toString() implementations returning null")
 	static Long toLongKey(Object key) {
 		final String str;
 		if (key instanceof String) {
@@ -139,6 +141,11 @@ public interface AssocArray extends Map<Object, Object> {
 			} catch (RuntimeException e) { // NOPMD - EmptyCatchBlock: intentionally ignored
 				// e.g. an AssocArray used as a key throws on toString():
 				// treat such keys as non-numeric
+				return null;
+			}
+			if (str == null) {
+				// a contract-violating toString(): treat the key as non-numeric,
+				// like the former Long.parseLong(null) NumberFormatException path
 				return null;
 			}
 		}

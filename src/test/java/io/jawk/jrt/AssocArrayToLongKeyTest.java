@@ -82,6 +82,19 @@ public class AssocArrayToLongKeyTest {
 	}
 
 	@Test
+	public void testReturnsNullWhenKeyToStringReturnsNull() {
+		// A contract-violating toString() must be treated as non-numeric,
+		// exactly like the former Long.parseLong(null) failure path
+		Object badKey = new Object() {
+			@Override
+			public String toString() {
+				return null;
+			}
+		};
+		assertNull(AssocArray.toLongKey(badKey));
+	}
+
+	@Test
 	public void testRejectsOutOfRangeValues() {
 		assertNull(AssocArray.toLongKey("9223372036854775808"));
 		assertNull(AssocArray.toLongKey("-9223372036854775809"));
