@@ -127,8 +127,11 @@ public class AVM implements VariableManager, Closeable {
 
 	private RuntimeStack runtimeStack = new RuntimeStack();
 
-	// operand stack
-	private Deque<Object> operandStack = new ArrayDeque<Object>();
+	// operand stack: a flat Object[] with an explicit top index so push/pop
+	// stay single array accesses; depth is bounded by expression nesting, so
+	// the array stays small and rarely grows
+	private Object[] operandStack = new Object[INITIAL_OPERAND_STACK_CAPACITY];
+	private int operandStackSize;
 	// Untyped array elements currently passed as user-function arguments, in
 	// call order. Each reference lives exactly as long as the call frame that
 	// received it, so this stack stays empty unless an untyped element
@@ -143,18 +146,25 @@ public class AVM implements VariableManager, Closeable {
 	private JRT jrt;
 	private Map<String, JawkExtension> extensionInstances;
 
-	private static final Object NULL_OPERAND = new Object();
+	private static final int INITIAL_OPERAND_STACK_CAPACITY = 64;
 
 	// stack methods
-	// private Object pop() { return operandStack.removeFirst(); }
-	// private void push(Object o) { operandStack.addLast(o); }
 	private Object pop() {
-		Object value = operandStack.pop();
-		return value == NULL_OPERAND ? null : value;
+		Object value = operandStack[--operandStackSize];
+		operandStack[operandStackSize] = null;
+		return value;
 	}
 
 	private void push(Object o) {
-		operandStack.push(o == null ? NULL_OPERAND : o);
+		if (operandStackSize == operandStack.length) {
+			operandStack = Arrays.copyOf(operandStack, operandStack.length * 2);
+		}
+		operandStack[operandStackSize++] = o;
+	}
+
+	private void clearOperandStack() {
+		Arrays.fill(operandStack, 0, operandStackSize, null);
+		operandStackSize = 0;
 	}
 
 	private final AwkSettings settings;
@@ -349,7 +359,7 @@ public class AVM implements VariableManager, Closeable {
 			exitCode = 0;
 			throw new IllegalStateException("eval(AwkExpression) cannot execute EXIT opcodes.", e);
 		}
-		return operandStack.isEmpty() ? null : JRT.toJavaScalar(pop());
+		return operandStackSize == 0 ? null : JRT.toJavaScalar(pop());
 	}
 
 	/**
@@ -709,7 +719,7 @@ public class AVM implements VariableManager, Closeable {
 
 	private void resetTransientRuntimeState(List<String> runtimeArguments, Map<String, Object> variableOverrides) {
 		// Reset the AVM-owned state that must not leak across executions.
-		operandStack.clear();
+		clearOperandStack();
 		elementArgumentReferences.clear();
 		environOffset = NULL_OFFSET;
 		argcOffset = NULL_OFFSET;
@@ -2403,7 +2413,7 @@ public class AVM implements VariableManager, Closeable {
 					} else {
 						// Exit immediately with ExitException
 						// clear operand stack
-						operandStack.clear();
+						clearOperandStack();
 						throw new ExitException(exitCode, "The AWK script requested an exit");
 						// position.next();
 					}
@@ -2857,7 +2867,7 @@ public class AVM implements VariableManager, Closeable {
 	private void resetCallState() {
 		runtimeStack.popAllFrames();
 		elementArgumentReferences.clear();
-		operandStack.clear();
+		clearOperandStack();
 	}
 
 	/**
@@ -3761,10 +3771,11 @@ public class AVM implements VariableManager, Closeable {
 	}
 
 	private Object[] popArguments(long numArgs) {
-		Object[] args = new Object[(int) numArgs];
-		for (int i = (int) numArgs - 1; i >= 0; i--) {
-			args[i] = pop();
-		}
+		int count = (int) numArgs;
+		Object[] args = new Object[count];
+		operandStackSize -= count;
+		System.arraycopy(operandStack, operandStackSize, args, 0, count);
+		Arrays.fill(operandStack, operandStackSize, operandStackSize + count, null);
 		return args;
 	}
 
@@ -4143,7 +4154,7 @@ public class AVM implements VariableManager, Closeable {
 		}
 		// nextfile can be invoked from user-defined functions: unwind them.
 		runtimeStack.popAllFrames();
-		operandStack.clear();
+		clearOperandStack();
 		if (endFileAddress == null
 				|| withinBeginFileBlocks && jrt.hasPendingInputFileError(resolvedInputSource)) {
 			// No ENDFILE rules to run, or the file could not be opened: skip
