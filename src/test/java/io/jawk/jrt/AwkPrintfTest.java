@@ -920,6 +920,43 @@ public class AwkPrintfTest {
 	}
 
 	@Test
+	public void testFormatCacheReuseAndEviction() {
+		// Repeated use of one format must keep working from the parsed-format
+		// cache, and cycling through more distinct formats than the cache
+		// bound must keep producing correct results after eviction.
+		for (int i = 0; i < 600; i++) {
+			String format = "#" + i + ":%0" + (i % 7 + 2) + "d/%s";
+			String expected1 = sprintf(format, i, "a");
+			String expected2 = sprintf(format, i, "a");
+			assertEquals(expected1, expected2);
+			assertEquals("#" + i + ":", expected1.substring(0, expected1.indexOf(':') + 1));
+		}
+		assertEquals("042", sprintf("%03d", 42));
+		assertEquals("042", sprintf("%03d", 42));
+	}
+
+	@Test
+	public void testErrorPrecedenceMatchesSequentialProcessing() {
+		// Errors must surface in the order a single left-to-right pass over
+		// the format string produces them, even though parsing is cached:
+		// a missing argument for an earlier conversion wins over a later
+		// invalid specifier, and a width star consumes its argument before
+		// an invalid precision star is diagnosed.
+		AwkRuntimeException missingFirst = assertThrows(AwkRuntimeException.class, () -> sprintf("%d %*2d"));
+		assertEquals("not enough arguments to satisfy format string `%d %*2d'", missingFirst.getMessage());
+		AwkRuntimeException invalidStar = assertThrows(AwkRuntimeException.class, () -> sprintf("%d %*2d", 1, 2));
+		assertEquals(
+				"no `$' supplied for positional field width or precision in `%d %*2d'",
+				invalidStar.getMessage());
+		AwkRuntimeException widthBeforeError = assertThrows(AwkRuntimeException.class, () -> sprintf("%*.*2d"));
+		assertEquals("not enough arguments to satisfy format string `%*.*2d'", widthBeforeError.getMessage());
+		AwkRuntimeException precisionStar = assertThrows(AwkRuntimeException.class, () -> sprintf("%*.*2d", 5, 3));
+		assertEquals(
+				"no `$' supplied for positional field width or precision in `%*.*2d'",
+				precisionStar.getMessage());
+	}
+
+	@Test
 	public void testToAwkString() {
 		assertEquals("", AwkPrintf.toAwkString(null, AwkPrintf.DEFAULT_CONVFMT, Locale.US));
 		assertEquals("text", AwkPrintf.toAwkString("text", AwkPrintf.DEFAULT_CONVFMT, Locale.US));

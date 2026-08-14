@@ -27,9 +27,12 @@ import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.text.DecimalFormatSymbols;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.IllegalFormatException;
+import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * AWK's {@code printf}/{@code sprintf} formatting engine.
@@ -84,6 +87,41 @@ public final class AwkPrintf {
 
 	/** 2^64 as a {@link BigInteger}, used for unsigned wrapping checks. */
 	private static final BigInteger TWO_POW_64 = BigInteger.ONE.shiftLeft(64);
+
+	/** No width or precision operand in the specifier. */
+	private static final int OPERAND_NONE = 0;
+
+	/** Width or precision given as literal digits in the format string. */
+	private static final int OPERAND_FIXED = 1;
+
+	/** Width or precision given as {@code *}, consuming a sequential argument. */
+	private static final int OPERAND_STAR = 2;
+
+	/** Width or precision given as {@code *n$}, referencing a positional argument. */
+	private static final int OPERAND_STAR_POSITIONAL = 3;
+
+	/** Shared flag set with every flag cleared, for segments that ignore flags. */
+	private static final Flags NO_FLAGS = new Flags(false, false, false, false, false, false);
+
+	/** Maximum number of parsed format strings kept in {@link #FORMAT_CACHE}. */
+	private static final int FORMAT_CACHE_LIMIT = 256;
+
+	/**
+	 * Cache of parsed format strings. Parsing depends only on the format text,
+	 * not on the locale or the arguments, and AWK programs typically reuse a
+	 * handful of format strings (including {@code CONVFMT}) for every record.
+	 */
+	private static final ConcurrentHashMap<String, Segment[]> FORMAT_CACHE = new ConcurrentHashMap<String, Segment[]>();
+
+	/** Maximum number of locales kept in {@link #LOCALE_SYMBOLS_CACHE}. */
+	private static final int LOCALE_SYMBOLS_CACHE_LIMIT = 64;
+
+	/**
+	 * Per-locale decimal and grouping separator characters.
+	 * {@link DecimalFormatSymbols#getInstance(Locale)} clones the symbols on
+	 * every call, which is far too expensive to repeat for every conversion.
+	 */
+	private static final ConcurrentHashMap<Locale, LocaleSymbols> LOCALE_SYMBOLS_CACHE = new ConcurrentHashMap<Locale, LocaleSymbols>();
 
 	private AwkPrintf() {
 		throw new UnsupportedOperationException();
@@ -207,10 +245,448 @@ public final class AwkPrintf {
 		Flags withoutGrouping() {
 			return grouping ? new Flags(leftJustify, plusSign, spaceSign, zeroPad, alternate, false) : this;
 		}
+
+		/**
+		 * Returns these flags with the {@code -} flag set, as a negative
+		 * dynamic field width requires.
+		 *
+		 * @return an equivalent flag set with left justification
+		 */
+		Flags withLeftJustify() {
+			return leftJustify ? this : new Flags(true, plusSign, spaceSign, zeroPad, alternate, grouping);
+		}
 	}
 
 	/**
-	 * Stateful single-pass formatter for one {@code sprintf()} call.
+	 * Decimal and grouping separator characters of one locale.
+	 */
+	private static final class LocaleSymbols {
+
+		private final char decimalSeparator;
+		private final char groupingSeparator;
+
+		LocaleSymbols(char decimalSeparator, char groupingSeparator) {
+			this.decimalSeparator = decimalSeparator;
+			this.groupingSeparator = groupingSeparator;
+		}
+	}
+
+	/**
+	 * One parsed piece of a format string: either verbatim text or one
+	 * conversion specifier. Segments are immutable and shared between all
+	 * calls using the same format string, so rendering replays argument
+	 * consumption, argument-mode tracking, and fatal parse errors in exactly
+	 * the order the previous single-pass implementation produced them.
+	 */
+	private static final class Segment {
+
+		/** Verbatim text to append, or {@code null} for a conversion. */
+		private final String literal;
+
+		/** Positional ({@code n$}) argument index, or 0 for sequential. */
+		private final int argPosition;
+
+		private final Flags flags;
+
+		/** Width operand kind, one of the {@code OPERAND_*} constants. */
+		private final int widthKind;
+
+		/** Fixed width value, or the {@code *n$} width argument position. */
+		private final int width;
+
+		/** Precision operand kind, one of the {@code OPERAND_*} constants. */
+		private final int precisionKind;
+
+		/** Fixed precision value, or the {@code *n$} precision argument position. */
+		private final int precision;
+
+		/** Conversion character, or {@code '\0'} for literal segments. */
+		private final char conversion;
+
+		/**
+		 * Fatal parse error raised when rendering reaches this segment (after
+		 * the width operand has consumed its argument), or {@code null}.
+		 */
+		private final String parseError;
+
+		Segment(String literal, int argPosition, Flags flags, int widthKind, int width, int precisionKind,
+				int precision, char conversion, String parseError) {
+			this.literal = literal;
+			this.argPosition = argPosition;
+			this.flags = flags;
+			this.widthKind = widthKind;
+			this.width = width;
+			this.precisionKind = precisionKind;
+			this.precision = precision;
+			this.conversion = conversion;
+			this.parseError = parseError;
+		}
+	}
+
+	/**
+	 * Returns the decimal and grouping separators of the given locale, from a
+	 * bounded cache.
+	 */
+	private static LocaleSymbols localeSymbolsFor(Locale locale) {
+		LocaleSymbols symbols = LOCALE_SYMBOLS_CACHE.get(locale);
+		if (symbols == null) {
+			DecimalFormatSymbols dfs = DecimalFormatSymbols.getInstance(locale);
+			symbols = new LocaleSymbols(dfs.getDecimalSeparator(), dfs.getGroupingSeparator());
+			if (LOCALE_SYMBOLS_CACHE.size() >= LOCALE_SYMBOLS_CACHE_LIMIT) {
+				LOCALE_SYMBOLS_CACHE.clear();
+			}
+			LOCALE_SYMBOLS_CACHE.putIfAbsent(locale, symbols);
+		}
+		return symbols;
+	}
+
+	/**
+	 * Returns the parsed form of the given format string, from a bounded
+	 * cache.
+	 */
+	private static Segment[] compiledFormat(String format) {
+		Segment[] segments = FORMAT_CACHE.get(format);
+		if (segments == null) {
+			segments = compileFormat(format);
+			if (FORMAT_CACHE.size() >= FORMAT_CACHE_LIMIT) {
+				// Rare: a program cycling through many generated format
+				// strings. Dropping the whole cache keeps the bound simple
+				// and the hit path lock-free.
+				FORMAT_CACHE.clear();
+			}
+			Segment[] winner = FORMAT_CACHE.putIfAbsent(format, segments);
+			if (winner != null) {
+				return winner;
+			}
+		}
+		return segments;
+	}
+
+	/**
+	 * Parses a format string into segments. This method never throws: fatal
+	 * parse errors are recorded as error segments so that rendering raises
+	 * them only once every preceding conversion has consumed its arguments,
+	 * preserving the error precedence of single-pass processing.
+	 */
+	private static Segment[] compileFormat(String format) {
+		List<Segment> segments = new ArrayList<Segment>();
+		StringBuilder literal = new StringBuilder();
+		int length = format.length();
+		int i = 0;
+		while (i < length) {
+			char c = format.charAt(i);
+			if (c != '%') {
+				literal.append(c);
+				i++;
+				continue;
+			}
+			if (i + 1 >= length) {
+				// Dangling '%' at the end of the format: print it verbatim.
+				literal.append('%');
+				break;
+			}
+			if (format.charAt(i + 1) == '%') {
+				literal.append('%');
+				i += 2;
+				continue;
+			}
+			i = compileSpecifier(format, i, segments, literal);
+			if (i < 0) {
+				// A fatal parse error segment was emitted; the rest of the
+				// format string is unreachable.
+				break;
+			}
+		}
+		flushLiteral(segments, literal);
+		return segments.toArray(new Segment[0]);
+	}
+
+	/**
+	 * Parses one format specifier starting at {@code start} (which points at
+	 * the {@code '%'}), emitting segments, and returns the index of the first
+	 * character after the specifier, or a negative value when a fatal parse
+	 * error segment was emitted.
+	 */
+	private static int compileSpecifier(String format, int start, List<Segment> segments, StringBuilder literal) {
+		int length = format.length();
+		int i = start + 1;
+
+		// gawk-style positional specifier: %n$...
+		int argPosition = 0;
+		int digitsEnd = i;
+		while (digitsEnd < length && isAsciiDigit(format.charAt(digitsEnd))) {
+			digitsEnd++;
+		}
+		if (digitsEnd > i && digitsEnd < length && format.charAt(digitsEnd) == '$') {
+			argPosition = parseInt(format, i, digitsEnd);
+			if (argPosition <= 0) {
+				emitError(
+						segments,
+						literal,
+						OPERAND_NONE,
+						0,
+						"argument index with `$' must be > 0 in `" + format + "'");
+				return -1;
+			}
+			i = digitsEnd + 1;
+		}
+
+		// Flags, in any order and possibly repeated.
+		boolean leftJustify = false;
+		boolean plusSign = false;
+		boolean spaceSign = false;
+		boolean zeroPad = false;
+		boolean alternate = false;
+		boolean grouping = false;
+		flagLoop: while (i < length) {
+			switch (format.charAt(i)) {
+			case '-':
+				leftJustify = true;
+				break;
+			case '+':
+				plusSign = true;
+				break;
+			case ' ':
+				spaceSign = true;
+				break;
+			case '0':
+				zeroPad = true;
+				break;
+			case '#':
+				alternate = true;
+				break;
+			case '\'':
+				grouping = true;
+				break;
+			default:
+				break flagLoop;
+			}
+			i++;
+		}
+
+		// Field width: digits, or '*' (optionally '*n$').
+		int widthKind = OPERAND_NONE;
+		int width = -1;
+		if (i < length && format.charAt(i) == '*') {
+			i++;
+			int starArgEnd = starPositionEnd(format, i);
+			if (starArgEnd == i && i < length && isAsciiDigit(format.charAt(i))) {
+				// Digits after a star operand not terminated by '$' are
+				// fatal rather than literal, like gawk: "%*2d".
+				emitError(
+						segments,
+						literal,
+						OPERAND_NONE,
+						0,
+						"no `$' supplied for positional field width or precision in `" + format + "'");
+				return -1;
+			}
+			if (starArgEnd > i) {
+				widthKind = OPERAND_STAR_POSITIONAL;
+				width = parseInt(format, i, starArgEnd - 1);
+				i = starArgEnd;
+			} else {
+				widthKind = OPERAND_STAR;
+			}
+		} else {
+			int widthEnd = i;
+			while (widthEnd < length && isAsciiDigit(format.charAt(widthEnd))) {
+				widthEnd++;
+			}
+			if (widthEnd > i) {
+				widthKind = OPERAND_FIXED;
+				width = parseInt(format, i, widthEnd);
+				i = widthEnd;
+			}
+		}
+
+		// Precision: '.' followed by digits (empty means 0), or '.*'.
+		int precisionKind = OPERAND_NONE;
+		int precision = -1;
+		if (i < length && format.charAt(i) == '.') {
+			i++;
+			if (i < length && format.charAt(i) == '*') {
+				i++;
+				int starArgEnd = starPositionEnd(format, i);
+				if (starArgEnd == i && i < length && isAsciiDigit(format.charAt(i))) {
+					// The width operand (if any) still consumes its argument
+					// before this error is raised, like gawk: "%*.*2d".
+					emitError(
+							segments,
+							literal,
+							widthKind,
+							width,
+							"no `$' supplied for positional field width or precision in `" + format + "'");
+					return -1;
+				}
+				if (starArgEnd > i) {
+					precisionKind = OPERAND_STAR_POSITIONAL;
+					precision = parseInt(format, i, starArgEnd - 1);
+					i = starArgEnd;
+				} else {
+					precisionKind = OPERAND_STAR;
+				}
+			} else {
+				int precisionEnd = i;
+				while (precisionEnd < length && isAsciiDigit(format.charAt(precisionEnd))) {
+					precisionEnd++;
+				}
+				precisionKind = OPERAND_FIXED;
+				precision = precisionEnd == i ? 0 : parseInt(format, i, precisionEnd);
+				i = precisionEnd;
+			}
+		}
+
+		// Length modifiers (h, j, l, L, t, z) are each accepted at most
+		// once and ignored, like gawk. A repeated modifier such as "ll"
+		// or "hh" makes the whole specifier invalid, also like gawk.
+		int modifierMask = 0;
+		while (i < length) {
+			int modifierIndex = LENGTH_MODIFIERS.indexOf(format.charAt(i));
+			if (modifierIndex < 0 || (modifierMask & 1 << modifierIndex) != 0) {
+				break;
+			}
+			modifierMask |= 1 << modifierIndex;
+			i++;
+		}
+
+		if (i < length && format.charAt(i) == '%') {
+			// A percent conversion reached through flags, width, or
+			// precision prints a plain '%' and ignores them all, like
+			// gawk ("%5%" prints "%"). Star operands still consume their
+			// arguments, and an explicit position still pins the format to
+			// positional mode, also like gawk.
+			emitVerbatim(
+					segments,
+					literal,
+					new Segment(
+							"%",
+							argPosition,
+							NO_FLAGS,
+							widthKind,
+							width,
+							precisionKind,
+							precision,
+							(char) 0,
+							null));
+			return i + 1;
+		}
+
+		if (i >= length || CONVERSION_CHARS.indexOf(format.charAt(i)) < 0) {
+			// Unknown or unterminated conversion: print the specifier
+			// verbatim (including the offending character) without
+			// consuming a value argument, like gawk. Star operands still
+			// consume their arguments, and an explicit position still pins
+			// the format to positional mode, also like gawk.
+			int end = i < length ? i + 1 : length;
+			emitVerbatim(
+					segments,
+					literal,
+					new Segment(
+							format.substring(start, end),
+							argPosition,
+							NO_FLAGS,
+							widthKind,
+							width,
+							precisionKind,
+							precision,
+							(char) 0,
+							null));
+			return end;
+		}
+
+		char conversion = format.charAt(i);
+		i++;
+
+		flushLiteral(segments, literal);
+		segments
+				.add(
+						new Segment(
+								null,
+								argPosition,
+								new Flags(leftJustify, plusSign, spaceSign, zeroPad, alternate, grouping),
+								widthKind,
+								width,
+								precisionKind,
+								precision,
+								conversion,
+								null));
+		return i;
+	}
+
+	/**
+	 * Emits verbatim specifier text (a {@code %} conversion or an unknown
+	 * conversion). When the specifier has no side effects (no star operand to
+	 * consume, no positional index to validate), the text is merged into the
+	 * pending literal run; otherwise a standalone segment replays those side
+	 * effects before appending the text.
+	 */
+	private static void emitVerbatim(List<Segment> segments, StringBuilder literal, Segment segment) {
+		boolean sideEffectFree = segment.argPosition == 0
+				&& segment.widthKind != OPERAND_STAR
+				&& segment.widthKind != OPERAND_STAR_POSITIONAL
+				&& segment.precisionKind != OPERAND_STAR
+				&& segment.precisionKind != OPERAND_STAR_POSITIONAL;
+		if (sideEffectFree) {
+			literal.append(segment.literal);
+			return;
+		}
+		flushLiteral(segments, literal);
+		segments.add(segment);
+	}
+
+	/**
+	 * Emits a fatal parse error segment, preceded by any width operand whose
+	 * argument consumption must be replayed before the error is raised.
+	 */
+	private static void emitError(
+			List<Segment> segments,
+			StringBuilder literal,
+			int widthKind,
+			int width,
+			String message) {
+		flushLiteral(segments, literal);
+		segments.add(new Segment(null, 0, NO_FLAGS, widthKind, width, OPERAND_NONE, -1, (char) 0, message));
+	}
+
+	/** Emits the pending literal text run as a segment, if any. */
+	private static void flushLiteral(List<Segment> segments, StringBuilder literal) {
+		if (literal.length() > 0) {
+			segments
+					.add(
+							new Segment(
+									literal.toString(),
+									0,
+									NO_FLAGS,
+									OPERAND_NONE,
+									-1,
+									OPERAND_NONE,
+									-1,
+									(char) 0,
+									null));
+			literal.setLength(0);
+		}
+	}
+
+	/**
+	 * Returns the index right after a {@code n$} sequence starting at
+	 * {@code i}, or {@code i} when there is no such sequence.
+	 */
+	private static int starPositionEnd(String format, int i) {
+		int length = format.length();
+		int digitsEnd = i;
+		while (digitsEnd < length && isAsciiDigit(format.charAt(digitsEnd))) {
+			digitsEnd++;
+		}
+		if (digitsEnd > i && digitsEnd < length && format.charAt(digitsEnd) == '$') {
+			return digitsEnd + 1;
+		}
+		return i;
+	}
+
+	/**
+	 * Stateful renderer for one {@code sprintf()} call, walking the parsed
+	 * segments of the format string.
 	 */
 	private static final class AwkPrintfFormatter {
 
@@ -219,6 +695,8 @@ public final class AwkPrintf {
 		private final String format;
 		private final Object[] args;
 		private final StringBuilder out;
+		private final char decimalSeparator;
+		private final char groupingSeparator;
 
 		/** Index of the next sequential argument to consume. */
 		private int argIndex;
@@ -235,232 +713,85 @@ public final class AwkPrintf {
 			this.format = format;
 			this.args = args;
 			this.out = new StringBuilder(format.length() + 16);
+			LocaleSymbols symbols = localeSymbolsFor(locale);
+			this.decimalSeparator = symbols.decimalSeparator;
+			this.groupingSeparator = symbols.groupingSeparator;
 		}
 
 		String format() {
-			int length = format.length();
-			int i = 0;
-			while (i < length) {
-				char c = format.charAt(i);
-				if (c != '%') {
-					out.append(c);
-					i++;
-					continue;
-				}
-				if (i + 1 >= length) {
-					// Dangling '%' at the end of the format: print it verbatim.
-					out.append('%');
-					break;
-				}
-				if (format.charAt(i + 1) == '%') {
-					out.append('%');
-					i += 2;
-					continue;
-				}
-				i = formatSpecifier(i);
+			for (Segment segment : compiledFormat(format)) {
+				renderSegment(segment);
 			}
 			return out.toString();
 		}
 
 		/**
-		 * Parses and renders one format specifier starting at {@code start}
-		 * (which points at the {@code '%'}), and returns the index of the
-		 * first character after the specifier.
+		 * Renders one segment: evaluates the width and precision operands
+		 * (consuming their arguments), raises any recorded parse error, and
+		 * appends the literal text or the converted value.
 		 */
-		private int formatSpecifier(int start) {
-			int length = format.length();
-			int i = start + 1;
-
-			// gawk-style positional specifier: %n$...
-			int argPosition = 0;
-			int digitsEnd = i;
-			while (digitsEnd < length && isAsciiDigit(format.charAt(digitsEnd))) {
-				digitsEnd++;
-			}
-			if (digitsEnd > i && digitsEnd < length && format.charAt(digitsEnd) == '$') {
-				argPosition = parseInt(format, i, digitsEnd);
-				if (argPosition <= 0) {
-					throw new AwkRuntimeException("argument index with `$' must be > 0 in `" + format + "'");
-				}
-				i = digitsEnd + 1;
-			}
-
-			// Flags, in any order and possibly repeated.
-			boolean leftJustify = false;
-			boolean plusSign = false;
-			boolean spaceSign = false;
-			boolean zeroPad = false;
-			boolean alternate = false;
-			boolean grouping = false;
-			flagLoop: while (i < length) {
-				switch (format.charAt(i)) {
-				case '-':
-					leftJustify = true;
-					break;
-				case '+':
-					plusSign = true;
-					break;
-				case ' ':
-					spaceSign = true;
-					break;
-				case '0':
-					zeroPad = true;
-					break;
-				case '#':
-					alternate = true;
-					break;
-				case '\'':
-					grouping = true;
-					break;
-				default:
-					break flagLoop;
-				}
-				i++;
-			}
-
-			// Field width: digits, or '*' (optionally '*n$').
+		private void renderSegment(Segment segment) {
+			Flags flags = segment.flags;
 			int width = -1;
-			if (i < length && format.charAt(i) == '*') {
-				i++;
-				int starArgEnd = starPositionEnd(i);
-				requireStarPositionTerminated(i, starArgEnd);
-				long dynamicWidth;
-				if (starArgEnd > i) {
-					int starPosition = parseInt(format, i, starArgEnd - 1);
-					// gawk treats a zero-indexed star operand ("%*0$d") as
-					// the value zero, without consuming an argument.
-					dynamicWidth = starPosition == 0 ? 0 : (long) JRT.toDouble(argAt(starPosition));
-					i = starArgEnd;
+			if (segment.widthKind != OPERAND_NONE) {
+				if (segment.widthKind == OPERAND_FIXED) {
+					width = segment.width;
 				} else {
-					// A sequential star operand pins the format to sequential
-					// mode; an explicitly positioned one is neutral.
-					recordArgumentMode(false);
-					dynamicWidth = (long) JRT.toDouble(nextArg());
-				}
-				if (dynamicWidth < 0) {
-					leftJustify = true;
-					dynamicWidth = -dynamicWidth;
-				}
-				width = (int) Math.min(dynamicWidth, Integer.MAX_VALUE);
-			} else {
-				int widthEnd = i;
-				while (widthEnd < length && isAsciiDigit(format.charAt(widthEnd))) {
-					widthEnd++;
-				}
-				if (widthEnd > i) {
-					width = parseInt(format, i, widthEnd);
-					i = widthEnd;
+					long dynamicWidth;
+					if (segment.widthKind == OPERAND_STAR) {
+						// A sequential star operand pins the format to
+						// sequential mode; an explicitly positioned one is
+						// neutral.
+						recordArgumentMode(false);
+						dynamicWidth = (long) JRT.toDouble(nextArg());
+					} else {
+						// gawk treats a zero-indexed star operand ("%*0$d")
+						// as the value zero, without consuming an argument.
+						dynamicWidth = segment.width == 0 ? 0 : (long) JRT.toDouble(argAt(segment.width));
+					}
+					if (dynamicWidth < 0) {
+						flags = flags.withLeftJustify();
+						dynamicWidth = -dynamicWidth;
+					}
+					width = (int) Math.min(dynamicWidth, Integer.MAX_VALUE);
 				}
 			}
-
-			// Precision: '.' followed by digits (empty means 0), or '.*'.
+			if (segment.parseError != null) {
+				throw new AwkRuntimeException(segment.parseError);
+			}
 			int precision = -1;
-			if (i < length && format.charAt(i) == '.') {
-				i++;
-				if (i < length && format.charAt(i) == '*') {
-					i++;
-					int starArgEnd = starPositionEnd(i);
-					requireStarPositionTerminated(i, starArgEnd);
+			if (segment.precisionKind != OPERAND_NONE) {
+				if (segment.precisionKind == OPERAND_FIXED) {
+					precision = segment.precision;
+				} else {
 					long dynamicPrecision;
-					if (starArgEnd > i) {
-						int starPosition = parseInt(format, i, starArgEnd - 1);
-						// Same zero-index rule as the width operand.
-						dynamicPrecision = starPosition == 0 ? 0 : (long) JRT.toDouble(argAt(starPosition));
-						i = starArgEnd;
-					} else {
+					if (segment.precisionKind == OPERAND_STAR) {
 						// Same sequential-mode tracking as the width operand.
 						recordArgumentMode(false);
 						dynamicPrecision = (long) JRT.toDouble(nextArg());
+					} else {
+						// Same zero-index rule as the width operand.
+						dynamicPrecision = segment.precision == 0 ? 0 : (long) JRT.toDouble(argAt(segment.precision));
 					}
 					// A negative dynamic precision means "no precision" in C.
 					if (dynamicPrecision >= 0) {
 						precision = (int) Math.min(dynamicPrecision, Integer.MAX_VALUE);
 					}
-				} else {
-					int precisionEnd = i;
-					while (precisionEnd < length && isAsciiDigit(format.charAt(precisionEnd))) {
-						precisionEnd++;
-					}
-					precision = precisionEnd == i ? 0 : parseInt(format, i, precisionEnd);
-					i = precisionEnd;
 				}
 			}
-
-			// Length modifiers (h, j, l, L, t, z) are each accepted at most
-			// once and ignored, like gawk. A repeated modifier such as "ll"
-			// or "hh" makes the whole specifier invalid, also like gawk.
-			int modifierMask = 0;
-			while (i < length) {
-				int modifierIndex = LENGTH_MODIFIERS.indexOf(format.charAt(i));
-				if (modifierIndex < 0 || (modifierMask & 1 << modifierIndex) != 0) {
-					break;
-				}
-				modifierMask |= 1 << modifierIndex;
-				i++;
-			}
-
-			if (i < length && format.charAt(i) == '%') {
-				// A percent conversion reached through flags, width, or
-				// precision prints a plain '%' and ignores them all, like
-				// gawk ("%5%" prints "%"). An explicit position still pins
-				// the format to positional mode, also like gawk.
-				if (argPosition > 0) {
+			if (segment.literal != null) {
+				// Verbatim text; a positional specifier still pins the format
+				// to positional mode and validates its index, like gawk.
+				if (segment.argPosition > 0) {
 					recordArgumentMode(true);
-					requireArgumentIndex(argPosition);
+					requireArgumentIndex(segment.argPosition);
 				}
-				out.append('%');
-				return i + 1;
+				out.append(segment.literal);
+				return;
 			}
-
-			if (i >= length || CONVERSION_CHARS.indexOf(format.charAt(i)) < 0) {
-				// Unknown or unterminated conversion: print the specifier
-				// verbatim (including the offending character) without
-				// consuming an argument, like gawk. An explicit position
-				// still pins the format to positional mode, also like gawk.
-				if (argPosition > 0) {
-					recordArgumentMode(true);
-					requireArgumentIndex(argPosition);
-				}
-				int end = i < length ? i + 1 : length;
-				out.append(format, start, end);
-				return end;
-			}
-
-			char conversion = format.charAt(i);
-			i++;
-
-			Flags flags = new Flags(leftJustify, plusSign, spaceSign, zeroPad, alternate, grouping);
-			recordArgumentMode(argPosition > 0);
-			Object arg = argPosition > 0 ? argAt(argPosition) : nextArg();
-			render(conversion, flags, width, precision, arg);
-			return i;
-		}
-
-		/**
-		 * Rejects digits after a star operand that are not terminated by
-		 * {@code $}, like gawk: {@code %*2d} is fatal rather than literal.
-		 */
-		private void requireStarPositionTerminated(int i, int starArgEnd) {
-			if (starArgEnd == i && i < format.length() && isAsciiDigit(format.charAt(i))) {
-				throw new AwkRuntimeException(
-						"no `$' supplied for positional field width or precision in `" + format + "'");
-			}
-		}
-
-		/**
-		 * Returns the index right after a {@code n$} sequence starting at
-		 * {@code i}, or {@code i} when there is no such sequence.
-		 */
-		private int starPositionEnd(int i) {
-			int length = format.length();
-			int digitsEnd = i;
-			while (digitsEnd < length && isAsciiDigit(format.charAt(digitsEnd))) {
-				digitsEnd++;
-			}
-			if (digitsEnd > i && digitsEnd < length && format.charAt(digitsEnd) == '$') {
-				return digitsEnd + 1;
-			}
-			return i;
+			recordArgumentMode(segment.argPosition > 0);
+			Object arg = segment.argPosition > 0 ? argAt(segment.argPosition) : nextArg();
+			render(segment.conversion, flags, width, precision, arg);
 		}
 
 		private Object nextArg() {
@@ -739,8 +1070,7 @@ public final class AwkPrintf {
 			case 'f':
 			case 'F': {
 				int p = precision < 0 ? 6 : precision;
-				// The exact binary value of the double is intended: it makes rounding match gawk's C library.
-				String s = decimalString(new BigDecimal(abs).setScale(p, RoundingMode.HALF_EVEN)); // NOPMD
+				String s = decimalString(roundHalfEvenToScale(abs, p));
 				if (flags.alternate && p == 0) {
 					s = forceDecimalSeparator(s);
 				}
@@ -794,10 +1124,7 @@ public final class AwkPrintf {
 				mantissa = BigDecimal.ZERO.setScale(precision);
 				exponent = 0;
 			} else {
-				// The exact binary value of the double is intended: this is what makes
-				// rounding match the C library used by gawk.
-				BigDecimal rounded = new BigDecimal(abs) // NOPMD
-						.round(new MathContext(precision + 1, RoundingMode.HALF_EVEN));
+				BigDecimal rounded = roundHalfEvenToSignificant(abs, precision + 1);
 				exponent = rounded.precision() - rounded.scale() - 1;
 				mantissa = rounded.movePointLeft(exponent).setScale(precision, RoundingMode.UNNECESSARY);
 			}
@@ -809,8 +1136,7 @@ public final class AwkPrintf {
 			if (abs == 0) {
 				return alternate ? forceDecimalSeparator("0") + zeros(precision - 1) : "0";
 			}
-			// The exact binary value of the double is intended: it makes rounding match gawk's C library.
-			BigDecimal rounded = new BigDecimal(abs).round(new MathContext(precision, RoundingMode.HALF_EVEN)); // NOPMD
+			BigDecimal rounded = roundHalfEvenToSignificant(abs, precision);
 			int exponent = rounded.precision() - rounded.scale() - 1;
 			if (exponent >= -4 && exponent < precision) {
 				String s = decimalString(rounded.setScale(precision - 1 - exponent, RoundingMode.UNNECESSARY));
@@ -853,14 +1179,11 @@ public final class AwkPrintf {
 		/** Renders a {@link BigDecimal} using the locale's decimal separator. */
 		private String decimalString(BigDecimal value) {
 			String s = value.toPlainString();
-			char decimalSeparator = DecimalFormatSymbols.getInstance(locale).getDecimalSeparator();
 			return decimalSeparator == '.' ? s : s.replace('.', decimalSeparator);
 		}
 
 		/** Inserts locale grouping separators into the integer part of {@code s}. */
 		private String groupDigits(String s) {
-			char groupingSeparator = DecimalFormatSymbols.getInstance(locale).getGroupingSeparator();
-			char decimalSeparator = DecimalFormatSymbols.getInstance(locale).getDecimalSeparator();
 			int end = s.indexOf(decimalSeparator);
 			if (end < 0) {
 				end = s.length();
@@ -883,12 +1206,10 @@ public final class AwkPrintf {
 		 * digits.
 		 */
 		private String forceDecimalSeparator(String s) {
-			char decimalSeparator = DecimalFormatSymbols.getInstance(locale).getDecimalSeparator();
 			return s.indexOf(decimalSeparator) < 0 ? s + decimalSeparator : s;
 		}
 
 		private String stripTrailingFractionZeros(String s) {
-			char decimalSeparator = DecimalFormatSymbols.getInstance(locale).getDecimalSeparator();
 			if (s.indexOf(decimalSeparator) < 0) {
 				return s;
 			}
@@ -925,6 +1246,109 @@ public final class AwkPrintf {
 		private void appendSpaces(int count) {
 			out.append(repeat(' ', count));
 		}
+	}
+
+	/**
+	 * Rounds the exact binary value of {@code abs} to {@code scale} fractional
+	 * digits with {@link RoundingMode#HALF_EVEN}, producing exactly the same
+	 * result as {@code new BigDecimal(abs).setScale(scale, HALF_EVEN)}.
+	 * <p>
+	 * When the shortest decimal representation of {@code abs} provably rounds
+	 * to the same value (see {@link #roundsLikeExact}), it is used instead of
+	 * the exact expansion, which is much cheaper for values like {@code 0.1}
+	 * whose exact binary expansion has dozens or hundreds of digits.
+	 * </p>
+	 */
+	private static BigDecimal roundHalfEvenToScale(double abs, int scale) {
+		BigDecimal shortest = shortestDecimal(abs);
+		if (shortest != null && roundsLikeExact(abs, shortest, shortest.scale() - scale, -scale)) {
+			return shortest.setScale(scale, RoundingMode.HALF_EVEN);
+		}
+		// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+		return new BigDecimal(abs).setScale(scale, RoundingMode.HALF_EVEN); // NOPMD
+	}
+
+	/**
+	 * Rounds the exact binary value of {@code abs} to {@code digits}
+	 * significant digits with {@link RoundingMode#HALF_EVEN}, producing a
+	 * result numerically equal to
+	 * {@code new BigDecimal(abs).round(new MathContext(digits, HALF_EVEN))}.
+	 */
+	private static BigDecimal roundHalfEvenToSignificant(double abs, int digits) {
+		if (digits > 0) {
+			BigDecimal shortest = shortestDecimal(abs);
+			if (shortest != null) {
+				// Decimal exponent of the rounding unit: eS - digits + 1,
+				// where eS = precision - scale - 1.
+				int unitExponent = shortest.precision() - shortest.scale() - digits;
+				if (roundsLikeExact(abs, shortest, shortest.precision() - digits, unitExponent)) {
+					return shortest.round(new MathContext(digits, RoundingMode.HALF_EVEN));
+				}
+			}
+		}
+		// The exact binary value of the double is intended: it makes rounding match gawk's C library.
+		return new BigDecimal(abs).round(new MathContext(digits, RoundingMode.HALF_EVEN)); // NOPMD
+	}
+
+	/**
+	 * Returns the shortest decimal representation of {@code abs}, or
+	 * {@code null} when {@code abs} is zero, subnormal, or non-finite (those
+	 * always take the exact path).
+	 */
+	private static BigDecimal shortestDecimal(double abs) {
+		if (!(abs >= Double.MIN_NORMAL) || abs > Double.MAX_VALUE) {
+			return null;
+		}
+		return new BigDecimal(Double.toString(abs));
+	}
+
+	/**
+	 * Decides whether rounding the shortest decimal representation of
+	 * {@code abs} at the position of the unit {@code 10^unitExponent}
+	 * provably yields the same value as rounding the exact binary expansion.
+	 * <p>
+	 * The exact value differs from the shortest representation by at most
+	 * half an ulp (the shortest representation parses back to the same
+	 * double). Requiring the rounding unit to exceed 100 ulps and the first
+	 * dropped digit to be away from the halfway point guarantees that no
+	 * rounding boundary — and no power of ten, where the two values could
+	 * disagree on the position of the leading digit — lies between the two
+	 * values, so both round identically.
+	 * </p>
+	 *
+	 * @param abs the positive, normal double being rounded
+	 * @param shortest its shortest decimal representation
+	 * @param remainderDigits how many digits of {@code shortest} fall below
+	 *        the rounding unit
+	 * @param unitExponent decimal exponent of the rounding unit
+	 * @return whether the shortest representation can be rounded instead of
+	 *         the exact expansion
+	 */
+	private static boolean roundsLikeExact(double abs, BigDecimal shortest, int remainderDigits, int unitExponent) {
+		if (unitExponent < -307 || unitExponent > 308) {
+			// Math.pow(10, unitExponent) would leave the normal double range.
+			return false;
+		}
+		if (Math.ulp(abs) * 100.0 >= Math.pow(10.0, unitExponent)) {
+			return false;
+		}
+		if (remainderDigits <= 0) {
+			// The shortest representation is an exact multiple of the
+			// rounding unit; the exact value rounds to it.
+			return true;
+		}
+		String digits = shortest.unscaledValue().toString();
+		if (remainderDigits > digits.length()) {
+			// The dropped fraction starts with a zero digit: far from the
+			// halfway point.
+			return true;
+		}
+		// With the unit at least 200 times the maximum difference between the
+		// exact value and its shortest representation, only a first dropped
+		// digit of 4 or 5 can put the two values on opposite sides of a
+		// rounding boundary.
+		char first = digits.charAt(digits.length() - remainderDigits);
+		return first != '4' && first != '5';
 	}
 
 	/** Renders an exponent value with at least two digits, like C. */
