@@ -116,17 +116,58 @@ public interface AssocArray extends Map<Object, Object> {
 
 	/**
 	 * Attempts to parse the key as a {@code Long}.
+	 * <p>
+	 * This accepts and rejects exactly the same inputs as
+	 * {@link Long#parseLong(String)} (radix 10), but scans the string without
+	 * ever constructing an exception: most keys are not integer strings (every
+	 * multidimensional {@code arr[x,y]} key, for instance), and paying the cost
+	 * of a {@link NumberFormatException} stack-trace fill on every array access
+	 * is prohibitive.
+	 * </p>
 	 *
 	 * @param key the key to parse (must not be {@code null})
 	 * @return the {@code Long} value, or {@code null} if the key cannot be parsed
 	 *         as a long integer
 	 */
 	static Long toLongKey(Object key) {
-		try {
-			return Long.parseLong(key.toString());
-		} catch (Exception e) { // NOPMD - EmptyCatchBlock: intentionally ignored
+		final String str = key.toString();
+		final int len = str.length();
+		if (len == 0) {
 			return null;
 		}
+		int i = 0;
+		boolean negative = false;
+		long limit = -Long.MAX_VALUE;
+		final char firstChar = str.charAt(0);
+		if (firstChar < '0') { // possible leading "+" or "-"
+			if (firstChar == '-') {
+				negative = true;
+				limit = Long.MIN_VALUE;
+			} else if (firstChar != '+') {
+				return null;
+			}
+			if (len == 1) { // lone "+" or "-"
+				return null;
+			}
+			i = 1;
+		}
+		// Accumulate negatively, exactly like Long.parseLong, so that
+		// Long.MIN_VALUE (whose magnitude exceeds Long.MAX_VALUE) parses too
+		final long multmin = limit / 10;
+		long result = 0;
+		while (i < len) {
+			// Character.digit keeps parity with Long.parseLong on non-ASCII digits
+			final int digit = Character.digit(str.charAt(i++), 10);
+			if (digit < 0 || result < multmin) {
+				return null;
+			}
+			result *= 10;
+			if (result < limit + digit) {
+				return null;
+			}
+			result -= digit;
+		}
+		return negative ? result : -result;
 	}
 
 // -------------------------------------------------------------------------
@@ -149,12 +190,8 @@ public interface AssocArray extends Map<Object, Object> {
 		if (containsKey(key)) {
 			return true;
 		}
-		try {
-			long iKey = Long.parseLong(key.toString());
-			return containsKey(iKey);
-		} catch (Exception e) { // NOPMD - EmptyCatchBlock: intentionally ignored
-		}
-		return false;
+		Long lKey = toLongKey(key);
+		return lKey != null && containsKey(lKey);
 	}
 
 	/**
