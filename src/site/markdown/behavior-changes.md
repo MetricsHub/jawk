@@ -20,6 +20,25 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- Arithmetic on integral operands is now computed in exact 64-bit integers when the result fits:
+  `+`, `-`, `*`, an evenly-dividing `/`, `%`, unary `-` and `+`, `++`/`--`, and the corresponding
+  compound assignments — on variables, array elements, and fields alike — keep all their digits
+  beyond 2^53, and comparisons between two such values are exact as well. A compound assignment
+  or `++`/`--` on an uninitialized variable, a missing array element, or a missing field starts
+  from integer zero, so counters built that way stay exact. `print 9007199254740992 + 1` now prints `9007199254740993` (previously
+  `9007199254740992`, which is also what gawk prints, as gawk computes in doubles unless run
+  with `-M`). A result that overflows 64 bits still falls back to floating point
+  (`print 9223372036854775806 + 2` prints `9223372036854775808`), and exponentiation and any
+  operation with a fractional or string operand are unchanged. Integer results carry no negative
+  zero: with `x = 0`, `1/-x` now prints `inf` (previously `-inf`). Programs precompiled with an
+  earlier version are rejected and must be recompiled, since they may carry constants folded in
+  floating point ([#537](https://github.com/jawkio/jawk/issues/537)).
+- A field updated with a compound assignment or `++`/`--` now retains its numeric value, like a
+  field assigned with `=` always did, instead of being replaced by its `CONVFMT` string, so
+  repeated updates stay exact and `print $1` shows the full value. When `$0` is reconstituted,
+  numeric field values are now converted with `CONVFMT`, as POSIX requires and gawk does:
+  `{ $1 = 0.1 + 0.2; print }` prints `0.3 ...` (previously `0.30000000000000004 ...`, the raw
+  Java rendering of the double) ([#537](https://github.com/jawkio/jawk/issues/537)).
 - Array subscripts are now converted to their string key with the `CONVFMT` in effect at the
   moment the subscript is used, as POSIX requires and gawk does. Previously a single-dimension
   numeric subscript was stored as a number and converted lazily, so a later `CONVFMT` change

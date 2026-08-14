@@ -707,6 +707,155 @@ public class JRT {
 	}
 
 	/**
+	 * Returns whether a scalar is an exact 64-bit integer: a boxed
+	 * {@link Long} or {@link Integer}, whose value is known without any
+	 * floating-point rounding.
+	 *
+	 * @param o the scalar to examine
+	 * @return {@code true} when {@code o} is a {@code Long} or an
+	 *         {@code Integer}
+	 */
+	private static boolean isExactIntegral(Object o) {
+		return o instanceof Long || o instanceof Integer;
+	}
+
+	/**
+	 * Adds two AWK scalars. When both operands are exact 64-bit integers and
+	 * the sum fits in 64 bits, the result stays an exact {@link Long};
+	 * otherwise both operands are converted with {@link #toDouble(Object)}
+	 * and the result is a {@link Double}.
+	 *
+	 * @param o1 the left operand
+	 * @param o2 the right operand
+	 * @return {@code o1 + o2} as a canonical AWK scalar
+	 */
+	public static Object add(Object o1, Object o2) {
+		if (isExactIntegral(o1) && isExactIntegral(o2)) {
+			try {
+				return Math.addExact(((Number) o1).longValue(), ((Number) o2).longValue());
+			} catch (ArithmeticException overflow) {
+				return toDouble(o1) + toDouble(o2);
+			}
+		}
+		return toDouble(o1) + toDouble(o2);
+	}
+
+	/**
+	 * Subtracts two AWK scalars. When both operands are exact 64-bit integers
+	 * and the difference fits in 64 bits, the result stays an exact
+	 * {@link Long}; otherwise both operands are converted with
+	 * {@link #toDouble(Object)} and the result is a {@link Double}.
+	 *
+	 * @param o1 the left operand
+	 * @param o2 the right operand
+	 * @return {@code o1 - o2} as a canonical AWK scalar
+	 */
+	public static Object subtract(Object o1, Object o2) {
+		if (isExactIntegral(o1) && isExactIntegral(o2)) {
+			try {
+				return Math.subtractExact(((Number) o1).longValue(), ((Number) o2).longValue());
+			} catch (ArithmeticException overflow) {
+				return toDouble(o1) - toDouble(o2);
+			}
+		}
+		return toDouble(o1) - toDouble(o2);
+	}
+
+	/**
+	 * Multiplies two AWK scalars. When both operands are exact 64-bit
+	 * integers and the product fits in 64 bits, the result stays an exact
+	 * {@link Long}; otherwise both operands are converted with
+	 * {@link #toDouble(Object)} and the result is a {@link Double}.
+	 *
+	 * @param o1 the left operand
+	 * @param o2 the right operand
+	 * @return {@code o1 * o2} as a canonical AWK scalar
+	 */
+	public static Object multiply(Object o1, Object o2) {
+		if (isExactIntegral(o1) && isExactIntegral(o2)) {
+			try {
+				return Math.multiplyExact(((Number) o1).longValue(), ((Number) o2).longValue());
+			} catch (ArithmeticException overflow) {
+				return toDouble(o1) * toDouble(o2);
+			}
+		}
+		return toDouble(o1) * toDouble(o2);
+	}
+
+	/**
+	 * Divides two AWK scalars. When both operands are exact 64-bit integers
+	 * and the quotient is a 64-bit integer with no remainder, the result
+	 * stays an exact {@link Long}; every other case (a fractional quotient,
+	 * a zero divisor, or {@code Long.MIN_VALUE / -1}) is computed in
+	 * floating point, as before.
+	 *
+	 * @param o1 the dividend
+	 * @param o2 the divisor
+	 * @return {@code o1 / o2} as a canonical AWK scalar
+	 */
+	public static Object divide(Object o1, Object o2) {
+		if (isExactIntegral(o1) && isExactIntegral(o2)) {
+			long l1 = ((Number) o1).longValue();
+			long l2 = ((Number) o2).longValue();
+			if (l2 != 0 && l1 % l2 == 0 && (l1 != Long.MIN_VALUE || l2 != -1)) {
+				return l1 / l2;
+			}
+		}
+		return toDouble(o1) / toDouble(o2);
+	}
+
+	/**
+	 * Computes the remainder of two AWK scalars. When both operands are exact
+	 * 64-bit integers and the divisor is non-zero, the result stays an exact
+	 * {@link Long}; otherwise the remainder is computed in floating point,
+	 * so a zero divisor still yields {@code nan}.
+	 *
+	 * @param o1 the dividend
+	 * @param o2 the divisor
+	 * @return {@code o1 % o2} as a canonical AWK scalar
+	 */
+	public static Object mod(Object o1, Object o2) {
+		if (isExactIntegral(o1) && isExactIntegral(o2)) {
+			long l2 = ((Number) o2).longValue();
+			if (l2 != 0) {
+				return ((Number) o1).longValue() % l2;
+			}
+		}
+		return toDouble(o1) % toDouble(o2);
+	}
+
+	/**
+	 * Raises an AWK scalar to a power. Exponentiation is always computed in
+	 * floating point, like gawk's {@code ^} operator.
+	 *
+	 * @param o1 the base
+	 * @param o2 the exponent
+	 * @return {@code o1 ^ o2} as a {@link Double}
+	 */
+	public static Object pow(Object o1, Object o2) {
+		return Math.pow(toDouble(o1), toDouble(o2));
+	}
+
+	/**
+	 * Negates an AWK scalar. An exact 64-bit integer stays an exact
+	 * {@link Long} (except {@code Long.MIN_VALUE}, whose negation does not
+	 * fit); everything else is converted with {@link #toDouble(Object)} and
+	 * negated as a {@link Double}.
+	 *
+	 * @param o the scalar to negate
+	 * @return {@code -o} as a canonical AWK scalar
+	 */
+	public static Object negate(Object o) {
+		if (isExactIntegral(o)) {
+			long l = ((Number) o).longValue();
+			if (l != Long.MIN_VALUE) {
+				return -l;
+			}
+		}
+		return -toDouble(o);
+	}
+
+	/**
 	 * Convert a String, Long, or Double to Long.
 	 *
 	 * @param o Object to convert.
@@ -850,6 +999,15 @@ public class JRT {
 	 */
 	public static boolean compare2(Object o1, Object o2, int mode, boolean ignoreCase) {
 		if (o1 instanceof Number && o2 instanceof Number) {
+			if (isExactIntegral(o1) && isExactIntegral(o2)) {
+				// Compare exact 64-bit integers without the precision loss a
+				// double conversion would introduce beyond 2^53.
+				int comparison = Long.compare(((Number) o1).longValue(), ((Number) o2).longValue());
+				if (mode == 0) {
+					return comparison == 0;
+				}
+				return mode < 0 ? comparison < 0 : comparison > 0;
+			}
 			return compareNumbers(((Number) o1).doubleValue(), ((Number) o2).doubleValue(), mode);
 		}
 
@@ -1061,31 +1219,43 @@ public class JRT {
 
 	/**
 	 * Return an object which is numerically equivalent to
-	 * one plus a given object. For Integers and Doubles,
-	 * this is similar to o+1. For Strings, attempts are
-	 * made to convert it to a double first. If the
-	 * String does not contain a numeric prefix, 1 is returned.
+	 * one plus a given object. An exact 64-bit integer stays an exact
+	 * {@link Long} (unless the increment overflows). For other numbers and
+	 * for Strings, the value is converted to a double first; a String
+	 * without a numeric prefix counts as 0, so the result is 1.
 	 *
 	 * @param o The object to increase.
 	 * @return {@code o + 1} if o is numeric or contains a numeric prefix;
 	 *         otherwise, {@code 1.0}
 	 */
 	public static Object inc(Object o) {
+		if (isExactIntegral(o)) {
+			long l = ((Number) o).longValue();
+			if (l != Long.MAX_VALUE) {
+				return l + 1;
+			}
+		}
 		return toDouble(o) + 1;
 	}
 
 	/**
 	 * Return an object which is numerically equivalent to
-	 * one minus a given object. For Integers and Doubles,
-	 * this is similar to o-1. For Strings, attempts are
-	 * made to convert it to a double first. If the
-	 * String does not contain a numeric prefix, -1 is returned.
+	 * one minus a given object. An exact 64-bit integer stays an exact
+	 * {@link Long} (unless the decrement overflows). For other numbers and
+	 * for Strings, the value is converted to a double first; a String
+	 * without a numeric prefix counts as 0, so the result is -1.
 	 *
 	 * @param o The object to increase.
 	 * @return {@code o - 1} if o is numeric or contains a numeric prefix;
 	 *         otherwise, {@code -1.0}
 	 */
 	public static Object dec(Object o) {
+		if (isExactIntegral(o)) {
+			long l = ((Number) o).longValue();
+			if (l != Long.MIN_VALUE) {
+				return l - 1;
+			}
+		}
 		return toDouble(o) - 1;
 	}
 
@@ -2295,7 +2465,18 @@ public class JRT {
 	}
 
 	private String rebuildRecordTextFromFields(List<Object> fields) {
-		return joinFieldsWithLiteralSeparator(fields, ofs);
+		// A field assigned a numeric value retains the number itself;
+		// reconstituting $0 converts it with CONVFMT, as POSIX requires and
+		// gawk does (a string or input-derived field joins verbatim).
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < fields.size(); i++) {
+			if (i > 0) {
+				sb.append(ofs);
+			}
+			Object field = fields.get(i);
+			sb.append(field == null ? "" : toAwkString(field));
+		}
+		return sb.toString();
 	}
 
 	private final class RecordState {

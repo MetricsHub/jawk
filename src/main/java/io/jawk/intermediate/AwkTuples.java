@@ -50,10 +50,10 @@ import io.jawk.jrt.JRT;
  */
 public class AwkTuples implements Serializable {
 
-	// Bumped to 4 when single-dimension subscripts started emitting
-	// APPLY_SUBSEP: older tuple streams lack the conversion and must be
-	// recompiled.
-	private static final long serialVersionUID = 4L;
+	// Bumped to 5 when arithmetic on integral operands became exact in 64
+	// bits: older tuple streams carry constants folded in floating point and
+	// must be recompiled.
+	private static final long serialVersionUID = 5L;
 
 	/** Address manager */
 	private final AddressManager addressManager = new AddressManager();
@@ -2392,43 +2392,23 @@ public class AwkTuples implements Serializable {
 		if (opcode == null) {
 			return null;
 		}
+		// Arithmetic folds through the same JRT helpers the interpreter uses,
+		// and keeps their exact result type: normalizing an integral Double
+		// to a Long here would give the folded constant an exactness in later
+		// folds that the runtime result would not have.
 		switch (opcode) {
-		case ADD: {
-			double d1 = JRT.toDouble(left);
-			double d2 = JRT.toDouble(right);
-			double ans = d1 + d2;
-			return JRT.toScalarNumber(ans);
-		}
-		case SUBTRACT: {
-			double d1 = JRT.toDouble(left);
-			double d2 = JRT.toDouble(right);
-			double ans = d1 - d2;
-			return JRT.toScalarNumber(ans);
-		}
-		case MULTIPLY: {
-			double d1 = JRT.toDouble(left);
-			double d2 = JRT.toDouble(right);
-			double ans = d1 * d2;
-			return JRT.toScalarNumber(ans);
-		}
-		case DIVIDE: {
-			double d1 = JRT.toDouble(left);
-			double d2 = JRT.toDouble(right);
-			double ans = d1 / d2;
-			return JRT.toScalarNumber(ans);
-		}
-		case MOD: {
-			double d1 = JRT.toDouble(left);
-			double d2 = JRT.toDouble(right);
-			double ans = d1 % d2;
-			return JRT.toScalarNumber(ans);
-		}
-		case POW: {
-			double d1 = JRT.toDouble(left);
-			double d2 = JRT.toDouble(right);
-			double ans = Math.pow(d1, d2);
-			return JRT.toScalarNumber(ans);
-		}
+		case ADD:
+			return JRT.add(left, right);
+		case SUBTRACT:
+			return JRT.subtract(left, right);
+		case MULTIPLY:
+			return JRT.multiply(left, right);
+		case DIVIDE:
+			return JRT.divide(left, right);
+		case MOD:
+			return JRT.mod(left, right);
+		case POW:
+			return JRT.pow(left, right);
 		case CMP_EQ:
 		case CMP_LT:
 		case CMP_GT:
@@ -2455,15 +2435,15 @@ public class AwkTuples implements Serializable {
 			return null;
 		}
 		switch (opcode) {
-		case NEGATE: {
-			double value = JRT.toDouble(literal);
-			double ans = -value;
-			return JRT.toScalarNumber(ans);
-		}
-		case UNARY_PLUS: {
-			double value = JRT.toDouble(literal);
-			return JRT.toScalarNumber(value);
-		}
+		case NEGATE:
+			return JRT.negate(literal);
+		case UNARY_PLUS:
+			// The interpreter pushes a numeric scalar back unchanged; only a
+			// string literal needs the numeric conversion.
+			if (literal instanceof Long || literal instanceof Double) {
+				return literal;
+			}
+			return JRT.toDouble(literal);
 		default:
 			return null;
 		}

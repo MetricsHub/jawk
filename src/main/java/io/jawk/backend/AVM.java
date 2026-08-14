@@ -1235,15 +1235,15 @@ public class AVM implements VariableManager, Closeable {
 				case NEGATE: {
 					// stack[0] = item to numerically negate
 
-					double d = JRT.toDouble(pop());
-					push(-d);
+					push(JRT.negate(pop()));
 					position.next();
 					break;
 				}
 				case UNARY_PLUS: {
 					// stack[0] = item to convert to a number
-					double d = JRT.toDouble(pop());
-					push(d);
+					// A numeric scalar is already a number: pushing it back
+					// unchanged avoids both re-boxing and precision loss.
+					push(numericValueOf(pop()));
 					position.next();
 					break;
 				}
@@ -1357,33 +1357,30 @@ public class AVM implements VariableManager, Closeable {
 					long offset = variableTuple.getVariableOffset();
 					boolean isGlobal = variableTuple.isGlobal();
 
-					double val = JRT.toDouble(rhs);
-
 					Map<Object, Object> array = ensureMapVariable(offset, isGlobal);
 					checkScalar(arrIdx);
-					Object o = array.get(arrIdx);
-					double origVal = JRT.toDouble(o);
+					Object o = blankToZero(array.get(arrIdx));
 
-					double newVal;
+					Object newVal;
 
 					switch (opcode) {
 					case PLUS_EQ_ARRAY:
-						newVal = origVal + val;
+						newVal = JRT.add(o, rhs);
 						break;
 					case MINUS_EQ_ARRAY:
-						newVal = origVal - val;
+						newVal = JRT.subtract(o, rhs);
 						break;
 					case MULT_EQ_ARRAY:
-						newVal = origVal * val;
+						newVal = JRT.multiply(o, rhs);
 						break;
 					case DIV_EQ_ARRAY:
-						newVal = origVal / val;
+						newVal = JRT.divide(o, rhs);
 						break;
 					case MOD_EQ_ARRAY:
-						newVal = origVal % val;
+						newVal = JRT.mod(o, rhs);
 						break;
 					case POW_EQ_ARRAY:
-						newVal = Math.pow(origVal, val);
+						newVal = JRT.pow(o, rhs);
 						break;
 					default:
 						throw new Error("Invalid op code here: " + opcode);
@@ -1409,30 +1406,28 @@ public class AVM implements VariableManager, Closeable {
 						rhs = BLANK;
 					}
 
-					double val = JRT.toDouble(rhs);
 					checkScalar(arrIdx);
-					Object o = array.get(arrIdx);
-					double origVal = JRT.toDouble(o);
-					double newVal;
+					Object o = blankToZero(array.get(arrIdx));
+					Object newVal;
 
 					switch (opcode) {
 					case PLUS_EQ_MAP_ELEMENT:
-						newVal = origVal + val;
+						newVal = JRT.add(o, rhs);
 						break;
 					case MINUS_EQ_MAP_ELEMENT:
-						newVal = origVal - val;
+						newVal = JRT.subtract(o, rhs);
 						break;
 					case MULT_EQ_MAP_ELEMENT:
-						newVal = origVal * val;
+						newVal = JRT.multiply(o, rhs);
 						break;
 					case DIV_EQ_MAP_ELEMENT:
-						newVal = origVal / val;
+						newVal = JRT.divide(o, rhs);
 						break;
 					case MOD_EQ_MAP_ELEMENT:
-						newVal = origVal % val;
+						newVal = JRT.mod(o, rhs);
 						break;
 					case POW_EQ_MAP_ELEMENT:
-						newVal = Math.pow(origVal, val);
+						newVal = JRT.pow(o, rhs);
 						break;
 					default:
 						throw new Error("Invalid op code here: " + opcode);
@@ -1479,29 +1474,27 @@ public class AVM implements VariableManager, Closeable {
 					VariableTuple variableTuple = (VariableTuple) tuple;
 					long offset = variableTuple.getVariableOffset();
 					boolean isGlobal = variableTuple.isGlobal();
-					Object o1 = resolveVariable(offset, isGlobal, false);
+					Object o1 = blankToZero(resolveVariable(offset, isGlobal, false));
 					Object o2 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans;
+					Object ans;
 					switch (opcode) {
 					case PLUS_EQ:
-						ans = d1 + d2;
+						ans = JRT.add(o1, o2);
 						break;
 					case MINUS_EQ:
-						ans = d1 - d2;
+						ans = JRT.subtract(o1, o2);
 						break;
 					case MULT_EQ:
-						ans = d1 * d2;
+						ans = JRT.multiply(o1, o2);
 						break;
 					case DIV_EQ:
-						ans = d1 / d2;
+						ans = JRT.divide(o1, o2);
 						break;
 					case MOD_EQ:
-						ans = d1 % d2;
+						ans = JRT.mod(o1, o2);
 						break;
 					case POW_EQ:
-						ans = Math.pow(d1, d2);
+						ans = JRT.pow(o1, o2);
 						break;
 					default:
 						throw new Error("Invalid opcode here: " + opcode);
@@ -1522,29 +1515,29 @@ public class AVM implements VariableManager, Closeable {
 
 					// same code as GET_INPUT_FIELD:
 					long fieldnum = JRT.parseFieldNumber(pop());
-					double incval = JRT.toDouble(pop());
+					Object incval = pop();
 
 					// except here, get the number, and add the incvalue
-					Object numObj = jrt.jrtGetInputField(fieldnum);
-					double num;
+					Object numObj = blankToZero(jrt.jrtGetInputField(fieldnum));
+					Object num;
 					switch (opcode) {
 					case PLUS_EQ_INPUT_FIELD:
-						num = JRT.toDouble(numObj) + incval;
+						num = JRT.add(numObj, incval);
 						break;
 					case MINUS_EQ_INPUT_FIELD:
-						num = JRT.toDouble(numObj) - incval;
+						num = JRT.subtract(numObj, incval);
 						break;
 					case MULT_EQ_INPUT_FIELD:
-						num = JRT.toDouble(numObj) * incval;
+						num = JRT.multiply(numObj, incval);
 						break;
 					case DIV_EQ_INPUT_FIELD:
-						num = JRT.toDouble(numObj) / incval;
+						num = JRT.divide(numObj, incval);
 						break;
 					case MOD_EQ_INPUT_FIELD:
-						num = JRT.toDouble(numObj) % incval;
+						num = JRT.mod(numObj, incval);
 						break;
 					case POW_EQ_INPUT_FIELD:
-						num = Math.pow(JRT.toDouble(numObj), incval);
+						num = JRT.pow(numObj, incval);
 						break;
 					default:
 						throw new Error("Invalid opcode here: " + opcode);
@@ -1601,8 +1594,7 @@ public class AVM implements VariableManager, Closeable {
 					Object key = pop();
 					checkScalar(key);
 					Object o = aa.get(key);
-					double ans = JRT.toDouble(o) + 1;
-					aa.put(key, ans);
+					aa.put(key, JRT.inc(blankToZero(o)));
 					position.next();
 					break;
 				}
@@ -1616,8 +1608,7 @@ public class AVM implements VariableManager, Closeable {
 					Object key = pop();
 					checkScalar(key);
 					Object o = aa.get(key);
-					double ans = JRT.toDouble(o) - 1;
-					aa.put(key, ans);
+					aa.put(key, JRT.dec(blankToZero(o)));
 					position.next();
 					break;
 				}
@@ -1628,8 +1619,7 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(key);
 					Map<Object, Object> aa = toMap(pop());
 					Object o = aa.get(key);
-					double ans = JRT.toDouble(o) + 1;
-					aa.put(key, ans);
+					aa.put(key, JRT.inc(blankToZero(o)));
 					position.next();
 					break;
 				}
@@ -1640,8 +1630,7 @@ public class AVM implements VariableManager, Closeable {
 					checkScalar(key);
 					Map<Object, Object> aa = toMap(pop());
 					Object o = aa.get(key);
-					double ans = JRT.toDouble(o) - 1;
-					aa.put(key, ans);
+					aa.put(key, JRT.dec(blankToZero(o)));
 					position.next();
 					break;
 				}
@@ -1649,12 +1638,11 @@ public class AVM implements VariableManager, Closeable {
 					// stack[0] = dollar index (field number)
 					long fieldnum = JRT.parseFieldNumber(pop());
 
-					Object numObj = jrt.jrtGetInputField(fieldnum);
-					double original = JRT.toDouble(numObj);
-					double num = original + 1;
-					setNumOnJRT(fieldnum, num);
+					Object numObj = blankToZero(jrt.jrtGetInputField(fieldnum));
+					Object original = numericValueOf(numObj);
+					setNumOnJRT(fieldnum, JRT.inc(original));
 
-					push(Double.valueOf(original));
+					push(original);
 
 					position.next();
 					break;
@@ -1664,12 +1652,11 @@ public class AVM implements VariableManager, Closeable {
 					// same code as GET_INPUT_FIELD:
 					long fieldnum = JRT.parseFieldNumber(pop());
 
-					Object numObj = jrt.jrtGetInputField(fieldnum);
-					double original = JRT.toDouble(numObj);
-					double num = original - 1;
-					setNumOnJRT(fieldnum, num);
+					Object numObj = blankToZero(jrt.jrtGetInputField(fieldnum));
+					Object original = numericValueOf(numObj);
+					setNumOnJRT(fieldnum, JRT.dec(original));
 
-					push(Double.valueOf(original));
+					push(original);
 
 					position.next();
 					break;
@@ -1947,10 +1934,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans = d1 + d2;
-					push(ans);
+					push(JRT.add(o1, o2));
 					position.next();
 					break;
 				}
@@ -1959,10 +1943,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans = d1 - d2;
-					push(ans);
+					push(JRT.subtract(o1, o2));
 					position.next();
 					break;
 				}
@@ -1971,10 +1952,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans = d1 * d2;
-					push(ans);
+					push(JRT.multiply(o1, o2));
 					position.next();
 					break;
 				}
@@ -1983,10 +1961,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans = d1 / d2;
-					push(ans);
+					push(JRT.divide(o1, o2));
 					position.next();
 					break;
 				}
@@ -1995,10 +1970,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans = d1 % d2;
-					push(ans);
+					push(JRT.mod(o1, o2));
 					position.next();
 					break;
 				}
@@ -2007,10 +1979,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					double d1 = JRT.toDouble(o1);
-					double d2 = JRT.toDouble(o2);
-					double ans = Math.pow(d1, d2);
-					push(ans);
+					push(JRT.pow(o1, o2));
 					position.next();
 					break;
 				}
@@ -3808,15 +3777,15 @@ public class AVM implements VariableManager, Closeable {
 		return jrt.sprintf(fmt, argArray);
 	}
 
-	private void setNumOnJRT(long fieldNum, double num) {
-		String numString = jrt.toAwkString(Double.valueOf(num));
-
-		// same code as ASSIGN_AS_INPUT_FIELD
+	private void setNumOnJRT(long fieldNum, Object num) {
+		// same code as ASSIGN_AS_INPUT_FIELD: a field retains the numeric
+		// scalar itself (so an exact integer survives repeated arithmetic),
+		// while $0 is record text and converts with CONVFMT immediately
 		if (fieldNum == 0) {
-			jrt.setInputLine(numString);
+			jrt.setInputLine(jrt.toAwkString(num));
 			jrt.jrtParseFields();
 		} else {
-			jrt.jrtSetInputField(numString, fieldNum);
+			jrt.jrtSetInputField(num, fieldNum);
 		}
 	}
 
@@ -3875,6 +3844,26 @@ public class AVM implements VariableManager, Closeable {
 	 * Numerically increases an Awk variable by one; the result
 	 * is placed back into that variable.
 	 */
+	/**
+	 * Replaces a missing or uninitialized array element by numeric zero, so
+	 * that {@code ++}/{@code --} on it starts from an exact integer, the same
+	 * way {@link #inc(long, boolean)} treats an uninitialized variable.
+	 */
+	private static Object blankToZero(Object o) {
+		return o == null || o instanceof UninitializedObject ? ZERO : o;
+	}
+
+	/**
+	 * Coerces a scalar to its numeric value, keeping an already numeric
+	 * scalar unchanged so an exact integer is not rounded through a double.
+	 */
+	private static Object numericValueOf(Object o) {
+		if (o instanceof Long || o instanceof Integer || o instanceof Double) {
+			return o;
+		}
+		return JRT.toDouble(o);
+	}
+
 	private Object inc(long l, boolean isGlobal) {
 		Object o = resolveVariable(l, isGlobal, false);
 		if (o instanceof UninitializedObject) {

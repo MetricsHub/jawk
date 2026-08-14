@@ -247,6 +247,58 @@ public class JRTTest {
 	}
 
 	@Test
+	public void testCompare2ExactIntegralOperands() {
+		// Two exact 64-bit integers compare exactly, without the precision
+		// loss a double conversion would introduce beyond 2^53.
+		assertFalse(JRT.compare2(9007199254740993L, 9007199254740992L, 0));
+		assertTrue(JRT.compare2(9007199254740993L, 9007199254740992L, 1));
+		assertTrue(JRT.compare2(9007199254740992L, 9007199254740993L, -1));
+		assertFalse(JRT.compare2(Long.MAX_VALUE, Long.MAX_VALUE - 1, 0));
+		assertTrue(JRT.compare2(Long.MAX_VALUE, Long.MAX_VALUE - 1, 1));
+		// Integer operands take the same exact path.
+		assertTrue(JRT.compare2(Integer.valueOf(3), 3L, 0));
+	}
+
+	@Test
+	public void testExactIntegralArithmetic() {
+		// Integral operands stay exact 64-bit integers.
+		assertEquals(Long.valueOf(3L), JRT.add(1L, 2L));
+		assertEquals(Long.valueOf(3L), JRT.add(Integer.valueOf(1), 2L));
+		assertEquals(Long.valueOf(9007199254740993L), JRT.add(9007199254740992L, 1L));
+		assertEquals(Long.valueOf(-1L), JRT.subtract(1L, 2L));
+		assertEquals(Long.valueOf(9007199254740991L), JRT.subtract(9007199254740992L, 1L));
+		assertEquals(Long.valueOf(6L), JRT.multiply(2L, 3L));
+		assertEquals(Long.valueOf(4611686018427387903L), JRT.divide(9223372036854775806L, 2L));
+		assertEquals(Long.valueOf(7L), JRT.mod(Long.MAX_VALUE, 10L));
+		assertEquals(Long.valueOf(-9007199254740993L), JRT.negate(9007199254740993L));
+		assertEquals(Long.valueOf(9007199254740993L), JRT.inc(9007199254740992L));
+		assertEquals(Long.valueOf(9007199254740991L), JRT.dec(9007199254740992L));
+	}
+
+	@Test
+	public void testExactIntegralArithmeticOverflowFallsBackToDouble() {
+		assertEquals(9.223372036854776E18, ((Number) JRT.add(Long.MAX_VALUE, 1L)).doubleValue(), 0);
+		assertEquals(-9.223372036854776E18, ((Number) JRT.subtract(Long.MIN_VALUE, 1L)).doubleValue(), 0);
+		assertEquals(1.8446744073709552E19, ((Number) JRT.multiply(Long.MAX_VALUE, 2L)).doubleValue(), 0);
+		assertEquals(9.223372036854776E18, ((Number) JRT.divide(Long.MIN_VALUE, -1L)).doubleValue(), 0);
+		assertEquals(9.223372036854776E18, ((Number) JRT.inc(Long.MAX_VALUE)).doubleValue(), 0);
+		assertEquals(-9.223372036854776E18, ((Number) JRT.dec(Long.MIN_VALUE)).doubleValue(), 0);
+		assertEquals(9.223372036854776E18, ((Number) JRT.negate(Long.MIN_VALUE)).doubleValue(), 0);
+	}
+
+	@Test
+	public void testNonIntegralArithmeticStaysInFloatingPoint() {
+		// A fractional quotient, a zero divisor, or any non-integral operand
+		// computes in floating point, exactly as before.
+		assertEquals(Double.valueOf(2.5), JRT.divide(5L, 2L));
+		assertEquals(Double.valueOf(4.0), JRT.add(1.5, 2.5));
+		assertEquals(Double.valueOf(3.0), JRT.add("1", 2L));
+		assertTrue(Double.isNaN(((Number) JRT.mod(5L, 0L)).doubleValue()));
+		assertTrue(Double.isInfinite(((Number) JRT.divide(5L, 0L)).doubleValue()));
+		assertEquals(Double.valueOf(8.0), JRT.pow(2L, 3L));
+	}
+
+	@Test
 	public void testCompare2PlainStrings() {
 		assertFalse(JRT.compare2("3", "3.0", 0));
 		assertTrue(JRT.compare2("3", "4.0", -1));

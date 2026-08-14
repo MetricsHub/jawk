@@ -51,6 +51,7 @@ public class AwkScriptBenchmark {
 	private Awk awk;
 	private AwkProgram sumInputProgram;
 	private AwkProgram projectMatchingProgram;
+	private AwkProgram arithmeticLoopProgram;
 	private String mixedNumericInput;
 
 	/**
@@ -69,6 +70,9 @@ public class AwkScriptBenchmark {
 		this.projectMatchingProgram = this.awk
 				.compile(
 						"/^input/ { print $1, $2 + 1, ($2 ~ /^[0-9]/) }\n");
+		this.arithmeticLoopProgram = this.awk
+				.compile(
+						"BEGIN { s = 0; for (i = 0; i < 50000; i++) s = s + i; print s }\n");
 		this.mixedNumericInput = "input 10\n"
 				+ "input 3.14\n"
 				+ "input 0\n"
@@ -102,5 +106,19 @@ public class AwkScriptBenchmark {
 	@Benchmark
 	public String projectMatchingValues() throws IOException, ExitException {
 		return this.awk.script(this.projectMatchingProgram).input(this.mixedNumericInput).execute();
+	}
+
+	/**
+	 * Measures a tight interpreter loop of increments, comparisons, and
+	 * additions, the hot path targeted by the arithmetic boxing work
+	 * (<a href="https://github.com/jawkio/jawk/issues/537">#537</a>).
+	 *
+	 * @return script output
+	 * @throws IOException if execution fails
+	 * @throws ExitException if the script exits non-zero
+	 */
+	@Benchmark
+	public String tightArithmeticLoop() throws IOException, ExitException {
+		return this.awk.script(this.arithmeticLoopProgram).input("").execute();
 	}
 }
