@@ -1354,49 +1354,7 @@ public class AVM implements VariableManager, Closeable {
 				case DIV_EQ_ARRAY:
 				case MOD_EQ_ARRAY:
 				case POW_EQ_ARRAY: {
-					// arg[0] = offset
-					// arg[1] = isGlobal
-					// stack[0] = array index
-					// stack[1] = value
-					Object arrIdx = pop();
-					Object rhs = pop();
-					if (rhs == null) {
-						rhs = BLANK;
-					}
-					VariableTuple variableTuple = (VariableTuple) tuple;
-					long offset = variableTuple.getVariableOffset();
-					boolean isGlobal = variableTuple.isGlobal();
-
-					Map<Object, Object> array = ensureMapVariable(offset, isGlobal);
-					checkScalar(arrIdx);
-					Object o = blankToZero(array.get(arrIdx));
-
-					Object newVal;
-
-					switch (opcode) {
-					case PLUS_EQ_ARRAY:
-						newVal = JRT.add(o, rhs);
-						break;
-					case MINUS_EQ_ARRAY:
-						newVal = JRT.subtract(o, rhs);
-						break;
-					case MULT_EQ_ARRAY:
-						newVal = JRT.multiply(o, rhs);
-						break;
-					case DIV_EQ_ARRAY:
-						newVal = JRT.divide(o, rhs);
-						break;
-					case MOD_EQ_ARRAY:
-						newVal = JRT.mod(o, rhs);
-						break;
-					case POW_EQ_ARRAY:
-						newVal = JRT.pow(o, rhs);
-						break;
-					default:
-						throw new Error("Invalid op code here: " + opcode);
-					}
-
-					assignArray(offset, arrIdx, newVal, isGlobal);
+					execCompoundAssignArray(opcode, (VariableTuple) tuple);
 					position.next();
 					break;
 				}
@@ -1406,44 +1364,7 @@ public class AVM implements VariableManager, Closeable {
 				case DIV_EQ_MAP_ELEMENT:
 				case MOD_EQ_MAP_ELEMENT:
 				case POW_EQ_MAP_ELEMENT: {
-					// stack[0] = array index
-					// stack[1] = associative array
-					// stack[2] = value
-					Object arrIdx = pop();
-					Map<Object, Object> array = toMap(pop());
-					Object rhs = pop();
-					if (rhs == null) {
-						rhs = BLANK;
-					}
-
-					checkScalar(arrIdx);
-					Object o = blankToZero(array.get(arrIdx));
-					Object newVal;
-
-					switch (opcode) {
-					case PLUS_EQ_MAP_ELEMENT:
-						newVal = JRT.add(o, rhs);
-						break;
-					case MINUS_EQ_MAP_ELEMENT:
-						newVal = JRT.subtract(o, rhs);
-						break;
-					case MULT_EQ_MAP_ELEMENT:
-						newVal = JRT.multiply(o, rhs);
-						break;
-					case DIV_EQ_MAP_ELEMENT:
-						newVal = JRT.divide(o, rhs);
-						break;
-					case MOD_EQ_MAP_ELEMENT:
-						newVal = JRT.mod(o, rhs);
-						break;
-					case POW_EQ_MAP_ELEMENT:
-						newVal = JRT.pow(o, rhs);
-						break;
-					default:
-						throw new Error("Invalid op code here: " + opcode);
-					}
-
-					assignMapElement(array, arrIdx, newVal);
+					execCompoundAssignMapElement(opcode);
 					position.next();
 					break;
 				}
@@ -1478,39 +1399,7 @@ public class AVM implements VariableManager, Closeable {
 				case DIV_EQ:
 				case MOD_EQ:
 				case POW_EQ: {
-					// arg[0] = offset
-					// arg[1] = isGlobal
-					// stack[0] = value
-					VariableTuple variableTuple = (VariableTuple) tuple;
-					long offset = variableTuple.getVariableOffset();
-					boolean isGlobal = variableTuple.isGlobal();
-					Object o1 = blankToZero(resolveVariable(offset, isGlobal, false));
-					Object o2 = pop();
-					Object ans;
-					switch (opcode) {
-					case PLUS_EQ:
-						ans = JRT.add(o1, o2);
-						break;
-					case MINUS_EQ:
-						ans = JRT.subtract(o1, o2);
-						break;
-					case MULT_EQ:
-						ans = JRT.multiply(o1, o2);
-						break;
-					case DIV_EQ:
-						ans = JRT.divide(o1, o2);
-						break;
-					case MOD_EQ:
-						ans = JRT.mod(o1, o2);
-						break;
-					case POW_EQ:
-						ans = JRT.pow(o1, o2);
-						break;
-					default:
-						throw new Error("Invalid opcode here: " + opcode);
-					}
-					push(ans);
-					runtimeStack.setVariable(offset, ans, isGlobal);
+					execCompoundAssignVariable(opcode, (VariableTuple) tuple);
 					position.next();
 					break;
 				}
@@ -1520,44 +1409,8 @@ public class AVM implements VariableManager, Closeable {
 				case DIV_EQ_INPUT_FIELD:
 				case MOD_EQ_INPUT_FIELD:
 				case POW_EQ_INPUT_FIELD: {
-					// stack[0] = dollar_fieldNumber
-					// stack[1] = inc value
-
-					// same code as GET_INPUT_FIELD:
-					long fieldnum = JRT.parseFieldNumber(pop());
-					Object incval = pop();
-
-					// except here, get the number, and add the incvalue
-					Object numObj = blankToZero(jrt.jrtGetInputField(fieldnum));
-					Object num;
-					switch (opcode) {
-					case PLUS_EQ_INPUT_FIELD:
-						num = JRT.add(numObj, incval);
-						break;
-					case MINUS_EQ_INPUT_FIELD:
-						num = JRT.subtract(numObj, incval);
-						break;
-					case MULT_EQ_INPUT_FIELD:
-						num = JRT.multiply(numObj, incval);
-						break;
-					case DIV_EQ_INPUT_FIELD:
-						num = JRT.divide(numObj, incval);
-						break;
-					case MOD_EQ_INPUT_FIELD:
-						num = JRT.mod(numObj, incval);
-						break;
-					case POW_EQ_INPUT_FIELD:
-						num = JRT.pow(numObj, incval);
-						break;
-					default:
-						throw new Error("Invalid opcode here: " + opcode);
-					}
-					setNumOnJRT(fieldnum, num);
-
-					// put the result value on the stack
-					push(num);
+					execCompoundAssignInputField(opcode);
 					position.next();
-
 					break;
 				}
 				case INC: {
@@ -2214,70 +2067,8 @@ public class AVM implements VariableManager, Closeable {
 					break;
 				}
 				case INDIRECT_CALL: {
-					IndirectCallTuple callTuple = (IndirectCallTuple) tuple;
-					Object[] actualArguments = popArguments(callTuple.getNumActualParams());
-					String requestedName = jrt.toAwkString(pop());
-					String qualifiedName = normalizeIndirectFunctionName(requestedName);
-					IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
-					if (target != null) {
-						long formalCount = target.getNumFormalParams();
-						if (actualArguments.length > formalCount) {
-							jrt
-									.printWarning(
-											"gawk: "
-													+ callTuple.getSourceName()
-													+ ":"
-													+ callTuple.getSourceLine()
-													+ ": warning: function `"
-													+ qualifiedName
-													+ "' called with more arguments than declared");
-						}
-						if (profiling) {
-							activeProfilingFunctions.push(new ActiveFunction(qualifiedName, tupleStartNanos));
-						}
-						runtimeStack.pushFrame(formalCount, position.currentIndex());
-						adoptElementArgumentReferences(actualArguments);
-						int copiedArgumentCount = Math.min(actualArguments.length, (int) formalCount);
-						for (int i = 0; i < copiedArgumentCount; i++) {
-							runtimeStack.setVariable(i, actualArguments[i], false);
-						}
-						position.jump(target.getAddress());
-						break;
-					}
-
-					String awkName = requestedName.startsWith("awk::") ?
-							requestedName.substring("awk::".length()) : requestedName;
-					BuiltinFunction builtin = BuiltinFunction.of(awkName);
-					if (builtin != null) {
-						resolveIndirectArguments(actualArguments, builtin);
-						push(invokeIndirectBuiltin(builtin, actualArguments, position.lineNumber()));
-						position.next();
-						break;
-					}
-					ExtensionFunction extensionFunction = callTuple.getExtensionFunctions().get(awkName);
-					if (extensionFunction != null) {
-						resolveIndirectArguments(actualArguments, extensionFunction);
-						if (profiling) {
-							activeProfilingFunctions.push(new ActiveFunction(awkName, tupleStartNanos));
-						}
-						try {
-							push(
-									invokeExtension(
-											extensionFunction,
-											actualArguments,
-											position.lineNumber(),
-											true));
-						} finally {
-							if (profiling) {
-								recordFunctionExit(System.nanoTime());
-							}
-						}
-						position.next();
-						break;
-					}
-					throw new AwkRuntimeException(
-							position.lineNumber(),
-							"function `" + qualifiedName + "' is not defined");
+					execIndirectCall((IndirectCallTuple) tuple, position, tupleStartNanos);
+					break;
 				}
 				case FUNCTION: {
 					// important for compilation,
@@ -2791,6 +2582,236 @@ public class AVM implements VariableManager, Closeable {
 			return ProfilingReport.empty();
 		}
 		return new ProfilingReport(tupleProfilingStats, functionProfilingStats);
+	}
+
+	// The exec* helpers below are extracted from executeTuples on purpose:
+	// that method must stay well under HotSpot's HugeMethodLimit (8000
+	// bytecodes) or the JIT never compiles the interpreter loop (see #562).
+
+	private void execCompoundAssignVariable(Opcode opcode, VariableTuple variableTuple) {
+		// arg[0] = offset
+		// arg[1] = isGlobal
+		// stack[0] = value
+		long offset = variableTuple.getVariableOffset();
+		boolean isGlobal = variableTuple.isGlobal();
+		Object o1 = blankToZero(resolveVariable(offset, isGlobal, false));
+		Object o2 = pop();
+		Object ans;
+		switch (opcode) {
+		case PLUS_EQ:
+			ans = JRT.add(o1, o2);
+			break;
+		case MINUS_EQ:
+			ans = JRT.subtract(o1, o2);
+			break;
+		case MULT_EQ:
+			ans = JRT.multiply(o1, o2);
+			break;
+		case DIV_EQ:
+			ans = JRT.divide(o1, o2);
+			break;
+		case MOD_EQ:
+			ans = JRT.mod(o1, o2);
+			break;
+		case POW_EQ:
+			ans = JRT.pow(o1, o2);
+			break;
+		default:
+			throw new Error("Invalid opcode here: " + opcode);
+		}
+		push(ans);
+		runtimeStack.setVariable(offset, ans, isGlobal);
+	}
+
+	private void execCompoundAssignArray(Opcode opcode, VariableTuple variableTuple) {
+		// arg[0] = offset
+		// arg[1] = isGlobal
+		// stack[0] = array index
+		// stack[1] = value
+		Object arrIdx = pop();
+		Object rhs = pop();
+		if (rhs == null) {
+			rhs = BLANK;
+		}
+		long offset = variableTuple.getVariableOffset();
+		boolean isGlobal = variableTuple.isGlobal();
+
+		Map<Object, Object> array = ensureMapVariable(offset, isGlobal);
+		checkScalar(arrIdx);
+		Object o = blankToZero(array.get(arrIdx));
+
+		Object newVal;
+
+		switch (opcode) {
+		case PLUS_EQ_ARRAY:
+			newVal = JRT.add(o, rhs);
+			break;
+		case MINUS_EQ_ARRAY:
+			newVal = JRT.subtract(o, rhs);
+			break;
+		case MULT_EQ_ARRAY:
+			newVal = JRT.multiply(o, rhs);
+			break;
+		case DIV_EQ_ARRAY:
+			newVal = JRT.divide(o, rhs);
+			break;
+		case MOD_EQ_ARRAY:
+			newVal = JRT.mod(o, rhs);
+			break;
+		case POW_EQ_ARRAY:
+			newVal = JRT.pow(o, rhs);
+			break;
+		default:
+			throw new Error("Invalid op code here: " + opcode);
+		}
+
+		assignArray(offset, arrIdx, newVal, isGlobal);
+	}
+
+	private void execCompoundAssignMapElement(Opcode opcode) {
+		// stack[0] = array index
+		// stack[1] = associative array
+		// stack[2] = value
+		Object arrIdx = pop();
+		Map<Object, Object> array = toMap(pop());
+		Object rhs = pop();
+		if (rhs == null) {
+			rhs = BLANK;
+		}
+
+		checkScalar(arrIdx);
+		Object o = blankToZero(array.get(arrIdx));
+		Object newVal;
+
+		switch (opcode) {
+		case PLUS_EQ_MAP_ELEMENT:
+			newVal = JRT.add(o, rhs);
+			break;
+		case MINUS_EQ_MAP_ELEMENT:
+			newVal = JRT.subtract(o, rhs);
+			break;
+		case MULT_EQ_MAP_ELEMENT:
+			newVal = JRT.multiply(o, rhs);
+			break;
+		case DIV_EQ_MAP_ELEMENT:
+			newVal = JRT.divide(o, rhs);
+			break;
+		case MOD_EQ_MAP_ELEMENT:
+			newVal = JRT.mod(o, rhs);
+			break;
+		case POW_EQ_MAP_ELEMENT:
+			newVal = JRT.pow(o, rhs);
+			break;
+		default:
+			throw new Error("Invalid op code here: " + opcode);
+		}
+
+		assignMapElement(array, arrIdx, newVal);
+	}
+
+	private void execCompoundAssignInputField(Opcode opcode) {
+		// stack[0] = dollar_fieldNumber
+		// stack[1] = inc value
+
+		// same code as GET_INPUT_FIELD:
+		long fieldnum = JRT.parseFieldNumber(pop());
+		Object incval = pop();
+
+		// except here, get the number, and add the incvalue
+		Object numObj = blankToZero(jrt.jrtGetInputField(fieldnum));
+		Object num;
+		switch (opcode) {
+		case PLUS_EQ_INPUT_FIELD:
+			num = JRT.add(numObj, incval);
+			break;
+		case MINUS_EQ_INPUT_FIELD:
+			num = JRT.subtract(numObj, incval);
+			break;
+		case MULT_EQ_INPUT_FIELD:
+			num = JRT.multiply(numObj, incval);
+			break;
+		case DIV_EQ_INPUT_FIELD:
+			num = JRT.divide(numObj, incval);
+			break;
+		case MOD_EQ_INPUT_FIELD:
+			num = JRT.mod(numObj, incval);
+			break;
+		case POW_EQ_INPUT_FIELD:
+			num = JRT.pow(numObj, incval);
+			break;
+		default:
+			throw new Error("Invalid opcode here: " + opcode);
+		}
+		setNumOnJRT(fieldnum, num);
+
+		// put the result value on the stack
+		push(num);
+	}
+
+	private void execIndirectCall(IndirectCallTuple callTuple, PositionTracker position, long tupleStartNanos) {
+		Object[] actualArguments = popArguments(callTuple.getNumActualParams());
+		String requestedName = jrt.toAwkString(pop());
+		String qualifiedName = normalizeIndirectFunctionName(requestedName);
+		IndirectFunctionTarget target = callTuple.getUserFunctions().get(qualifiedName);
+		if (target != null) {
+			long formalCount = target.getNumFormalParams();
+			if (actualArguments.length > formalCount) {
+				jrt
+						.printWarning(
+								"gawk: "
+										+ callTuple.getSourceName()
+										+ ":"
+										+ callTuple.getSourceLine()
+										+ ": warning: function `"
+										+ qualifiedName
+										+ "' called with more arguments than declared");
+			}
+			if (profiling) {
+				activeProfilingFunctions.push(new ActiveFunction(qualifiedName, tupleStartNanos));
+			}
+			runtimeStack.pushFrame(formalCount, position.currentIndex());
+			adoptElementArgumentReferences(actualArguments);
+			int copiedArgumentCount = Math.min(actualArguments.length, (int) formalCount);
+			for (int i = 0; i < copiedArgumentCount; i++) {
+				runtimeStack.setVariable(i, actualArguments[i], false);
+			}
+			position.jump(target.getAddress());
+			return;
+		}
+
+		String awkName = requestedName.startsWith("awk::") ?
+				requestedName.substring("awk::".length()) : requestedName;
+		BuiltinFunction builtin = BuiltinFunction.of(awkName);
+		if (builtin != null) {
+			resolveIndirectArguments(actualArguments, builtin);
+			push(invokeIndirectBuiltin(builtin, actualArguments, position.lineNumber()));
+			position.next();
+			return;
+		}
+		ExtensionFunction extensionFunction = callTuple.getExtensionFunctions().get(awkName);
+		if (extensionFunction != null) {
+			resolveIndirectArguments(actualArguments, extensionFunction);
+			if (profiling) {
+				activeProfilingFunctions.push(new ActiveFunction(awkName, tupleStartNanos));
+			}
+			try {
+				push(
+						invokeExtension(
+								extensionFunction,
+								actualArguments,
+								position.lineNumber(),
+								true));
+			} finally {
+				if (profiling) {
+					recordFunctionExit(System.nanoTime());
+				}
+			}
+			position.next();
+			return;
+		}
+		throw new AwkRuntimeException(
+				position.lineNumber(),
+				"function `" + qualifiedName + "' is not defined");
 	}
 
 	private void execPrint(CountTuple tuple) throws IOException {
