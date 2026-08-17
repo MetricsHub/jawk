@@ -28,8 +28,9 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   to exist on the current drive, a redirection created and truncated `dev\null` and kept the
   output that was meant to be discarded, and where it did not, the redirection was a fatal error
   and `getline` aborted the script. Only the name is translated, so `close()` still takes the
-  spelling the script used, and the Windows spelling `NUL` keeps working under its own name. On
-  POSIX platforms nothing changes: `/dev/null` is the device already
+  spelling the script used, and the native Windows spelling `NUL` needs no translation — it is now
+  accepted as an operand too, which the per-file input loop of `BEGINFILE`/`ENDFILE` used to
+  report as a missing file. On POSIX platforms nothing changes: `/dev/null` is the device already
   ([#567](https://github.com/jawkio/jawk/issues/567)).
 - The gawk special filenames `/dev/stdout`, `/dev/stderr`, `/dev/stdin` and their `/dev/fd/1`,
   `/dev/fd/2`, `/dev/fd/0` spellings are now recognized in redirections and in `getline`, and

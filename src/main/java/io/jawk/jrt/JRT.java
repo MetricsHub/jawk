@@ -2829,13 +2829,16 @@ public class JRT {
 
 	/**
 	 * Returns whether the supplied name designates the null device, which reads
-	 * as an empty file and discards everything written to it. As in gawk, only
-	 * the Unix name is recognized: the Windows spelling {@code NUL} needs no
-	 * translation, since Windows opens that name as the device already.
+	 * as an empty file and discards everything written to it. Both spellings the
+	 * platform answers to are recognized: {@code /dev/null} everywhere, and the
+	 * native {@code NUL} on Windows, where the file system opens that name as the
+	 * device already.
 	 * <p>
-	 * Callers that inspect a filename before opening it must recognize the name
-	 * instead of relying on the file system, because Windows does not report its
-	 * null device as an existing file.
+	 * This is for callers that inspect a filename before opening it, which must
+	 * recognize the name instead of relying on the file system, because Windows
+	 * does not report its null device as an existing file. Translating a name for
+	 * the platform is a narrower question, answered by
+	 * {@link #toPlatformFileName(String)}.
 	 * </p>
 	 *
 	 * @param fileNameParam name used in a redirection, in {@code getline} or in
@@ -2843,7 +2846,8 @@ public class JRT {
 	 * @return {@code true} when the name designates the null device
 	 */
 	static boolean isNullDeviceName(String fileNameParam) {
-		return DEV_NULL.equals(fileNameParam);
+		return DEV_NULL.equals(fileNameParam)
+				|| (IS_WINDOWS && WINDOWS_NULL_DEVICE.equalsIgnoreCase(fileNameParam));
 	}
 
 	/**
@@ -2853,7 +2857,8 @@ public class JRT {
 	 * device on every Unix system but a plain relative path on Windows, where
 	 * leaving it untranslated creates and truncates a {@code dev\null} file, or
 	 * fails outright when no {@code dev} directory exists. gawk's Windows port
-	 * performs the same translation.
+	 * performs the same translation, and, as in gawk, the native {@code NUL}
+	 * needs none: Windows opens that name as the device itself.
 	 * <p>
 	 * Redirections stay keyed by the name the script used, so {@code close()}
 	 * takes the original spelling.

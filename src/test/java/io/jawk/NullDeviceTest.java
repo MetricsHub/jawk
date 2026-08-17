@@ -159,6 +159,39 @@ public class NullDeviceTest {
 	}
 
 	@Test
+	public void nulAsAnOperandReadsAsAnEmptyFileOnWindows() throws Exception {
+		// NUL needs no translation — Windows opens that name as the device — but
+		// it is no more stat-able than /dev/null is, so the per-file main input
+		// loop must recognize it too instead of reporting a missing file. The
+		// name is an ordinary filename on POSIX platforms, hence windowsOnly().
+		AwkTestSupport
+				.awkTest("the native NUL spelling is a readable empty file in the file list")
+				.script(
+						"BEGINFILE { print \"bf[\" FILENAME \"] errno=[\" ERRNO \"]\" }"
+								+ " ENDFILE { print \"ef[\" FILENAME \"]\", FNR }"
+								+ " END { print \"NR=\" NR }")
+				.operand("NUL")
+				.windowsOnly()
+				.expectLines("bf[NUL] errno=[]", "ef[NUL] 0", "NR=0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void nulIsTheNullDeviceInRedirectionsOnWindows() throws Exception {
+		AwkTestSupport
+				.awkTest("the native NUL spelling discards output and reads as empty")
+				.script(
+						"BEGIN {"
+								+ " print \"written\" > \"NUL\";"
+								+ " print close(\"NUL\");"
+								+ " print (getline line < \"NUL\"), \"[\" line \"]\""
+								+ " }")
+				.windowsOnly()
+				.expectLines("0", "0 []")
+				.runAndAssert();
+	}
+
+	@Test
 	public void writingToDevNullCreatesNoRegularFile() throws Exception {
 		// A redirection that fails to reach the device writes to whatever regular
 		// file the name resolves to: on Windows that is dev\null on the current

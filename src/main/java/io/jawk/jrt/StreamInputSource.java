@@ -537,8 +537,10 @@ public class StreamInputSource implements InputSource, Closeable {
 	 */
 	private String openCurrentFile(String arg) {
 		// The default input stream and the null device are not files to stat:
-		// Windows reports its null device as nonexistent, so the checks below
-		// would turn an operand that reads as an empty file into an open error.
+		// Windows reports its null device as nonexistent, under either spelling,
+		// so the checks below would turn an operand that reads as an empty file
+		// into an open error — while the plain main input loop, which opens the
+		// operand without stat'ing it first, reads it happily.
 		if ("-".equals(arg) || JRT.isNullDeviceName(arg)) {
 			try {
 				partitioningReader = openFileListReader(arg);

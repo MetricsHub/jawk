@@ -269,7 +269,8 @@ where the device is spelled `NUL`, as gawk's Windows port does: `print > "/dev/n
 end of input (`0`), `close("/dev/null")` succeeds, and `/dev/null` as an operand reads as an
 empty input file. Unlike the four names above, the null device is opened like any other file —
 only its name is translated, never the redirection itself — so `close()` takes the spelling the
-script used. Windows also opens `NUL` under its own name, which needs no translation.
+script used. The native Windows spelling `NUL` needs no translation, since the file system opens
+that name as the device itself, and it is accepted wherever `/dev/null` is, operands included.
 
 ${esc.h}${esc.h}${esc.h} Range patterns
 
