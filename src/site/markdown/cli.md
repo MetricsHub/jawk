@@ -71,6 +71,8 @@ You can also request standard input explicitly with the `-` operand, which makes
 $ echo "from stdin" | java -jar jawk-${project.version}-standalone.jar '{ print FILENAME ":" $0 }' before.txt - after.txt
 ```
 
+Inside a script, `getline < "/dev/stdin"` reads the same standard input, and `print > "/dev/stdout"` and `print > "/dev/stderr"` write to the standard output and standard error of the process, as they do in gawk. See [special filenames](compatibility.html#special-filenames) for details.
+
 ## Read Input Files
 
 Input filenames passed after the script become runtime operands and are processed as AWK input files:
@@ -169,7 +171,7 @@ Use `-S` or `--sandbox` to switch to the sandboxed tuple compiler and runtime:
 $ java -jar jawk-${project.version}-standalone.jar -S -f script.awk input.txt
 ```
 
-Sandbox mode disables `system()`, input and output redirection, command pipelines, `@include` source inclusion, and related features that are intentionally unsafe in a restricted host environment.
+Sandbox mode disables `system()`, input and output redirection, command pipelines, `@include` source inclusion, and related features that are intentionally unsafe in a restricted host environment. Every redirection is rejected, whatever the target: the `/dev/stdin`, `/dev/stdout`, and `/dev/stderr` [special filenames](compatibility.html#special-filenames) are no more reachable from a sandboxed script than a regular file is.
 
 ## See Also
 

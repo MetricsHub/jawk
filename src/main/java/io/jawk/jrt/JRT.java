@@ -25,6 +25,7 @@ package io.jawk.jrt;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -96,6 +97,19 @@ public class JRT {
 	 */
 	private static final int DYNAMIC_PATTERN_CACHE_LIMIT = 256;
 
+	/** gawk special filename designating the standard input of the process. */
+	private static final String DEV_STDIN = "/dev/stdin";
+	/** gawk special filename designating the standard output of the process. */
+	private static final String DEV_STDOUT = "/dev/stdout";
+	/** gawk special filename designating the standard error of the process. */
+	private static final String DEV_STDERR = "/dev/stderr";
+	/** gawk special filename designating file descriptor 0 (standard input). */
+	private static final String DEV_FD_0 = "/dev/fd/0";
+	/** gawk special filename designating file descriptor 1 (standard output). */
+	private static final String DEV_FD_1 = "/dev/fd/1";
+	/** gawk special filename designating file descriptor 2 (standard error). */
+	private static final String DEV_FD_2 = "/dev/fd/2";
+
 	private final VariableManager vm;
 
 	private IoState ioState;
@@ -105,6 +119,19 @@ public class JRT {
 	private PrintStream error;
 	/** PrintStream used for runtime warning messages, stderr by default. */
 	private PrintStream warning = System.err;
+	/**
+	 * Stream backing the {@code /dev/stdin} special filename. It defaults to the
+	 * standard input of the JVM and is replaced by the input stream the host
+	 * configured for the run, so that {@code getline < "/dev/stdin"} reads the
+	 * same data as the main input loop does when no operand is given.
+	 */
+	private InputStream standardInput = System.in;
+	/**
+	 * Sink writing to the standard error of the process, used by the
+	 * {@code /dev/stderr} special filename; created on first use and discarded
+	 * whenever the warning stream is replaced.
+	 */
+	private AwkSink standardErrorSink;
 	/** Current IGNORECASE value, as assigned by the script or the host. */
 	private Object ignorecase = Long.valueOf(0L);
 	/** Precomputed truth of IGNORECASE, consulted by every regexp operation. */
@@ -193,12 +220,44 @@ public class JRT {
 		}
 	}
 
+	/**
+	 * Sink that flushes its stream after every operation, so that partial lines
+	 * are visible immediately. Used by the {@code /dev/stderr} special filename,
+	 * which gawk keeps unbuffered.
+	 */
+	private static final class FlushingAwkSink extends OutputStreamAwkSink {
+
+		private FlushingAwkSink(PrintStream printStream, Locale locale) {
+			super(printStream, locale);
+		}
+
+		@Override
+		public void print(String ofs, String ors, String ofmt, Object... values) {
+			super.print(ofs, ors, ofmt, values);
+			flush();
+		}
+
+		@Override
+		public void printf(String ofs, String ors, String ofmt, String convfmt, String format, Object... values) {
+			super.printf(ofs, ors, ofmt, convfmt, format, values);
+			flush();
+		}
+	}
+
 	private static final class IoState {
 
 		private final Map<String, PartitioningReader> fileReaders = new HashMap<String, PartitioningReader>();
 		private final Map<String, CommandInputState> commandInputs = new HashMap<String, CommandInputState>();
 		private final Map<String, FileOutputState> fileOutputs = new HashMap<String, FileOutputState>();
 		private final Map<String, ProcessOutputState> processOutputs = new HashMap<String, ProcessOutputState>();
+		/**
+		 * Sink handed out for each standard output special filename a redirection
+		 * is currently open on. The sink is retained rather than resolved again on
+		 * {@code close()}, so that the redirection is always flushed through the
+		 * sink that actually received its writes, even if the runtime's default
+		 * output sink has been replaced since.
+		 */
+		private final Map<String, AwkSink> specialOutputs = new HashMap<String, AwkSink>();
 	}
 
 	/**
@@ -263,6 +322,24 @@ public class JRT {
 	 */
 	public void setWarningStream(PrintStream warningStream) {
 		this.warning = Objects.requireNonNull(warningStream, "warningStream");
+		// The /dev/stderr sink wraps the warning stream: drop it so that the
+		// next write is routed to the new stream.
+		this.standardErrorSink = null;
+	}
+
+	/**
+	 * Binds the stream that the {@code /dev/stdin} special filename reads from to
+	 * the input source of the execution that is starting. A stream-backed source
+	 * lends the stream it falls back to when {@code ARGV} holds no filename, which
+	 * is what the run treats as its standard input; a source that produces records
+	 * some other way has no such stream, so {@code /dev/stdin} designates the
+	 * standard input of the JVM.
+	 *
+	 * @param inputSource input source bound to this execution
+	 */
+	public void bindStandardInput(InputSource inputSource) {
+		this.standardInput = inputSource instanceof StreamInputSource ?
+				((StreamInputSource) inputSource).getDefaultInput() : System.in;
 	}
 
 	/**
@@ -2714,14 +2791,85 @@ public class JRT {
 	}
 
 	/**
-	 * Resolves the sink used by file redirection.
+	 * Returns whether the supplied name is the gawk special filename for the
+	 * standard input of the process.
+	 *
+	 * @param fileNameParam name used in a redirection
+	 * @return {@code true} for {@code /dev/stdin} and {@code /dev/fd/0}
+	 */
+	private static boolean isStandardInputName(String fileNameParam) {
+		return DEV_STDIN.equals(fileNameParam) || DEV_FD_0.equals(fileNameParam);
+	}
+
+	/**
+	 * Returns whether the supplied name is the gawk special filename for the
+	 * standard output of the process.
+	 *
+	 * @param fileNameParam name used in a redirection
+	 * @return {@code true} for {@code /dev/stdout} and {@code /dev/fd/1}
+	 */
+	private static boolean isStandardOutputName(String fileNameParam) {
+		return DEV_STDOUT.equals(fileNameParam) || DEV_FD_1.equals(fileNameParam);
+	}
+
+	/**
+	 * Returns whether the supplied name is the gawk special filename for the
+	 * standard error of the process.
+	 *
+	 * @param fileNameParam name used in a redirection
+	 * @return {@code true} for {@code /dev/stderr} and {@code /dev/fd/2}
+	 */
+	private static boolean isStandardErrorName(String fileNameParam) {
+		return DEV_STDERR.equals(fileNameParam) || DEV_FD_2.equals(fileNameParam);
+	}
+
+	/**
+	 * Returns the sink writing to the standard error of the process, creating it
+	 * on first use. Every write is flushed so that the records a script sends to
+	 * {@code /dev/stderr} interleave with the diagnostics the runtime itself
+	 * writes to the same stream.
+	 *
+	 * @return the {@code /dev/stderr} sink
+	 */
+	private AwkSink getStandardErrorSink() {
+		if (standardErrorSink == null) {
+			standardErrorSink = new FlushingAwkSink(warning, locale);
+		}
+		return standardErrorSink;
+	}
+
+	/**
+	 * Resolves the sink used by file redirection. The gawk special filenames
+	 * {@code /dev/stdout} and {@code /dev/stderr} (and their {@code /dev/fd/1}
+	 * and {@code /dev/fd/2} spellings) are routed to the streams the process
+	 * already holds open instead of being opened, and therefore truncated, as
+	 * regular files.
 	 *
 	 * @param fileNameParam target file name
 	 * @param append whether output should be appended
 	 * @return the sink that writes to the requested file
 	 */
 	protected AwkSink getFileAwkSink(String fileNameParam, boolean append) {
+		if (isStandardOutputName(fileNameParam)) {
+			return openSpecialOutput(fileNameParam, awkSink);
+		}
+		if (isStandardErrorName(fileNameParam)) {
+			return openSpecialOutput(fileNameParam, getStandardErrorSink());
+		}
 		return getOrCreateFileOutputState(fileNameParam, append).sink;
+	}
+
+	/**
+	 * Records that a redirection is open on a standard output special filename,
+	 * so that {@code close()} has something to report and to flush.
+	 *
+	 * @param fileNameParam the special filename being redirected to
+	 * @param sink the sink that receives the redirected output
+	 * @return the supplied sink
+	 */
+	private AwkSink openSpecialOutput(String fileNameParam, AwkSink sink) {
+		getIoState().specialOutputs.put(fileNameParam, sink);
+		return sink;
 	}
 
 	/**
@@ -2838,6 +2986,11 @@ public class JRT {
 	 * <p>
 	 * jrtConsumeFileInput.
 	 * </p>
+	 * <p>
+	 * The gawk special filename {@code /dev/stdin} (and its {@code /dev/fd/0}
+	 * spelling) reads the standard input of the process rather than a file of
+	 * that name.
+	 * </p>
 	 *
 	 * @param fileNameParam a {@link java.lang.String} object
 	 * @return a boolean
@@ -2848,8 +3001,10 @@ public class JRT {
 		PartitioningReader pr = fileReaders.get(fileNameParam);
 		if (pr == null) {
 			try {
+				InputStream inputStream = isStandardInputName(fileNameParam) ?
+						standardInput : new FileInputStream(fileNameParam);
 				pr = new PartitioningReader(
-						new InputStreamReader(new FileInputStream(fileNameParam), StandardCharsets.UTF_8),
+						new InputStreamReader(inputStream, StandardCharsets.UTF_8),
 						this.rs);
 				fileReaders.put(fileNameParam, pr);
 				this.filename = fileNameParam;
@@ -3033,8 +3188,9 @@ public class JRT {
 		boolean b2 = jrtCloseCommandReader(fileNameParam);
 		boolean b3 = jrtCloseOutputFile(fileNameParam);
 		boolean b4 = jrtCloseOutputStream(fileNameParam);
+		boolean b5 = jrtCloseSpecialOutput(fileNameParam);
 		// either close will do
-		return (b1 || b2 || b3 || b4) ? ZERO : MINUS_ONE;
+		return (b1 || b2 || b3 || b4 || b5) ? ZERO : MINUS_ONE;
 	}
 
 	/**
@@ -3060,8 +3216,41 @@ public class JRT {
 		for (String s : state.processOutputs.keySet()) {
 			set.add(s);
 		}
+		for (String s : state.specialOutputs.keySet()) {
+			set.add(s);
+		}
 		for (String s : set) {
 			jrtClose(s);
+		}
+	}
+
+	/**
+	 * Closes a redirection open on one of the standard output special filenames.
+	 * The sink is flushed but the stream it writes to is left open: it belongs to
+	 * the process, is shared with the runtime's own diagnostics and with the host
+	 * application, and gawk likewise closes only its private duplicate of the
+	 * descriptor. Redirecting to the same name again therefore works, exactly as
+	 * it does in gawk.
+	 *
+	 * @param fileNameParam the filename passed to {@code close()}
+	 * @return {@code true} when a redirection was open on that name and its sink
+	 *         was flushed successfully
+	 */
+	private boolean jrtCloseSpecialOutput(String fileNameParam) {
+		IoState state = ioState;
+		if (state == null) {
+			return false;
+		}
+		AwkSink sink = state.specialOutputs.remove(fileNameParam);
+		if (sink == null) {
+			return false;
+		}
+		try {
+			sink.flush();
+			return true;
+		} catch (IOException ioe) {
+			setERRNO(ioe.toString());
+			return false;
 		}
 	}
 
@@ -3116,6 +3305,14 @@ public class JRT {
 			return false;
 		}
 		state.fileReaders.remove(fileNameParam);
+		if (isStandardInputName(fileNameParam)) {
+			// The standard input of the process is shared with the main input
+			// loop and with the host application: drop the record reader but
+			// never close the stream behind it. A later getline from the same
+			// name reads on from whatever the stream still holds, as it does in
+			// gawk, which closes only its private duplicate of the descriptor.
+			return true;
+		}
 		try {
 			pr.close();
 			return true;

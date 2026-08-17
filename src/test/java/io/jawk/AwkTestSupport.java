@@ -53,8 +53,11 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import io.jawk.backend.AVM;
 import io.jawk.ext.JawkExtension;
+import io.jawk.jrt.AwkSink;
 import io.jawk.jrt.InputSource;
+import io.jawk.jrt.StreamInputSource;
 
 /**
  * Reusable helpers for building and executing Jawk tests. This consolidates the
@@ -351,6 +354,7 @@ public final class AwkTestSupport {
 		private InputSource inputSource;
 		private Reader scriptReader;
 		private Path scriptPath;
+		private final List<String> sharedRuntimeInputs = new ArrayList<>();
 
 		private AwkTestBuilder(String description) {
 			super(description);
@@ -497,6 +501,27 @@ public final class AwkTestSupport {
 			return this;
 		}
 
+		/**
+		 * Runs the script several times on a single reused runtime, one execution
+		 * per supplied standard-input text, and captures the output of all of them
+		 * in order. This is how a test exercises the state a runtime carries — or
+		 * must not carry — from one execution to the next, which the one-shot
+		 * {@link #stdin(String)} flow cannot express. Placeholders in each text are
+		 * resolved as usual.
+		 *
+		 * @param stdinPerExecution standard-input text for each execution, in order
+		 * @return this builder for method chaining
+		 * @throws IllegalArgumentException when no input is supplied
+		 */
+		public AwkTestBuilder executionsOnSharedRuntime(String... stdinPerExecution) {
+			if (stdinPerExecution == null || stdinPerExecution.length == 0) {
+				throw new IllegalArgumentException("At least one execution input is required");
+			}
+			sharedRuntimeInputs.clear();
+			sharedRuntimeInputs.addAll(Arrays.asList(stdinPerExecution));
+			return this;
+		}
+
 		@Override
 		protected AwkTestCase buildTestCase(
 				TestLayout layout,
@@ -519,7 +544,8 @@ public final class AwkTestSupport {
 					extensions,
 					inputSource,
 					scriptReader,
-					scriptPath);
+					scriptPath,
+					sharedRuntimeInputs);
 		}
 	}
 
@@ -1099,6 +1125,7 @@ public final class AwkTestSupport {
 		private final InputSource inputSource;
 		private final Reader scriptReader;
 		private final Path scriptPath;
+		private final List<String> sharedRuntimeInputs;
 
 		AwkTestCase(
 				TestLayout layout,
@@ -1112,7 +1139,8 @@ public final class AwkTestSupport {
 				List<JawkExtension> extensions,
 				InputSource inputSource,
 				Reader scriptReader,
-				Path scriptPath) {
+				Path scriptPath,
+				List<String> sharedRuntimeInputs) {
 			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, requiresPosix);
 			this.preAssignments = new LinkedHashMap<>(preAssignments);
 			this.customAwk = customAwk;
@@ -1120,6 +1148,7 @@ public final class AwkTestSupport {
 			this.inputSource = inputSource;
 			this.scriptReader = scriptReader;
 			this.scriptPath = scriptPath;
+			this.sharedRuntimeInputs = new ArrayList<>(sharedRuntimeInputs);
 		}
 
 		@Override
@@ -1147,6 +1176,9 @@ public final class AwkTestSupport {
 			} else {
 				program = awk.compile(resolvedScript(env));
 			}
+			if (!sharedRuntimeInputs.isEmpty()) {
+				return executeOnSharedRuntime(awk, program, env, out);
+			}
 			Awk.AwkRunBuilder builder = awk
 					.script(program)
 					.arguments(resolvedOperands(env))
@@ -1164,6 +1196,47 @@ public final class AwkTestSupport {
 				builder.execute(out);
 			} catch (ExitException ex) {
 				exitCode = ex.getCode();
+			}
+			return new ActualResult(out.toString(), "", exitCode);
+		}
+
+		/**
+		 * Runs the compiled program once per configured standard-input text on a
+		 * single reused runtime, collecting every execution's output in order.
+		 *
+		 * @param awk engine owning the runtime settings and extensions
+		 * @param program compiled program executed by each run
+		 * @param env execution environment used to resolve placeholders
+		 * @param out buffer collecting the output of all executions
+		 * @return the captured result
+		 * @throws Exception when an execution fails unexpectedly
+		 */
+		private ActualResult executeOnSharedRuntime(
+				Awk awk,
+				AwkProgram program,
+				ExecutionEnvironment env,
+				StringBuilder out)
+				throws Exception {
+			int exitCode = 0;
+			try (AVM avm = awk.createAvm()) {
+				avm.setAwkSink(AwkSink.from(out));
+				// Every source is created before any of them runs, so that what a
+				// run observes depends on the source bound to it rather than on the
+				// order the sources were constructed in.
+				List<InputSource> sources = new ArrayList<>(sharedRuntimeInputs.size());
+				for (String input : sharedRuntimeInputs) {
+					InputStream stream = new ByteArrayInputStream(
+							env.resolve(input).getBytes(StandardCharsets.UTF_8));
+					sources.add(new StreamInputSource(stream, avm, avm.getJrt()));
+				}
+				for (InputSource source : sources) {
+					try {
+						avm.execute(program, source, resolvedOperands(env), preAssignments);
+					} catch (ExitException ex) {
+						exitCode = ex.getCode();
+						break;
+					}
+				}
 			}
 			return new ActualResult(out.toString(), "", exitCode);
 		}

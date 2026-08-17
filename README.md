@@ -18,6 +18,7 @@ Jawk fully implements POSIX AWK, and adds support for the most commonly used gaw
 - `BEGINFILE` / `ENDFILE` special patterns, with the `ERRNO` and `ARGIND` special variables, so a script can hook into the command-line file processing loop and skip unreadable files without a fatal error
 - The `nextfile` statement
 - The `IGNORECASE`, `SYMTAB`, and `FUNCTAB` special variables
+- The `/dev/stdout`, `/dev/stderr`, and `/dev/stdin` special filenames (and their `/dev/fd/N` spellings) in redirections and `getline`, routed to the standard streams of the process instead of files of those names
 
 The gawk-specific `@` syntax and arrays-of-arrays syntax are rejected in `--posix` mode.
 

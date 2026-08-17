@@ -97,6 +97,19 @@ public class StreamInputSource implements InputSource, Closeable {
 		this.jrt = Objects.requireNonNull(jrt, "jrt");
 	}
 
+	/**
+	 * Returns the stream this source falls back to when {@code ARGV} holds no
+	 * filename. It is what the run treats as its standard input, both for the
+	 * conventional {@code -} filename and for the gawk special filename
+	 * {@code /dev/stdin}, which the runtime binds to it when this source becomes
+	 * the active one.
+	 *
+	 * @return the default input stream
+	 */
+	InputStream getDefaultInput() {
+		return defaultInput;
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	public boolean nextRecord() throws IOException {
