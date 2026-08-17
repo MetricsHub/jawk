@@ -108,6 +108,16 @@ public final class CollectingSink extends AwkSink {
 
 `getPrintStream()` provides the `PrintStream` used for pumping the stdout of spawned processes (`system("...")` and pipe output from `print ... | "cmd"`) back into the host output. File redirection (`print > "file"`) does _not_ use this stream — it creates its own file-backed sink internally.
 
+### Special Filenames
+
+The gawk [special filenames](compatibility.html#special-filenames) are routed to the streams the run is configured with rather than to files of those names:
+
+- `print > "/dev/stdout"` (and `/dev/fd/1`) writes to the sink, exactly like an unredirected `print`, so a script that writes there is captured by the host like any other output.
+- `print > "/dev/stderr"` (and `/dev/fd/2`) writes to the stream passed to `errorStream(PrintStream)`, which defaults to `System.err`.
+- `getline < "/dev/stdin"` (and `/dev/fd/0`) reads the stream passed to `input(...)` — not the JVM's standard input, unless that is what the host supplied. When the run is fed with a structured `InputSource` instead of a stream, `/dev/stdin` falls back to `System.in`.
+
+`close()` on these names never closes the host's streams.
+
 The default implementation returns a no-op stream that silently discards output. Override this method in sinks that need to capture subprocess output. Implementations typically return `System.out` or a custom stream.
 
 ### Using a Custom Sink

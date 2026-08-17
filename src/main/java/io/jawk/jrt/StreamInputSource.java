@@ -95,6 +95,10 @@ public class StreamInputSource implements InputSource, Closeable {
 		this.defaultInput = Objects.requireNonNull(defaultInput, "defaultInput");
 		this.vm = Objects.requireNonNull(vm, "vm");
 		this.jrt = Objects.requireNonNull(jrt, "jrt");
+		// The stream this source falls back to is what the run considers its
+		// standard input, both for the conventional "-" filename and for the
+		// gawk special filename /dev/stdin.
+		this.jrt.setStandardInput(defaultInput);
 	}
 
 	/** {@inheritDoc} */

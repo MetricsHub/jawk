@@ -14,6 +14,8 @@ You can use an `InputSource` with both:
 - `Awk.script(compiled).input(inputSource).execute()`
 - `Awk.eval(expression, source)` for one-off expression evaluation
 
+A script can also read the run's byte-stream input explicitly with `getline < "/dev/stdin"`, which reads the stream passed to `input(...)` rather than a file of that name — see [special filenames](compatibility.html#special-filenames). With an `InputSource` there is no such stream, so `/dev/stdin` falls back to `System.in`.
+
 ## InputSource Contract
 
 An `InputSource` implementation controls four things:

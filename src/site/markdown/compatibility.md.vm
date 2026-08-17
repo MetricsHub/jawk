@@ -231,6 +231,37 @@ A few edge cases follow Java's platform rules rather than the C library's:
 - NaN always prints as `nan`: Java does not track the sign of NaN, so gawk's occasional `-nan`
   is rendered without a sign.
 
+${esc.h}${esc.h}${esc.h} Special filenames
+
+Jawk recognizes the gawk
+[special filenames](https://www.gnu.org/software/gawk/manual/html_node/Special-FD.html) in
+redirections and in `getline`, and routes them to the streams the process already holds open
+instead of opening files of those names:
+
+- `/dev/stdout` and `/dev/fd/1` in `print`/`printf` redirections write to the standard output,
+  interleaved with unredirected `print` output.
+- `/dev/stderr` and `/dev/fd/2` write to the standard error, interleaved with the diagnostics
+  Jawk itself writes there. Every record is flushed, as gawk keeps `/dev/stderr` unbuffered.
+- `/dev/stdin` and `/dev/fd/0` in `getline < file` read the standard input, exactly like the
+  conventional `-` operand does.
+
+Nothing is opened or truncated, so `>` and `>>` behave identically on these names, and a shell
+redirection such as `2>log` keeps its position: the records the script writes and the ones Jawk
+writes go through the same stream instead of clobbering each other.
+
+`close()` on one of these names flushes the redirection and reports success, but never closes the
+underlying descriptor — which is shared with the runtime and, when Jawk is embedded, with the
+host application — so the name stays usable afterwards. As in gawk, closing a name no
+redirection is open on returns `-1`, and the records a closed `/dev/stdin` had already buffered
+are gone with it.
+
+Other `/dev/fd/N` names are not special-cased and are opened as ordinary files, which works on
+the platforms that provide them (as gawk itself documents for systems without `/dev/fd`
+support). These names are only special in redirections and in `getline`: an operand naming an
+input file is opened as a regular file, so use `-` to read the standard input there. In
+[sandbox mode](cli.html#enable-sandbox-mode) all redirections are rejected, the special
+filenames included.
+
 ${esc.h}${esc.h}${esc.h} Range patterns
 
 Range patterns (`begpat, endpat`) evaluate their two conditions lazily, as POSIX requires: the start condition is evaluated only while outside the range, and the end condition only once the range has started — including on the very record that starts it, so a range can begin and end on the same record. Conditions with side effects, such as `a++ == 2, a++ == 5`, therefore behave exactly as in gawk and One True Awk: each condition's side effects run only on the records where that condition is actually tested.

@@ -20,6 +20,21 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- The gawk special filenames `/dev/stdout`, `/dev/stderr`, `/dev/stdin` and their `/dev/fd/1`,
+  `/dev/fd/2`, `/dev/fd/0` spellings are now recognized in redirections and in `getline`, and
+  route to the streams the process already holds open: `print > "/dev/stdout"` writes to the
+  standard output alongside unredirected `print`, `print > "/dev/stderr"` writes to the standard
+  error alongside Jawk's own diagnostics (flushed per record), and `getline < "/dev/stdin"` reads
+  the standard input. Previously each name was opened as a regular file, so an output redirection
+  truncated it and wrote through an independent stream: with `2>log`, a script writing to
+  `/dev/stderr` restarted at offset 0 of the log and clobbered what Jawk had written there (and
+  vice versa). `>` and `>>` now behave identically on these names, since nothing is opened or
+  truncated, and `close()` flushes the redirection and reports success without ever closing the
+  underlying stream, so the name stays usable — closing a name no redirection is open on returns
+  `-1`, as in gawk. Other `/dev/fd/N` names are still opened as ordinary files, an operand naming
+  an input file is still opened as a regular file (use `-` for the standard input there), and
+  sandbox mode still rejects every redirection, the special filenames included
+  ([#556](https://github.com/jawkio/jawk/issues/556)).
 - Arithmetic on integral operands is now computed in exact 64-bit integers when the result fits:
   `+`, `-`, `*`, an evenly-dividing `/`, `%`, unary `-` and `+`, `++`/`--`, and the corresponding
   compound assignments — on variables, array elements, and fields alike — keep all their digits
