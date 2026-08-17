@@ -26,7 +26,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Locale;
+
 import org.junit.Test;
+
+import io.jawk.backend.AVM;
+import io.jawk.jrt.AwkSink;
+import io.jawk.jrt.StreamInputSource;
 
 /**
  * Tests for the gawk special filenames {@code /dev/stdin}, {@code /dev/stdout},
@@ -293,6 +302,42 @@ public class SpecialFileNameTest {
 				.script("BEGIN { getline line < \"/dev/stdin\"; print line }")
 				.expectLines("piped")
 				.runAndAssert();
+	}
+
+	@Test
+	public void devStdinFollowsTheInputSourceOfEachExecution() throws Exception {
+		// A reused runtime must bind /dev/stdin to the source of the execution
+		// that is starting, never to the stream of a previous one. AwkTestSupport
+		// runs one execution per test, so this contract is exercised through the
+		// AVM directly.
+		Awk awk = new Awk();
+		AwkProgram program = awk.compile("BEGIN { getline line < \"/dev/stdin\"; print line }");
+		StringBuilder output = new StringBuilder();
+		try (AVM avm = awk.createAvm()) {
+			avm.setAwkSink(AwkSink.from(output, Locale.US));
+			// Both sources exist before either runs, so only the binding made when
+			// a source becomes the active one can select the right stream.
+			StreamInputSource first = streamSource(avm, "one\n");
+			StreamInputSource second = streamSource(avm, "two\n");
+			avm.execute(program, first, Collections.<String>emptyList(), null);
+			avm.execute(program, second, Collections.<String>emptyList(), null);
+		}
+		assertEquals("one\ntwo\n", output.toString());
+	}
+
+	/**
+	 * Creates a stream-backed input source feeding the supplied text to the
+	 * runtime of the given AVM.
+	 *
+	 * @param avm runtime the source belongs to
+	 * @param data text the source presents as its standard input
+	 * @return the input source
+	 */
+	private static StreamInputSource streamSource(AVM avm, String data) {
+		return new StreamInputSource(
+				new ByteArrayInputStream(data.getBytes(StandardCharsets.UTF_8)),
+				avm,
+				avm.getJrt());
 	}
 
 	@Test

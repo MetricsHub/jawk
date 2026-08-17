@@ -773,6 +773,9 @@ public class AVM implements VariableManager, Closeable {
 			closeInputSource(previousResolvedSource);
 		}
 		resolvedInputSource = resolvedSource;
+		// The /dev/stdin special filename follows the source bound to the run, so
+		// that a reused AVM never reads the stream of a previous execution.
+		jrt.bindStandardInput(resolvedSource);
 	}
 
 	private boolean hasCompatibleEvalGlobalLayout(long numGlobals) {

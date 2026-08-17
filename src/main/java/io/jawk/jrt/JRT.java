@@ -251,12 +251,13 @@ public class JRT {
 		private final Map<String, FileOutputState> fileOutputs = new HashMap<String, FileOutputState>();
 		private final Map<String, ProcessOutputState> processOutputs = new HashMap<String, ProcessOutputState>();
 		/**
-		 * Names of the standard output special filenames a redirection is
-		 * currently open on. The streams they designate belong to the process, so
-		 * there is no state to hold beyond the fact that {@code close()} has an
-		 * open redirection to report.
+		 * Sink handed out for each standard output special filename a redirection
+		 * is currently open on. The sink is retained rather than resolved again on
+		 * {@code close()}, so that the redirection is always flushed through the
+		 * sink that actually received its writes, even if the runtime's default
+		 * output sink has been replaced since.
 		 */
-		private final Set<String> specialOutputs = new HashSet<String>();
+		private final Map<String, AwkSink> specialOutputs = new HashMap<String, AwkSink>();
 	}
 
 	/**
@@ -327,14 +328,18 @@ public class JRT {
 	}
 
 	/**
-	 * Sets the stream that the {@code /dev/stdin} special filename reads from.
-	 * It defaults to {@link System#in} and is normally set to the input stream
-	 * the host configured for the run.
+	 * Binds the stream that the {@code /dev/stdin} special filename reads from to
+	 * the input source of the execution that is starting. A stream-backed source
+	 * lends the stream it falls back to when {@code ARGV} holds no filename, which
+	 * is what the run treats as its standard input; a source that produces records
+	 * some other way has no such stream, so {@code /dev/stdin} designates the
+	 * standard input of the JVM.
 	 *
-	 * @param inputStream stream backing {@code /dev/stdin}
+	 * @param inputSource input source bound to this execution
 	 */
-	public void setStandardInput(InputStream inputStream) {
-		this.standardInput = Objects.requireNonNull(inputStream, "inputStream");
+	public void bindStandardInput(InputSource inputSource) {
+		this.standardInput = inputSource instanceof StreamInputSource ?
+				((StreamInputSource) inputSource).getDefaultInput() : System.in;
 	}
 
 	/**
@@ -2846,14 +2851,25 @@ public class JRT {
 	 */
 	protected AwkSink getFileAwkSink(String fileNameParam, boolean append) {
 		if (isStandardOutputName(fileNameParam)) {
-			getIoState().specialOutputs.add(fileNameParam);
-			return awkSink;
+			return openSpecialOutput(fileNameParam, awkSink);
 		}
 		if (isStandardErrorName(fileNameParam)) {
-			getIoState().specialOutputs.add(fileNameParam);
-			return getStandardErrorSink();
+			return openSpecialOutput(fileNameParam, getStandardErrorSink());
 		}
 		return getOrCreateFileOutputState(fileNameParam, append).sink;
+	}
+
+	/**
+	 * Records that a redirection is open on a standard output special filename,
+	 * so that {@code close()} has something to report and to flush.
+	 *
+	 * @param fileNameParam the special filename being redirected to
+	 * @param sink the sink that receives the redirected output
+	 * @return the supplied sink
+	 */
+	private AwkSink openSpecialOutput(String fileNameParam, AwkSink sink) {
+		getIoState().specialOutputs.put(fileNameParam, sink);
+		return sink;
 	}
 
 	/**
@@ -3200,7 +3216,7 @@ public class JRT {
 		for (String s : state.processOutputs.keySet()) {
 			set.add(s);
 		}
-		for (String s : state.specialOutputs) {
+		for (String s : state.specialOutputs.keySet()) {
 			set.add(s);
 		}
 		for (String s : set) {
@@ -3222,11 +3238,15 @@ public class JRT {
 	 */
 	private boolean jrtCloseSpecialOutput(String fileNameParam) {
 		IoState state = ioState;
-		if (state == null || !state.specialOutputs.remove(fileNameParam)) {
+		if (state == null) {
+			return false;
+		}
+		AwkSink sink = state.specialOutputs.remove(fileNameParam);
+		if (sink == null) {
 			return false;
 		}
 		try {
-			(isStandardOutputName(fileNameParam) ? awkSink : getStandardErrorSink()).flush();
+			sink.flush();
 			return true;
 		} catch (IOException ioe) {
 			setERRNO(ioe.toString());
