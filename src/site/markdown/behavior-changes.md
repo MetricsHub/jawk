@@ -20,6 +20,17 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- On Windows, the filename `/dev/null` now designates the platform's null device (`NUL`) in
+  redirections, in `getline`, and as an input operand, as gawk's Windows port does:
+  `print > "/dev/null"` discards its output and creates no file, `getline < "/dev/null"` reports
+  end of input (`0`), `close("/dev/null")` succeeds, and `awk '{ ... }' /dev/null` reads an empty
+  input file. Previously the name was opened as a relative path: where a `dev` directory happened
+  to exist on the current drive, a redirection created and truncated `dev\null` and kept the
+  output that was meant to be discarded, and where it did not, the redirection was a fatal error
+  and `getline` aborted the script. Only the name is translated, so `close()` still takes the
+  spelling the script used, and the Windows spelling `NUL` keeps working under its own name. On
+  POSIX platforms nothing changes: `/dev/null` is the device already
+  ([#567](https://github.com/jawkio/jawk/issues/567)).
 - The gawk special filenames `/dev/stdout`, `/dev/stderr`, `/dev/stdin` and their `/dev/fd/1`,
   `/dev/fd/2`, `/dev/fd/0` spellings are now recognized in redirections and in `getline`, and
   route to the streams the process already holds open: `print > "/dev/stdout"` writes to the

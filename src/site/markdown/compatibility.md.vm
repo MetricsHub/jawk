@@ -262,6 +262,15 @@ input file is opened as a regular file, so use `-` to read the standard input th
 [sandbox mode](cli.html#enable-sandbox-mode) all redirections are rejected, the special
 filenames included.
 
+`/dev/null` is not one of those four names but a real device on every Unix system, so portable
+scripts discard output by redirecting to it. Jawk makes the name mean the same thing on Windows,
+where the device is spelled `NUL`, as gawk's Windows port does: `print > "/dev/null"` and
+`printf > "/dev/null"` discard their output and create no file, `getline < "/dev/null"` reports
+end of input (`0`), `close("/dev/null")` succeeds, and `/dev/null` as an operand reads as an
+empty input file. Unlike the four names above, the null device is opened like any other file —
+only its name is translated, never the redirection itself — so `close()` takes the spelling the
+script used. Windows also opens `NUL` under its own name, which needs no translation.
+
 ${esc.h}${esc.h}${esc.h} Range patterns
 
 Range patterns (`begpat, endpat`) evaluate their two conditions lazily, as POSIX requires: the start condition is evaluated only while outside the range, and the end condition only once the range has started — including on the very record that starts it, so a range can begin and end on the same record. Conditions with side effects, such as `a++ == 2, a++ == 5`, therefore behave exactly as in gawk and One True Awk: each condition's side effects run only on the records where that condition is actually tested.

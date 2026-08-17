@@ -71,7 +71,7 @@ You can also request standard input explicitly with the `-` operand, which makes
 $ echo "from stdin" | java -jar jawk-${project.version}-standalone.jar '{ print FILENAME ":" $0 }' before.txt - after.txt
 ```
 
-Inside a script, `getline < "/dev/stdin"` reads the same standard input, and `print > "/dev/stdout"` and `print > "/dev/stderr"` write to the standard output and standard error of the process, as they do in gawk. See [special filenames](compatibility.html#special-filenames) for details.
+Inside a script, `getline < "/dev/stdin"` reads the same standard input, and `print > "/dev/stdout"` and `print > "/dev/stderr"` write to the standard output and standard error of the process, as they do in gawk. `print > "/dev/null"` discards its output on every platform, Windows included, and `/dev/null` may be passed as an operand to read an empty input file. See [special filenames](compatibility.html#special-filenames) for details.
 
 ## Read Input Files
 
