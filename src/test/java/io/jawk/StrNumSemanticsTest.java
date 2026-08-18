@@ -178,6 +178,76 @@ public class StrNumSemanticsTest {
 	}
 
 	@Test
+	public void testBlankPaddedRecordIsNumericString() throws Exception {
+		awkTest("blank-padded record compares numerically")
+				.script("{ print($0 == 12), ($1 == 12) }")
+				.stdin(" 12 \n\t12\t\n")
+				.expectLines("1 1", "1 1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankPaddedRecordWithNonNumericTextStaysString() throws Exception {
+		awkTest("internal blanks or trailing text keep the record a string")
+				.script("{ print($0 == 12) }")
+				.stdin(" 1 2 \n 12x \n")
+				.expectLines("0", "0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankOnlyRecordIsNotNumeric() throws Exception {
+		awkTest("blank-only record is neither zero nor the empty string")
+				.script("{ print($0 == 0), ($0 == \"\") }")
+				.stdin("  \n")
+				.expectLines("0 0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankPaddedStringConstantStaysString() throws Exception {
+		awkTest("blank-padded string constants are never numeric strings")
+				.script("BEGIN { x = \" 12 \"; print(x == 12) }")
+				.expectLines("0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankPaddedSplitElementIsNumericString() throws Exception {
+		awkTest("blank-padded split elements compare numerically")
+				.script("BEGIN { split(\"a, 12 , 1 2 \", a, \",\"); print(a[2] == 12); print(a[3] == 12) }")
+				.expectLines("1", "0")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankPaddedGetlineVarIsNumericString() throws Exception {
+		awkTest("blank-padded getline var compares numerically")
+				.script("BEGIN { getline line < \"{{padded.txt}}\"; print(line == 12); print(line \"\") }")
+				.file("padded.txt", " 12 \n")
+				.expectLines("1", " 12 ")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankPaddedPreassignmentIsNumericString() throws Exception {
+		awkTest("blank-padded preassignments compare numerically")
+				.preassign("x", " 12 ")
+				.script("BEGIN { print(x == 12) }")
+				.expectLines("1")
+				.runAndAssert();
+	}
+
+	@Test
+	public void testBlankPaddedRecordTruthinessUsesNumericValue() throws Exception {
+		awkTest("blank-padded numeric records are truthy by numeric value")
+				.script("{ print($0 ? \"true\" : \"false\") }")
+				.stdin(" 0 \n 12 \n")
+				.expectLines("false", "true")
+				.runAndAssert();
+	}
+
+	@Test
 	public void testStrNumComparisonUsesRuntimeLocale() throws Exception {
 		AwkSettings settings = new AwkSettings();
 		settings.setLocale(Locale.FRANCE);

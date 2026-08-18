@@ -62,6 +62,31 @@ public class JRTComparisonNumberTest {
 	}
 
 	@Test
+	public void testIsParseableNumberIgnoresSurroundingBlanks() {
+		assertTrue(JRT.isParseableNumber(" 12", '.'));
+		assertTrue(JRT.isParseableNumber("12 ", '.'));
+		assertTrue(JRT.isParseableNumber(" 12 ", '.'));
+		// Java's whitespace definition applies, wider than C isspace: Unicode
+		// spaces (EM SPACE here) count as padding and must still parse once
+		// recognized.
+		String emSpace = Character.toString((char) 0x2003);
+		assertTrue(JRT.isParseableNumber(emSpace + "12" + emSpace, '.'));
+		assertTrue(JRT.compare2(new StrNum(emSpace + "12" + emSpace), 12L, 0));
+		assertTrue(JRT.isParseableNumber("\t+12.5e1\t", '.'));
+		assertTrue(JRT.isParseableNumber("\f12", '.'));
+	}
+
+	@Test
+	public void testIsParseableNumberRejectsBlankOnlyAndInternalBlanks() {
+		assertFalse(JRT.isParseableNumber(" ", '.'));
+		assertFalse(JRT.isParseableNumber(" \t ", '.'));
+		assertFalse(JRT.isParseableNumber(" 1 2 ", '.'));
+		assertFalse(JRT.isParseableNumber(" 12x ", '.'));
+		assertFalse(JRT.isParseableNumber(" + ", '.'));
+		assertFalse(JRT.isParseableNumber("x 12 ", '.'));
+	}
+
+	@Test
 	public void testIsParseableNumberRejectsHexadecimal() {
 		assertFalse(JRT.isParseableNumber("0x0", '.'));
 		assertFalse(JRT.isParseableNumber("0x10", '.'));
@@ -72,7 +97,15 @@ public class JRTComparisonNumberTest {
 	@Test
 	public void testIsParseableNumberUsesLocaleDecimalSeparator() {
 		assertTrue(JRT.isParseableNumber("3,14", ','));
+		assertTrue(JRT.isParseableNumber(" 3,14 ", ','));
 		assertFalse(JRT.isParseableNumber("3.14", ','));
+	}
+
+	@Test
+	public void testBlankPaddedStrNumParsesAndComparesNumerically() {
+		assertTrue(JRT.compare2(new StrNum(" 12 "), 12L, 0));
+		assertTrue(JRT.compare2(new StrNum("\t9\t"), 10L, -1));
+		assertEquals(31.4D, JRT.toDouble(new StrNum(" 3,14e1 ", ',')), 0.0D);
 	}
 
 	@Test
@@ -100,6 +133,7 @@ public class JRTComparisonNumberTest {
 	@Test
 	public void testUninitializedEqualsNumericZeroStrNum() {
 		assertTrue(JRT.compare2(new UninitializedObject(), new StrNum("0.000"), 0));
+		assertTrue(JRT.compare2(new UninitializedObject(), new StrNum(" 0 "), 0));
 		assertTrue(JRT.compare2(new StrNum("0.000"), new UninitializedObject(), 0));
 		assertFalse(JRT.compare2(new UninitializedObject(), new StrNum("0.000"), -1));
 	}

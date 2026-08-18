@@ -20,6 +20,13 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- An input-derived value whose text is a number surrounded by blanks — a record like `" 12 "`,
+  a `getline var` result read from padded input, a `split()` piece under a non-default
+  separator — is now recognized as a POSIX numeric string, so `$0 == 12` is true for the record
+  `" 12 "`, as in gawk. Previously the blanks forced a string comparison. Text with internal
+  blanks (`" 1 2 "`), trailing non-numeric text (`" 12x "`), or nothing but blanks is still not
+  numeric, and string constants such as `x = " 12 "` still compare as strings
+  ([#571](https://github.com/jawkio/jawk/issues/571)).
 - A redirected `getline` now sets exactly the variables gawk documents for each form:
   `getline < file` and `cmd | getline` set `$0` and `NF` only, and `getline var < file` and
   `cmd | getline var` set `var` only. Previously every redirected form also advanced `NR` — so a
