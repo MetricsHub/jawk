@@ -130,19 +130,9 @@ public class JRT {
 	 * configured for the run, so that {@code getline < "/dev/stdin"} reads the
 	 * same data as the main input loop does when no operand is given.
 	 */
-	/**
-	 * The stream that was {@code System.in} when this class was initialized. In
-	 * a CLI launch that is the standard input of the JVM process, the one thing
-	 * {@code ProcessBuilder.Redirect.INHERIT} can lend to a child process. An
-	 * embedder that replaces {@code System.in} via {@code System.setIn} before
-	 * running Jawk installs a Java stream that no child can inherit, and
-	 * comparing against the captured original makes that case fail closed: the
-	 * replacement never matches, so the child's standard input stays closed
-	 * instead of silently exposing the host's real descriptor 0.
-	 */
-	private static final InputStream PROCESS_STANDARD_INPUT = System.in;
-
 	private InputStream standardInput = System.in;
+
+	private boolean spawnedProcessesInheritStandardInput;
 	/**
 	 * Sink writing to the standard error of the process, used by the
 	 * {@code /dev/stderr} special filename; created on first use and discarded
@@ -3192,24 +3182,38 @@ public class JRT {
 	}
 
 	/**
-	 * Tells whether processes spawned on behalf of the script share the
+	 * Declares whether processes spawned on behalf of the script share the
 	 * standard input of this JVM. POSIX gives the children of {@code system()}
 	 * and of a command pipe the same standard input as awk itself, which is how
 	 * terminal-aware commands like {@code "stty size" | getline} find the
 	 * controlling terminal. That is only faithful when Jawk reads the real
-	 * standard input of the process — the captured
-	 * {@link #PROCESS_STANDARD_INPUT}, not whatever {@code System.in} currently
-	 * returns, so a stream installed with {@code System.setIn} never qualifies.
-	 * An embedded execution bound to a custom stream cannot lend that stream to
-	 * another OS process, and handing over the host JVM's standard input
-	 * instead would leak input the embedder never gave to Jawk, so there the
-	 * child's standard input stays closed.
+	 * standard input of the process, which no capture of {@code System.in} can
+	 * establish — an embedder may have replaced the stream with
+	 * {@code System.setIn} at any point, including before this class
+	 * initializes — so eligibility is asserted explicitly by the one caller
+	 * that can vouch for it: the command-line entry point of the process.
+	 * Everywhere else the flag stays {@code false} and the child's standard
+	 * input is closed, since a Java stream cannot be lent to another OS
+	 * process, and exposing the host JVM's real descriptor 0 instead would
+	 * leak input the embedder never gave to Jawk.
+	 *
+	 * @param inherit {@code true} when the standard input this run reads is
+	 *        the standard input of the JVM process itself
+	 */
+	public void setSpawnedProcessesInheritStandardInput(boolean inherit) {
+		this.spawnedProcessesInheritStandardInput = inherit;
+	}
+
+	/**
+	 * Tells whether processes spawned on behalf of the script share the
+	 * standard input of this JVM, as declared through
+	 * {@link #setSpawnedProcessesInheritStandardInput(boolean)}.
 	 *
 	 * @return {@code true} when spawned processes inherit the JVM's standard
 	 *         input
 	 */
 	private boolean spawnedProcessInheritsStandardInput() {
-		return standardInput == PROCESS_STANDARD_INPUT;
+		return spawnedProcessesInheritStandardInput;
 	}
 
 	/**

@@ -231,10 +231,11 @@ console rather than mixing with normal output.
 Subprocess **stdin** follows POSIX in CLI runs: the children of `system("...")` and of a
 command input pipe (`"cmd" | getline`) inherit the standard input of the JVM, so stdin
 filters and terminal-aware commands (`"stty size" | getline`) work as they do under gawk.
-In embedded runs that bind a custom input stream via `input(...)`, the child's standard
-input is closed instead: a Java stream cannot be lent to another OS process, and the
-host's real standard input is never handed to the script's children. The child of an
-output pipe (`print ... | "cmd"`) always reads the pipe itself as its standard input.
+In embedded runs — any execution not started through the `jawk` command line — the
+child's standard input is closed instead: a Java stream cannot be lent to another OS
+process, and the host's real standard input is never handed to the script's children.
+The child of an output pipe (`print ... | "cmd"`) always reads the pipe itself as its
+standard input.
 
 ## See Also
 

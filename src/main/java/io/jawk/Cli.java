@@ -92,6 +92,7 @@ public final class Cli {
 	private File compileOutputFile;
 	private boolean printUsage;
 	private boolean sandbox;
+	private boolean processStandardInput;
 	private boolean disableOptimize;
 	private boolean profiling;
 	private File profilingOutputFile;
@@ -503,6 +504,7 @@ public final class Cli {
 			avm.setAwkSink(sink);
 			avm.setErrorStream(err);
 			avm.setWarningStream(err);
+			avm.getJrt().setSpawnedProcessesInheritStandardInput(processStandardInput);
 			if (memoryFile != null) {
 				restorePersistentMemoryIfPresent(avm, memoryFile);
 			}
@@ -719,6 +721,11 @@ public final class Cli {
 	public static void main(String[] args) {
 		try {
 			Cli cli = new Cli();
+			// Only the process entry point can vouch that the standard input
+			// this CLI reads is the standard input of the JVM itself, the one
+			// stream a spawned child can inherit; embedders and tests reach
+			// run() through other paths and never set this.
+			cli.processStandardInput = true;
 			cli.parse(args);
 			cli.run();
 		} catch (ExitException e) {
