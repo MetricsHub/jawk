@@ -20,6 +20,19 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- A conditional expression whose result feeds a further operation on a literal — shapes like
+  `(v ? v : 24) * 2`, `-(v ? 5 : 24)`, or `$(v ? 1 : 2)` — now evaluates correctly under the
+  default tuple optimization. Previously the peephole literal fold merged the false branch's
+  literal with the operation at the branches' join point, so the true branch skipped the
+  operation, produced the false branch's folded result (`(60 ? 60 : 24) * 2` yielded 48), and
+  leaked a value onto the operand stack that displaced later `print` operands. Running with
+  `-s`/`--no-optimize` was unaffected
+  ([#578](https://github.com/jawkio/jawk/issues/578)).
+- The CLI now accepts POSIX attached option-arguments for the value-taking short options:
+  `-fprog.awk`, `-vx=1`, `-F:` (and the Jawk-specific `-L`, `-K`, `-l`) are equivalent to
+  `-f prog.awk`, `-v x=1`, `-F :`, as in gawk, mawk, BWK awk, and goawk. Previously the glued
+  form was rejected with `Unknown parameter`
+  ([#574](https://github.com/jawkio/jawk/issues/574)).
 - The children of `system(cmd)` and of a command input pipe (`"cmd" | getline`) now inherit
   Jawk's standard input when Jawk reads the standard input of the JVM (every CLI run), as POSIX
   requires and as gawk, mawk, and BWK awk behave: `echo hi | jawk 'BEGIN { "sort" | getline l;
