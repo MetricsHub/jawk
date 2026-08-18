@@ -109,6 +109,10 @@ public class JRT {
 	private static final String DEV_FD_1 = "/dev/fd/1";
 	/** gawk special filename designating file descriptor 2 (standard error). */
 	private static final String DEV_FD_2 = "/dev/fd/2";
+	/** Filename designating the null device on every Unix system. */
+	private static final String DEV_NULL = "/dev/null";
+	/** Name of the null device on Windows. */
+	private static final String WINDOWS_NULL_DEVICE = "NUL";
 
 	private final VariableManager vm;
 
@@ -2824,6 +2828,52 @@ public class JRT {
 	}
 
 	/**
+	 * Returns whether the supplied name designates the null device, which reads
+	 * as an empty file and discards everything written to it. Both spellings the
+	 * platform answers to are recognized: {@code /dev/null} everywhere, and the
+	 * native {@code NUL} on Windows, where the file system opens that name as the
+	 * device already.
+	 * <p>
+	 * This is for callers that inspect a filename before opening it, which must
+	 * recognize the name instead of relying on the file system, because Windows
+	 * does not report its null device as an existing file. Translating a name for
+	 * the platform is a narrower question, answered by
+	 * {@link #toPlatformFileName(String)}.
+	 * </p>
+	 *
+	 * @param fileNameParam name used in a redirection, in {@code getline} or in
+	 *        the {@code ARGV} file list
+	 * @return {@code true} when the name designates the null device
+	 */
+	static boolean isNullDeviceName(String fileNameParam) {
+		return DEV_NULL.equals(fileNameParam)
+				|| (IS_WINDOWS && WINDOWS_NULL_DEVICE.equalsIgnoreCase(fileNameParam));
+	}
+
+	/**
+	 * Maps a script-supplied filename to the name the platform opens it under.
+	 * Only the null device is translated, and only on Windows: portable AWK
+	 * scripts discard output by redirecting to {@code /dev/null}, which is a real
+	 * device on every Unix system but a plain relative path on Windows, where
+	 * leaving it untranslated creates and truncates a {@code dev\null} file, or
+	 * fails outright when no {@code dev} directory exists. gawk's Windows port
+	 * performs the same translation, and, as in gawk, the native {@code NUL}
+	 * needs none: Windows opens that name as the device itself.
+	 * <p>
+	 * Redirections stay keyed by the name the script used, so {@code close()}
+	 * takes the original spelling.
+	 * </p>
+	 *
+	 * @param fileNameParam name used in a redirection, in {@code getline} or in
+	 *        the {@code ARGV} file list
+	 * @return the name to open, which differs from the supplied one only for
+	 *         {@code /dev/null} on Windows
+	 */
+	static String toPlatformFileName(String fileNameParam) {
+		return IS_WINDOWS && DEV_NULL.equals(fileNameParam) ? WINDOWS_NULL_DEVICE : fileNameParam;
+	}
+
+	/**
 	 * Returns the sink writing to the standard error of the process, creating it
 	 * on first use. Every write is flushed so that the records a script sends to
 	 * {@code /dev/stderr} interleave with the diagnostics the runtime itself
@@ -2843,7 +2893,8 @@ public class JRT {
 	 * {@code /dev/stdout} and {@code /dev/stderr} (and their {@code /dev/fd/1}
 	 * and {@code /dev/fd/2} spellings) are routed to the streams the process
 	 * already holds open instead of being opened, and therefore truncated, as
-	 * regular files.
+	 * regular files, and {@code /dev/null} designates the platform's null device
+	 * on Windows too.
 	 *
 	 * @param fileNameParam target file name
 	 * @param append whether output should be appended
@@ -2989,7 +3040,8 @@ public class JRT {
 	 * <p>
 	 * The gawk special filename {@code /dev/stdin} (and its {@code /dev/fd/0}
 	 * spelling) reads the standard input of the process rather than a file of
-	 * that name.
+	 * that name, and {@code /dev/null} reads the platform's null device, which
+	 * reports end of input immediately on Windows too.
 	 * </p>
 	 *
 	 * @param fileNameParam a {@link java.lang.String} object
@@ -3002,7 +3054,7 @@ public class JRT {
 		if (pr == null) {
 			try {
 				InputStream inputStream = isStandardInputName(fileNameParam) ?
-						standardInput : new FileInputStream(fileNameParam);
+						standardInput : new FileInputStream(toPlatformFileName(fileNameParam));
 				pr = new PartitioningReader(
 						new InputStreamReader(inputStream, StandardCharsets.UTF_8),
 						this.rs);
@@ -3091,7 +3143,7 @@ public class JRT {
 	private FileOutputState createFileOutputState(String fileNameParam, boolean append) {
 		try {
 			PrintStream printStream = new PrintStream(
-					new FileOutputStream(fileNameParam, append),
+					new FileOutputStream(toPlatformFileName(fileNameParam), append),
 					true,
 					StandardCharsets.UTF_8.name());
 			return new FileOutputState(new OutputStreamAwkSink(printStream, locale));

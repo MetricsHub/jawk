@@ -75,6 +75,21 @@ public final class AwkTestSupport {
 			.toLowerCase(Locale.ROOT)
 			.contains("win");
 
+	/**
+	 * The platform a test case needs in order to be meaningful. Most behavior is
+	 * identical everywhere and needs {@link #ANY}; the other two values are for
+	 * the cases where the platform is the subject of the test, such as the name
+	 * its null device answers to.
+	 */
+	private enum PlatformRequirement {
+		/** The test runs everywhere. */
+		ANY,
+		/** The test needs a POSIX-like platform and is skipped on Windows. */
+		POSIX,
+		/** The test needs Windows and is skipped on POSIX-like platforms. */
+		WINDOWS
+	}
+
 	private static final Path SHARED_TEMP_DIR;
 
 	static {
@@ -538,7 +553,7 @@ public final class AwkTestSupport {
 					symlinks,
 					operands,
 					placeholders,
-					requiresPosix,
+					platformRequirement,
 					preAssignments,
 					customAwk,
 					extensions,
@@ -661,7 +676,7 @@ public final class AwkTestSupport {
 					symlinks,
 					operands,
 					placeholders,
-					requiresPosix,
+					platformRequirement,
 					argumentSpecs,
 					assignments,
 					environment,
@@ -689,7 +704,7 @@ public final class AwkTestSupport {
 		protected List<String> expectedLines;
 		protected Integer expectedExitCode;
 		protected Class<? extends Throwable> expectedException;
-		protected boolean requiresPosix;
+		protected PlatformRequirement platformRequirement = PlatformRequirement.ANY;
 		protected boolean useTempDir;
 		protected List<Function<String, String>> postProcessors = new ArrayList<>();
 
@@ -890,7 +905,21 @@ public final class AwkTestSupport {
 		 */
 		@SuppressWarnings("unchecked")
 		public B posixOnly() {
-			this.requiresPosix = true;
+			this.platformRequirement = PlatformRequirement.POSIX;
+			return (B) this;
+		}
+
+		/**
+		 * Marks the test as requiring Windows behaviour. The test is skipped when
+		 * running on a POSIX-like platform. Reserve this for behaviour that only
+		 * Windows can exhibit, such as a name that designates a device there and
+		 * an ordinary file elsewhere.
+		 *
+		 * @return this builder for method chaining
+		 */
+		@SuppressWarnings("unchecked")
+		public B windowsOnly() {
+			this.platformRequirement = PlatformRequirement.WINDOWS;
 			return (B) this;
 		}
 
@@ -965,7 +994,7 @@ public final class AwkTestSupport {
 		private final Map<String, String> symbolicLinks;
 		private final List<String> operandSpecs;
 		private final List<String> pathPlaceholders;
-		private final boolean requiresPosix;
+		private final PlatformRequirement platformRequirement;
 
 		BaseTestCase(
 				TestLayout layout,
@@ -973,13 +1002,13 @@ public final class AwkTestSupport {
 				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders,
-				boolean requiresPosix) {
+				PlatformRequirement platformRequirement) {
 			this.layout = layout;
 			this.fileContents = fileContents;
 			this.symbolicLinks = symbolicLinks;
 			this.operandSpecs = operandSpecs;
 			this.pathPlaceholders = pathPlaceholders;
-			this.requiresPosix = requiresPosix;
+			this.platformRequirement = platformRequirement;
 		}
 
 		@Override
@@ -989,8 +1018,10 @@ public final class AwkTestSupport {
 
 		@Override
 		public void assumeSupported() {
-			if (requiresPosix) {
+			if (platformRequirement == PlatformRequirement.POSIX) {
 				assumeTrue("POSIX-like environment required for " + layout.description, IS_POSIX);
+			} else if (platformRequirement == PlatformRequirement.WINDOWS) {
+				assumeTrue("Windows environment required for " + layout.description, !IS_POSIX);
 			}
 		}
 
@@ -1133,7 +1164,7 @@ public final class AwkTestSupport {
 				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders,
-				boolean requiresPosix,
+				PlatformRequirement platformRequirement,
 				Map<String, Object> preAssignments,
 				Awk customAwk,
 				List<JawkExtension> extensions,
@@ -1141,7 +1172,7 @@ public final class AwkTestSupport {
 				Reader scriptReader,
 				Path scriptPath,
 				List<String> sharedRuntimeInputs) {
-			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, requiresPosix);
+			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, platformRequirement);
 			this.preAssignments = new LinkedHashMap<>(preAssignments);
 			this.customAwk = customAwk;
 			this.extensions = new ArrayList<>(extensions);
@@ -1255,13 +1286,13 @@ public final class AwkTestSupport {
 				Map<String, String> symbolicLinks,
 				List<String> operandSpecs,
 				List<String> pathPlaceholders,
-				boolean requiresPosix,
+				PlatformRequirement platformRequirement,
 				List<String> argumentSpecs,
 				Map<String, Object> assignments,
 				Map<String, String> environment,
 				boolean redirectErrorStream,
 				InputStream stdinStream) {
-			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, requiresPosix);
+			super(layout, fileContents, symbolicLinks, operandSpecs, pathPlaceholders, platformRequirement);
 			this.argumentSpecs = new ArrayList<>(argumentSpecs);
 			this.assignments = new LinkedHashMap<>(assignments);
 			this.environment = new LinkedHashMap<>(environment);

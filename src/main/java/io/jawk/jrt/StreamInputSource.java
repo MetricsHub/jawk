@@ -536,7 +536,12 @@ public class StreamInputSource implements InputSource, Closeable {
 	 *         the file cannot be opened for reading
 	 */
 	private String openCurrentFile(String arg) {
-		if ("-".equals(arg)) {
+		// The default input stream and the null device are not files to stat:
+		// Windows reports its null device as nonexistent, under either spelling,
+		// so the checks below would turn an operand that reads as an empty file
+		// into an open error — while the plain main input loop, which opens the
+		// operand without stat'ing it first, reads it happily.
+		if ("-".equals(arg) || JRT.isNullDeviceName(arg)) {
 			try {
 				partitioningReader = openFileListReader(arg);
 				return null;
@@ -572,7 +577,8 @@ public class StreamInputSource implements InputSource, Closeable {
 	 * Opens a reader for the given {@code ARGV} filename entry. The
 	 * conventional {@code -} filename designates the default input stream
 	 * (usually stdin), as required by POSIX; any other name is opened as a
-	 * regular file.
+	 * regular file, under the name the platform knows it by, so that
+	 * {@code /dev/null} is the null device on Windows too.
 	 *
 	 * @param arg the filename from the {@code ARGV} file list
 	 * @return a reader presenting the argument as a file-list input
@@ -583,7 +589,7 @@ public class StreamInputSource implements InputSource, Closeable {
 		// Open the stream before publishing the flag: if the open fails, the
 		// still-current reader must keep its own classification, so that
 		// cleanup does not close the caller-provided default input stream.
-		InputStream stream = isDefaultInput ? defaultInput : new FileInputStream(arg);
+		InputStream stream = isDefaultInput ? defaultInput : new FileInputStream(JRT.toPlatformFileName(arg));
 		PartitioningReader reader = new PartitioningReader(
 				new InputStreamReader(stream, StandardCharsets.UTF_8),
 				jrt.getRSString(),
