@@ -1967,43 +1967,46 @@ public class AVM implements VariableManager, Closeable {
 					break;
 				}
 				case GETLINE_INPUT_TO_TARGET: {
+					// arg[0] = address to jump to when no record was read
 					checkGetlineAllowed(position);
 					Object input = isMainInputFileBounded() ?
 							jrt.consumeCurrentFileInputToTarget(resolvedInputSource) : jrt.consumeInputToTarget(resolvedInputSource);
 					if (input != null) {
 						push(1);
 						push(input);
+						position.next();
 					} else {
 						push(0);
-						push("");
+						position.jump(tuple.getAddress());
 					}
-					position.next();
 					break;
 				}
 				case USE_AS_FILE_INPUT: {
 					// stack[0] = filename
+					// arg[0] = address to jump to when no record was read
 					String s = jrt.toAwkString(pop());
-					if (jrt.jrtConsumeFileInput(s)) {
-						push(1);
-						push(jrt.getInputLine());
+					Integer retcode = jrt.jrtConsumeFileInputForGetline(s);
+					push(retcode);
+					if (retcode.intValue() == 1) {
+						push(jrt.toInputScalar(jrt.jrtGetInputString()));
+						position.next();
 					} else {
-						push(0);
-						push("");
+						position.jump(tuple.getAddress());
 					}
-					position.next();
 					break;
 				}
 				case USE_AS_COMMAND_INPUT: {
 					// stack[0] = command line
+					// arg[0] = address to jump to when no record was read
 					String s = jrt.toAwkString(pop());
-					if (jrt.jrtConsumeCommandInput(s)) {
-						push(1);
-						push(jrt.getInputLine());
+					Integer retcode = jrt.jrtConsumeCommandInputForGetline(s);
+					push(retcode);
+					if (retcode.intValue() == 1) {
+						push(jrt.toInputScalar(jrt.jrtGetInputString()));
+						position.next();
 					} else {
-						push(0);
-						push("");
+						position.jump(tuple.getAddress());
 					}
-					position.next();
 					break;
 				}
 				case ENVIRON_OFFSET: {

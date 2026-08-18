@@ -62,12 +62,12 @@ public class SandboxedAwkTuples extends AwkTuples {
 	}
 
 	@Override
-	public void useAsCommandInput() {
+	public void useAsCommandInput(Address noRecordAddress) {
 		deny("Command execution through pipelines is disabled in sandbox mode");
 	}
 
 	@Override
-	public void useAsFileInput() {
+	public void useAsFileInput(Address noRecordAddress) {
 		deny("Input redirection is disabled in sandbox mode");
 	}
 

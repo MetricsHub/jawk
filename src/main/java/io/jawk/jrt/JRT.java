@@ -22,6 +22,7 @@ package io.jawk.jrt;
  * ╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
  */
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -2727,53 +2728,113 @@ public class JRT {
 	}
 
 	/**
-	 * <p>
-	 * jrtConsumeFileInputForGetline.
-	 * </p>
+	 * Reads one record from a file for a redirected {@code getline},
+	 * translating the outcome into the AWK-visible return code.
 	 *
-	 * @param fileNameParam a {@link java.lang.String} object
-	 * @return a {@link java.lang.Integer} object
+	 * @param fileNameParam name of the file to read from
+	 * @return {@code 1} when a record was read (available through
+	 *         {@link #jrtGetInputString()}), {@code 0} at end of input, and
+	 *         {@code -1} when the file cannot be opened or read, in which case
+	 *         ERRNO carries the gawk-style error description
+	 * @throws AwkRuntimeException when the filename is the empty string, the
+	 *         fatal error gawk raises for a null-string redirection
 	 */
 	public Integer jrtConsumeFileInputForGetline(String fileNameParam) {
+		if (fileNameParam.isEmpty()) {
+			throw new AwkRuntimeException("expression for `<' redirection has null string value");
+		}
 		try {
 			if (jrtConsumeFileInput(fileNameParam)) {
 				return ONE;
-			} else {
-				jrtInputString = "";
-				return ZERO;
 			}
+			jrtInputString = "";
+			return ZERO;
 		} catch (IOException ioe) {
 			jrtInputString = "";
+			setERRNO(describeOpenFailure(fileNameParam, ioe));
 			return MINUS_ONE;
 		}
 	}
 
 	/**
-	 * Retrieve the next line of output from a command, executing
-	 * the command if necessary and store it to $0.
+	 * Reads one record from the output of a command for a redirected
+	 * {@code getline}, translating the outcome into the AWK-visible return
+	 * code.
 	 *
-	 * @param cmdString The command to execute.
-	 * @return Integer(1) if successful, Integer(0) if no more
-	 *         input is available, Integer(-1) upon an IO error.
+	 * @param cmdString the command to execute
+	 * @return {@code 1} when a record was read (available through
+	 *         {@link #jrtGetInputString()}), {@code 0} at end of input, and
+	 *         {@code -1} when the process cannot be spawned, in which case
+	 *         ERRNO carries the error description
+	 * @throws AwkRuntimeException when the command is the empty string, the
+	 *         fatal error gawk raises for a null-string redirection
 	 */
 	public Integer jrtConsumeCommandInputForGetline(String cmdString) {
+		if (cmdString.isEmpty()) {
+			throw new AwkRuntimeException("expression for `|' redirection has null string value");
+		}
 		try {
 			if (jrtConsumeCommandInput(cmdString)) {
 				return ONE;
-			} else {
-				jrtInputString = "";
-				return ZERO;
 			}
+			jrtInputString = "";
+			return ZERO;
 		} catch (IOException ioe) {
 			jrtInputString = "";
+			setERRNO(describeIoReason(ioe));
 			return MINUS_ONE;
 		}
 	}
 
 	/**
-	 * Retrieve $0.
+	 * Describes why a file could not be opened for reading, the way gawk
+	 * reports it through ERRNO: the strerror-style reason alone, without the
+	 * failing path that Java prefixes to its exception messages.
 	 *
-	 * @return The contents of the $0 input field.
+	 * @param fileNameParam the filename that failed to open
+	 * @param ioe the failure raised by the open or read
+	 * @return a gawk-style error description
+	 */
+	private static String describeOpenFailure(String fileNameParam, IOException ioe) {
+		if (!isStandardInputName(fileNameParam) && !isNullDeviceName(fileNameParam)) {
+			File file = new File(toPlatformFileName(fileNameParam));
+			if (file.isDirectory()) {
+				return "Is a directory";
+			}
+			if (!file.exists()) {
+				return "No such file or directory";
+			}
+		}
+		return describeIoReason(ioe);
+	}
+
+	/**
+	 * Extracts the reason from an I/O exception message, the way gawk reports
+	 * failures through ERRNO. Java prefixes the failing path to the reason,
+	 * as in {@code path (reason)}; only the reason is kept.
+	 *
+	 * @param ioe the failure to describe
+	 * @return the extracted reason, or "Permission denied" when the exception
+	 *         carries no message
+	 */
+	static String describeIoReason(IOException ioe) {
+		String message = ioe.getMessage();
+		if (message == null || message.isEmpty()) {
+			return "Permission denied";
+		}
+		int open = message.lastIndexOf('(');
+		if (open >= 0 && message.endsWith(")")) {
+			return message.substring(open + 1, message.length() - 1);
+		}
+		return message;
+	}
+
+	/**
+	 * Retrieve the record last consumed by a redirected {@code getline}.
+	 *
+	 * @return the last record read by
+	 *         {@link #jrtConsumeFileInputForGetline(String)} or
+	 *         {@link #jrtConsumeCommandInputForGetline(String)}
 	 */
 	public String jrtGetInputString() {
 		return jrtInputString;
@@ -3034,8 +3095,14 @@ public class JRT {
 	}
 
 	/**
+	 * Reads one record from a file opened by a redirected {@code getline}.
 	 * <p>
-	 * jrtConsumeFileInput.
+	 * The reader is opened on first use and kept until it is explicitly closed
+	 * or the VM exits. Unlike the main input loop, this transport leaves the
+	 * current record ({@code $0} and its fields), NR, FNR, and FILENAME
+	 * untouched: gawk documents {@code getline [var] < file} as setting only
+	 * the target of the read. The consumed record is exposed through
+	 * {@link #jrtGetInputString()}.
 	 * </p>
 	 * <p>
 	 * The gawk special filename {@code /dev/stdin} (and its {@code /dev/fd/0}
@@ -3044,38 +3111,31 @@ public class JRT {
 	 * reports end of input immediately on Windows too.
 	 * </p>
 	 *
-	 * @param fileNameParam a {@link java.lang.String} object
-	 * @return a boolean
-	 * @throws java.io.IOException if any.
+	 * @param fileNameParam name of the file to read from
+	 * @return {@code true} when a record was read; {@code false} at end of
+	 *         input
+	 * @throws java.io.IOException if the file cannot be opened or read; a
+	 *         failed open is not cached, so a later {@code getline} from the
+	 *         same name retries it
 	 */
 	public boolean jrtConsumeFileInput(String fileNameParam) throws IOException {
 		Map<String, PartitioningReader> fileReaders = getIoState().fileReaders;
 		PartitioningReader pr = fileReaders.get(fileNameParam);
 		if (pr == null) {
-			try {
-				InputStream inputStream = isStandardInputName(fileNameParam) ?
-						standardInput : new FileInputStream(toPlatformFileName(fileNameParam));
-				pr = new PartitioningReader(
-						new InputStreamReader(inputStream, StandardCharsets.UTF_8),
-						this.rs);
-				fileReaders.put(fileNameParam, pr);
-				this.filename = fileNameParam;
-			} catch (IOException ioe) {
-				fileReaders.remove(fileNameParam);
-				throw ioe;
-			}
+			InputStream inputStream = isStandardInputName(fileNameParam) ?
+					standardInput : new FileInputStream(toPlatformFileName(fileNameParam));
+			pr = new PartitioningReader(
+					new InputStreamReader(inputStream, StandardCharsets.UTF_8),
+					this.rs);
+			fileReaders.put(fileNameParam, pr);
 		}
 
 		String recordText = pr.readRecord();
 		if (recordText == null) {
 			return false;
-		} else {
-			jrtInputString = recordText;
-			inputLine = toInputScalar(recordText);
-			recordState = new RecordState(inputLine, null);
-			this.nr++;
-			return true;
 		}
+		jrtInputString = recordText;
+		return true;
 	}
 
 	private static Process spawnProcess(String cmd) throws IOException {
@@ -3095,26 +3155,32 @@ public class JRT {
 	}
 
 	/**
+	 * Reads one record from the output of a command spawned by a redirected
+	 * {@code getline}.
 	 * <p>
-	 * jrtConsumeCommandInput.
+	 * The process is spawned on first use and kept until the pipe is
+	 * explicitly closed or the VM exits. As with file redirection, the current
+	 * record ({@code $0} and its fields), NR, FNR, and FILENAME are left
+	 * untouched: gawk documents {@code cmd | getline [var]} as setting only
+	 * the target of the read. The consumed record is exposed through
+	 * {@link #jrtGetInputString()}.
 	 * </p>
 	 *
-	 * @param cmd a {@link java.lang.String} object
-	 * @return a boolean
-	 * @throws java.io.IOException if any.
+	 * @param cmd the command to execute
+	 * @return {@code true} when a record was read; {@code false} at end of
+	 *         input
+	 * @throws java.io.IOException if the process cannot be spawned; a failed
+	 *         spawn is not cached, so a later {@code getline} from the same
+	 *         command retries it
 	 */
 	public boolean jrtConsumeCommandInput(String cmd) throws IOException {
 		CommandInputState commandInput = getOrCreateCommandInputState(cmd);
 		String recordText = commandInput.reader.readRecord();
 		if (recordText == null) {
 			return false;
-		} else {
-			jrtInputString = recordText;
-			inputLine = toInputScalar(recordText);
-			recordState = new RecordState(inputLine, null);
-			this.nr++;
-			return true;
 		}
+		jrtInputString = recordText;
+		return true;
 	}
 
 	/**
@@ -3158,7 +3224,6 @@ public class JRT {
 		if (commandInput == null) {
 			commandInput = createCommandInputState(cmd);
 			state.commandInputs.put(cmd, commandInput);
-			this.filename = "";
 		}
 		return commandInput;
 	}

@@ -1045,12 +1045,16 @@ public enum Opcode {
 	 * assignment as a regular expression.
 	 * <p>
 	 * If there is input available, the input string and a return code
-	 * of 1 is pushed. If EOF is reached, an empty string ("")
-	 * is pushed along with a 0 return code. Upon an IO error,
-	 * the exception is propagated.
+	 * of 1 is pushed and execution falls through. If EOF is reached,
+	 * only a 0 return code is pushed and execution jumps to the
+	 * argument address, so that the target of the read keeps its
+	 * previous value. Upon an IO error, the exception is propagated.
+	 * <p>
+	 * Argument: address to jump to when no record was read.
 	 * <p>
 	 * Stack before: ...<br/>
-	 * Stack after: input-string return-code ...
+	 * Stack after: input-string return-code ... (or return-code ...
+	 * when no record was read)
 	 */
 	GETLINE_INPUT_TO_TARGET,
 	/**
@@ -1063,14 +1067,22 @@ public enum Opcode {
 	 * is maintained until it is explicitly closed, or until
 	 * the VM exits. Subsequent calls will obtain subsequent
 	 * lines (records) of input until no more records are available.
+	 * {@code $0}, {@code $1..$NF}, NR, FNR, and FILENAME are left
+	 * untouched.
 	 * <p>
 	 * If there is input available, the input string and a return code
-	 * of 1 is pushed. If EOF is reached, an empty string ("")
-	 * is pushed along with a 0 return code. Upon an IO error,
-	 * a blank string and a -1 is pushed onto the operand stack.
+	 * of 1 is pushed and execution falls through. If EOF is reached,
+	 * only a 0 return code is pushed and execution jumps to the
+	 * argument address. When the file cannot be opened or read, a -1
+	 * return code is pushed instead, ERRNO is set to the error
+	 * description, and execution jumps to the argument address. Either
+	 * way the target of the read keeps its previous value.
+	 * <p>
+	 * Argument: address to jump to when no record was read.
 	 * <p>
 	 * Stack before: filename ...<br/>
-	 * Stack after: input-string return-code ...
+	 * Stack after: input-string return-code ... (or return-code ...
+	 * when no record was read)
 	 */
 	USE_AS_FILE_INPUT,
 	/**
@@ -1084,14 +1096,22 @@ public enum Opcode {
 	 * is maintained until it is explicitly closed, or until
 	 * the VM exits. Subsequent calls will obtain subsequent
 	 * lines (records) of input until no more records are available.
+	 * {@code $0}, {@code $1..$NF}, NR, FNR, and FILENAME are left
+	 * untouched.
 	 * <p>
 	 * If there is input available, the input string and a return code
-	 * of 1 is pushed. If EOF is reached, an empty string ("")
-	 * is pushed along with a 0 return code. Upon an IO error,
-	 * a blank string and a -1 is pushed onto the operand stack.
+	 * of 1 is pushed and execution falls through. If EOF is reached,
+	 * only a 0 return code is pushed and execution jumps to the
+	 * argument address. When the process cannot be spawned, a -1
+	 * return code is pushed instead, ERRNO is set to the error
+	 * description, and execution jumps to the argument address. Either
+	 * way the target of the read keeps its previous value.
+	 * <p>
+	 * Argument: address to jump to when no record was read.
 	 * <p>
 	 * Stack before: command-line ...<br/>
-	 * Stack after: input-string return-code ...
+	 * Stack after: input-string return-code ... (or return-code ...
+	 * when no record was read)
 	 */
 	USE_AS_COMMAND_INPUT,
 
