@@ -53,7 +53,7 @@ public class AwkTuples implements Serializable {
 	// Bumped to 6 when the getline opcodes gained a no-record jump address:
 	// older tuple streams emit them without one and must be recompiled.
 	// (5 = exact 64-bit integral arithmetic.)
-	private static final long serialVersionUID = 6L;
+	private static final long serialVersionUID = 7L;
 
 	/** Address manager */
 	private final AddressManager addressManager = new AddressManager();
@@ -133,6 +133,13 @@ public class AwkTuples implements Serializable {
 	 * {@code null} when the program does not use per-file input stepping.
 	 */
 	private Address nextFileAddress;
+
+	/**
+	 * Address of the main input loop's next-record entry point, where a
+	 * runtime {@code next} statement executed from a user-defined function
+	 * resumes; {@code null} when the program has no main input loop.
+	 */
+	private Address nextAddress;
 
 	/**
 	 * <p>
@@ -1921,6 +1928,30 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
+	 * Registers the address of the main input loop's next-record entry point,
+	 * so that a runtime {@code next} statement executed from a user-defined
+	 * function can resume the loop there. A property of the tuple stream
+	 * rather than a tuple: the interpreter reads it once when it installs the
+	 * program.
+	 *
+	 * @param addr address where the main input loop consumes the next record
+	 */
+	public void setNextAddress(Address addr) {
+		nextAddress = addr;
+	}
+
+	/**
+	 * Returns the address of the main input loop's next-record entry point,
+	 * or {@code null} when the program has no main input loop.
+	 *
+	 * @return address where the main input loop consumes the next record, or
+	 *         {@code null}
+	 */
+	public Address getNextAddress() {
+		return nextAddress;
+	}
+
+	/**
 	 * Emits the tuple advancing the main input to the next input file, or
 	 * jumping to the given address when no input file remains.
 	 *
@@ -1945,6 +1976,15 @@ public class AwkTuples implements Serializable {
 	 */
 	public void execNextfile() {
 		queue.add(new Tuple.NoOperandTuple(Opcode.EXEC_NEXTFILE));
+	}
+
+	/**
+	 * Emits the tuple executing the {@code next} statement at runtime, for
+	 * uses inside user-defined functions, where the calling rule cannot be
+	 * known statically.
+	 */
+	public void execNext() {
+		queue.add(new Tuple.NoOperandTuple(Opcode.EXEC_NEXT));
 	}
 
 	/**
@@ -2534,6 +2574,7 @@ public class AwkTuples implements Serializable {
 		remapAddress(exitAddress, indexMapping, processedAddresses);
 		remapAddress(endFileAddress, indexMapping, processedAddresses);
 		remapAddress(nextFileAddress, indexMapping, processedAddresses);
+		remapAddress(nextAddress, indexMapping, processedAddresses);
 		addressManager.remapIndexes(indexMapping);
 	}
 
@@ -2745,13 +2786,14 @@ public class AwkTuples implements Serializable {
 			reachable[0] = true;
 			worklist.add(0);
 		}
-		// The property addresses are runtime jump targets (exit, nextfile,
-		// and the ENDFILE section it resumes at) that no tuple may reference:
-		// treat them as reachability roots so their sections are never
-		// eliminated as dead code.
+		// The property addresses are runtime jump targets (exit, next,
+		// nextfile, and the ENDFILE section nextfile resumes at) that no
+		// tuple may reference: treat them as reachability roots so their
+		// sections are never eliminated as dead code.
 		seedPropertyAddress(exitAddress, size, reachable, worklist);
 		seedPropertyAddress(endFileAddress, size, reachable, worklist);
 		seedPropertyAddress(nextFileAddress, size, reachable, worklist);
+		seedPropertyAddress(nextAddress, size, reachable, worklist);
 
 		while (!worklist.isEmpty()) {
 			int index = worklist.removeFirst();

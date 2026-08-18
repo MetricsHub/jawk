@@ -1683,7 +1683,21 @@ public enum Opcode {
 	 * Stack before: i1, i2, ..., in, top <br>
 	 * Stack after: "i1SUBSEPi2SUBSEP...in", top
 	 */
-	APPLY_SUBSEP_UNDER_TOP;
+	APPLY_SUBSEP_UNDER_TOP,
+
+	/**
+	 * Executes the {@code next} statement at runtime, when it is reached
+	 * through a user-defined function call: abandons the current input record
+	 * and resumes the main input loop, whose address is carried as a property
+	 * of the tuple stream, not as a tuple. The runtime stack and operand
+	 * stack are cleared, unwinding the active user-defined function calls.
+	 * When no input rule is active (BEGIN, END, BEGINFILE, or ENDFILE
+	 * callers), the runtime reports a fatal error instead. A {@code next}
+	 * written directly inside an input rule compiles to a plain {@code GOTO}.
+	 * <p>
+	 * Stack after: (empty)
+	 */
+	EXEC_NEXT;
 
 	private static final Opcode[] VALUES = values();
 
