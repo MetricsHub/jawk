@@ -73,7 +73,9 @@ public final class StrNum {
 	}
 
 	private double parseDoubleValue() {
-		String normalizedValue = JRT.normalizeNumberForComparison(value, decimalSeparator);
+		// Recognition ignores leading and trailing blanks, so parsing must
+		// strip them: the two move together.
+		String normalizedValue = JRT.normalizeNumberForComparison(JRT.trimWhitespace(value), decimalSeparator);
 		try {
 			return Double.parseDouble(normalizedValue);
 		} catch (NumberFormatException nfe) {

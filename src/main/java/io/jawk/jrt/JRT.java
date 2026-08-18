@@ -1196,7 +1196,9 @@ public class JRT {
 
 	/**
 	 * Returns whether the supplied text parses as an AWK number under this
-	 * runtime's locale, as used for strnum recognition.
+	 * runtime's locale, as used for strnum recognition. As POSIX specifies for
+	 * numeric strings, leading and trailing blanks around the number are
+	 * ignored, but text that is nothing but blanks does not qualify.
 	 *
 	 * @param value text to test
 	 * @return {@code true} when {@code value} is an input numeric string
@@ -1222,7 +1224,34 @@ public class JRT {
 	}
 
 	static boolean isParseableNumber(String value, char decimalSeparator) {
-		return !value.isEmpty() && numericPrefixEnd(value, 0, decimalSeparator) == value.length();
+		int length = value.length();
+		int start = 0;
+		while (start < length && Character.isWhitespace(value.charAt(start))) {
+			start++;
+		}
+		int end = numericPrefixEnd(value, start, decimalSeparator);
+		return end > start && isBlankToEnd(value, end);
+	}
+
+	/**
+	 * Strips the leading and trailing whitespace that strnum recognition
+	 * ignores, so a recognized numeric string can be handed to the Java
+	 * numeric parsers, which do not accept every character
+	 * {@link Character#isWhitespace(char)} does.
+	 *
+	 * @param value text to trim
+	 * @return {@code value} without leading and trailing whitespace
+	 */
+	static String trimWhitespace(String value) {
+		int end = value.length();
+		int start = 0;
+		while (start < end && Character.isWhitespace(value.charAt(start))) {
+			start++;
+		}
+		while (end > start && Character.isWhitespace(value.charAt(end - 1))) {
+			end--;
+		}
+		return start == 0 && end == value.length() ? value : value.substring(start, end);
 	}
 
 	/**
