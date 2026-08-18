@@ -24,6 +24,22 @@ The gawk-specific `@` syntax and arrays-of-arrays syntax are rejected in `--posi
 
 See the [compatibility page](https://jawk.io/compatibility.html) for detailed behavior notes and live compatibility reports against the POSIX, One True Awk, and gawk test suites.
 
+## Installation
+
+Install the `jawk` command with one line; the launcher finds a Java runtime (Java 8 or later) automatically:
+
+```shell
+curl -fsSL https://jawk.io/get | sh
+```
+
+On Windows (PowerShell):
+
+```powershell
+irm https://jawk.io/get.ps1 | iex
+```
+
+See the [installation page](https://jawk.io/install.html) for details, Maven/Gradle coordinates, and the standalone jar.
+
 ## CLI Example
 
 ```shell
