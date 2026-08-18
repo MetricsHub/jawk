@@ -66,6 +66,12 @@ public class JRTComparisonNumberTest {
 		assertTrue(JRT.isParseableNumber(" 12", '.'));
 		assertTrue(JRT.isParseableNumber("12 ", '.'));
 		assertTrue(JRT.isParseableNumber(" 12 ", '.'));
+		// Java's whitespace definition applies, wider than C isspace: Unicode
+		// spaces (EM SPACE here) count as padding and must still parse once
+		// recognized.
+		String emSpace = Character.toString((char) 0x2003);
+		assertTrue(JRT.isParseableNumber(emSpace + "12" + emSpace, '.'));
+		assertTrue(JRT.compare2(new StrNum(emSpace + "12" + emSpace), 12L, 0));
 		assertTrue(JRT.isParseableNumber("\t+12.5e1\t", '.'));
 		assertTrue(JRT.isParseableNumber("\f12", '.'));
 	}
