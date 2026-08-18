@@ -170,6 +170,72 @@ public class CliOptionTest {
 	}
 
 	@Test
+	public void attachedProgramFileOptionLoadsScript() throws Exception {
+		AwkTestSupport
+				.cliTest("CLI -fprog.awk loads the script like -f prog.awk")
+				.file("prog.awk", "BEGIN { print \"attached\" }")
+				.argument("-f{{prog.awk}}")
+				.expectLines("attached")
+				.runAndAssert();
+	}
+
+	@Test
+	public void attachedProgramFileOptionCombinesWithSeparateForm() throws Exception {
+		AwkTestSupport
+				.cliTest("CLI mixes -fone.awk with -f two.awk")
+				.file("one.awk", "BEGIN { print \"one\" }")
+				.file("two.awk", "BEGIN { print \"two\" }")
+				.argument("-f{{one.awk}}", "-f", "{{two.awk}}")
+				.expectLines("one", "two")
+				.runAndAssert();
+	}
+
+	@Test
+	public void attachedVariableAssignmentIsApplied() throws Exception {
+		AwkTestSupport
+				.cliTest("CLI -vx=42 assigns the variable like -v x=42")
+				.argument("-vx=42")
+				.script("BEGIN { print x }")
+				.expectLines("42")
+				.runAndAssert();
+	}
+
+	@Test
+	public void attachedFieldSeparatorIsApplied() throws Exception {
+		AwkTestSupport
+				.cliTest("CLI -F: sets the field separator like -F :")
+				.argument("-F:")
+				.script("{ print $2 }")
+				.stdin("a:b:c\n")
+				.expectLines("b")
+				.runAndAssert();
+	}
+
+	@Test
+	public void attachedOptionArgumentAfterDoubleDashStaysInArgv() throws Exception {
+		AwkTestSupport
+				.cliTest("CLI attached option-argument after -- is an operand")
+				.file("argv.awk", "BEGIN { for (i = 1; i < ARGC; i++) print i \"=\" ARGV[i] }")
+				.argument("-f", "{{argv.awk}}", "--")
+				.operand("-fnot-an-option.awk")
+				.expectLines("1=-fnot-an-option.awk")
+				.runAndAssert();
+	}
+
+	@Test
+	public void attachedUnknownOptionWithoutScriptIsStillRejected() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI unknown glued option without script is rejected")
+				.argument("-q2")
+				.script("{ print }")
+				.expectThrow(IllegalArgumentException.class)
+				.run();
+
+		result.assertExpected();
+		assertTrue(result.thrownException().getMessage().contains("Unknown parameter: -q2"));
+	}
+
+	@Test
 	public void doubleDashEndsOptionProcessing() throws Exception {
 		// After "--", the dash-leading argument is no longer an option: it is
 		// the inline script (without "--" it would be rejected as unknown)
