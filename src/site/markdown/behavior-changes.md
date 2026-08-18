@@ -33,6 +33,16 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   `-f prog.awk`, `-v x=1`, `-F :`, as in gawk, mawk, BWK awk, and goawk. Previously the glued
   form was rejected with `Unknown parameter`
   ([#574](https://github.com/jawkio/jawk/issues/574)).
+- The children of `system(cmd)` and of a command input pipe (`"cmd" | getline`) now inherit
+  Jawk's standard input when Jawk reads the standard input of the JVM (every CLI run), as POSIX
+  requires and as gawk, mawk, and BWK awk behave: `echo hi | jawk 'BEGIN { "sort" | getline l;
+  print l }'` prints `hi`, and terminal-aware commands such as `"stty size" | getline` can reach
+  the controlling terminal. Previously the child's standard input was always closed, so stdin
+  filters read nothing and `stty` failed with `Inappropriate ioctl for device`. Output pipes
+  (`print | "cmd"`) are unchanged — the pipe itself remains the child's standard input — and
+  embedded executions bound to a custom Java input stream keep the closed-stdin behavior, since
+  a Java stream cannot be lent to another OS process
+  ([#575](https://github.com/jawkio/jawk/issues/575)).
 - An input-derived value whose text is a number surrounded by blanks — a record like `" 12 "`,
   a `getline var` result read from padded input, a `split()` piece under a non-default
   separator — is now recognized as a POSIX numeric string, so `$0 == 12` is true for the record

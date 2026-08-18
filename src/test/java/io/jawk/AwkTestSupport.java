@@ -50,6 +50,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -136,6 +137,63 @@ public final class AwkTestSupport {
 	 */
 	public static Path sharedTempDirectory() {
 		return SHARED_TEMP_DIR;
+	}
+
+	/**
+	 * Runs a script through the CLI in a freshly spawned JVM whose standard
+	 * input is redirected from a file holding the given content, asserts that
+	 * the run succeeds, and returns its standard output with platform line
+	 * separators normalized to {@code \n}.
+	 * <p>
+	 * The in-process builders cannot observe behavior that only exists across a
+	 * real process boundary, such as the file-descriptor inheritance of spawned
+	 * children; this helper exists for exactly those tests. The script travels
+	 * through a file because Windows mangles embedded double quotes in inline
+	 * command-line arguments, and the child's standard output and error are
+	 * redirected to files so no pipe can fill up and stall either side: the
+	 * timeout is enforced by {@code waitFor} alone, and an expired child is
+	 * killed.
+	 *
+	 * @param description human readable description used in assertion messages
+	 * @param script the AWK program to run
+	 * @param stdinContent the bytes offered to the JVM as its standard input
+	 * @return the standard output of the run, with {@code \r\n} normalized to
+	 *         {@code \n}
+	 * @throws Exception when the JVM cannot be spawned or its output read
+	 */
+	public static String runCliInFreshJvm(String description, String script, String stdinContent) throws Exception {
+		Path directory = Files.createTempDirectory(SHARED_TEMP_DIR, "cli-jvm");
+		Path stdinFile = directory.resolve("stdin.txt");
+		Files.write(stdinFile, stdinContent.getBytes(StandardCharsets.UTF_8));
+		Path scriptFile = directory.resolve("script.awk");
+		Files.write(scriptFile, script.getBytes(StandardCharsets.UTF_8));
+		Path stdoutFile = directory.resolve("stdout.txt");
+		Path stderrFile = directory.resolve("stderr.txt");
+
+		String javaBinary = new File(new File(System.getProperty("java.home"), "bin"), "java").getAbsolutePath();
+		File classes = new File(Cli.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+		ProcessBuilder pb = new ProcessBuilder(
+				javaBinary,
+				"-cp",
+				classes.getAbsolutePath(),
+				Cli.class.getName(),
+				"-f",
+				scriptFile.toAbsolutePath().toString());
+		pb.redirectInput(stdinFile.toFile());
+		pb.redirectOutput(stdoutFile.toFile());
+		pb.redirectError(stderrFile.toFile());
+
+		Process process = pb.start();
+		boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+		if (!finished) {
+			process.destroyForcibly();
+			process.waitFor();
+		}
+		String stderr = new String(Files.readAllBytes(stderrFile), StandardCharsets.UTF_8);
+		assertEquals(description + ": CLI JVM timed out; stderr: " + stderr, Boolean.TRUE, Boolean.valueOf(finished));
+		assertEquals(description + ": CLI JVM failed; stderr: " + stderr, 0, process.exitValue());
+		String stdout = new String(Files.readAllBytes(stdoutFile), StandardCharsets.UTF_8);
+		return stdout.replace("\r\n", "\n");
 	}
 
 	/**

@@ -92,6 +92,7 @@ public final class Cli {
 	private File compileOutputFile;
 	private boolean printUsage;
 	private boolean sandbox;
+	private boolean processStandardInput;
 	private boolean disableOptimize;
 	private boolean profiling;
 	private File profilingOutputFile;
@@ -544,6 +545,7 @@ public final class Cli {
 			avm.setAwkSink(sink);
 			avm.setErrorStream(err);
 			avm.setWarningStream(err);
+			avm.getJrt().setSpawnedProcessesInheritStandardInput(processStandardInput);
 			if (memoryFile != null) {
 				restorePersistentMemoryIfPresent(avm, memoryFile);
 			}
@@ -754,12 +756,30 @@ public final class Cli {
 
 	/**
 	 * Entry point for the command-line interface.
+	 * <p>
+	 * This method carries process semantics: because it is what the
+	 * {@code jawk} launch of the JVM runs, it declares that the standard input
+	 * the CLI reads is the standard input of the process, and the children of
+	 * {@code system()} and of command pipes may inherit it, as POSIX requires.
+	 * No Java-side check can distinguish the launcher-installed
+	 * {@code System.in} from a replacement installed with
+	 * {@code System.setIn}, so that declaration is part of this method's
+	 * contract: code that replaces {@code System.in} must not call
+	 * {@code main} programmatically — embedders and tests go through
+	 * {@link #create(String[], InputStream, PrintStream, PrintStream)}, the
+	 * constructors, or the {@link Awk} API, where spawned children always get
+	 * a closed standard input instead.
 	 *
 	 * @param args command-line arguments
 	 */
 	public static void main(String[] args) {
 		try {
 			Cli cli = new Cli();
+			// Only the process entry point can vouch that the standard input
+			// this CLI reads is the standard input of the JVM itself, the one
+			// stream a spawned child can inherit; embedders and tests reach
+			// run() through other paths and never set this.
+			cli.processStandardInput = true;
 			cli.parse(args);
 			cli.run();
 		} catch (ExitException e) {
