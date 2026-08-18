@@ -44,6 +44,7 @@ java -jar jawk-${project.version}-standalone.jar --list-ext
 >   - An operand containing `=` is treated as an AWK-style file-list assignment that applies before the next input file is consumed.
 >   - Use `-v name=value` instead when the variable must exist before `BEGIN`.
 >   - As in gawk, once the program text has been supplied (with `-f` or `-L`), an unknown option ends option processing and is passed on to the AWK program through `ARGV`, which is useful for `#!` interpreter scripts.
+>   - The value of a value-taking short option may be attached to the option letter (POSIX/getopt style): `-fprog.awk`, `-vx=1`, and `-F:` are equivalent to `-f prog.awk`, `-v x=1`, and `-F :`. This applies to `-f`, `-v`, `-F`, `-L`, `-K`, and `-l`.
 >
 > - Variables and formatting
 >

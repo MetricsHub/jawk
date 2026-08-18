@@ -20,6 +20,11 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- The CLI now accepts POSIX attached option-arguments for the value-taking short options:
+  `-fprog.awk`, `-vx=1`, `-F:` (and the Jawk-specific `-L`, `-K`, `-l`) are equivalent to
+  `-f prog.awk`, `-v x=1`, `-F :`, as in gawk, mawk, BWK awk, and goawk. Previously the glued
+  form was rejected with `Unknown parameter`
+  ([#574](https://github.com/jawkio/jawk/issues/574)).
 - An input-derived value whose text is a number surrounded by blanks — a record like `" 12 "`,
   a `getline var` result read from padded input, a `split()` piece under a non-default
   separator — is now recognized as a POSIX numeric string, so `$0 == 12` is true for the record
