@@ -20,6 +20,14 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- A conditional expression whose result feeds a further operation on a literal — shapes like
+  `(v ? v : 24) * 2`, `-(v ? 5 : 24)`, or `$(v ? 1 : 2)` — now evaluates correctly under the
+  default tuple optimization. Previously the peephole literal fold merged the false branch's
+  literal with the operation at the branches' join point, so the true branch skipped the
+  operation, produced the false branch's folded result (`(60 ? 60 : 24) * 2` yielded 48), and
+  leaked a value onto the operand stack that displaced later `print` operands. Running with
+  `-s`/`--no-optimize` was unaffected
+  ([#578](https://github.com/jawkio/jawk/issues/578)).
 - An input-derived value whose text is a number surrounded by blanks — a record like `" 12 "`,
   a `getline var` result read from padded input, a `split()` piece under a non-default
   separator — is now recognized as a POSIX numeric string, so `$0 == 12` is true for the record

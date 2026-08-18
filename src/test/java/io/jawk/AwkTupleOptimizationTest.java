@@ -110,6 +110,75 @@ public class AwkTupleOptimizationTest {
 	}
 
 	@Test
+	public void doesNotFoldBinaryOperatorAtTernaryJoinPoint() throws Exception {
+		// The false branch (PUSH 24) falls through to the join point
+		// (PUSH 2, MULTIPLY) that the true branch jumps to: folding
+		// 24 * 2 would land the true branch on the folded literal
+		String script = "BEGIN { v = 60; print \"size:\", (v ? v : 24) * 2 }\n";
+		AwkTestSupport
+				.awkTest("ternary result times literal takes the true branch")
+				.script(script)
+				.expect("size: 120\n")
+				.runAndAssert();
+
+		AwkProgram tuples = new Awk().compile(script);
+		List<Opcode> opcodes = collectOpcodes(tuples);
+		assertTrue("MULTIPLY at a jump target must survive folding", opcodes.contains(Opcode.MULTIPLY));
+	}
+
+	@Test
+	public void doesNotFoldBinaryOperatorAtTernaryJoinPointInAssignment() throws Exception {
+		AwkTestSupport
+				.awkTest("ternary result times literal assigns the true branch")
+				.script("BEGIN { v = 60; h = (v ? v : 24) * 2; print h }")
+				.expect("120\n")
+				.runAndAssert();
+	}
+
+	@Test
+	public void stillTakesFalseBranchOfGuardedTernary() throws Exception {
+		AwkTestSupport
+				.awkTest("ternary result times literal takes the false branch")
+				.script("BEGIN { v = 0; print (v ? v : 24) * 2 }")
+				.expect("48\n")
+				.runAndAssert();
+	}
+
+	@Test
+	public void doesNotFoldUnaryOperatorAtTernaryJoinPoint() throws Exception {
+		// Same shape with NEGATE as the join point of the two branches
+		String script = "BEGIN { v = 1; print -(v ? 5 : 24) }\n";
+		AwkTestSupport
+				.awkTest("negated ternary takes the true branch")
+				.script(script)
+				.expect("-5\n")
+				.runAndAssert();
+
+		AwkProgram tuples = new Awk().compile(script);
+		List<Opcode> opcodes = collectOpcodes(tuples);
+		assertTrue("NEGATE at a jump target must survive folding", opcodes.contains(Opcode.NEGATE));
+	}
+
+	@Test
+	public void doesNotFoldFieldReferenceAtTernaryJoinPoint() throws Exception {
+		// Here GET_INPUT_FIELD is the join point: fusing it with the false
+		// branch's literal field index would hijack the true branch
+		String script = "{ v = 1; print $(v ? 1 : 2) }\n";
+		AwkTestSupport
+				.awkTest("ternary field index takes the true branch")
+				.script(script)
+				.stdin("a b\n")
+				.expect("a\n")
+				.runAndAssert();
+
+		AwkProgram tuples = new Awk().compile(script);
+		List<Opcode> opcodes = collectOpcodes(tuples);
+		assertTrue(
+				"GET_INPUT_FIELD at a jump target must survive folding",
+				opcodes.contains(Opcode.GET_INPUT_FIELD));
+	}
+
+	@Test
 	public void foldsNestedLiteralArithmetic() throws Exception {
 		String script = "BEGIN { print 1 + 2 + 3 }\n";
 		AwkTestSupport
