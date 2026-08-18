@@ -3167,20 +3167,34 @@ public class JRT {
 		return true;
 	}
 
-	private static Process spawnProcess(String cmd) throws IOException {
-		Process p;
-
-		if (IS_WINDOWS) {
-			// spawn the process using the Windows shell
-			ProcessBuilder pb = new ProcessBuilder("cmd.exe", "/c", cmd);
-			p = pb.start();
-		} else {
-			// spawn the process using the default POSIX shell
-			ProcessBuilder pb = new ProcessBuilder("/bin/sh", "-c", cmd);
-			p = pb.start();
+	private static Process spawnProcess(String cmd, boolean inheritStandardInput) throws IOException {
+		ProcessBuilder pb = IS_WINDOWS
+		// spawn the process using the Windows shell
+				? new ProcessBuilder("cmd.exe", "/c", cmd)
+				// spawn the process using the default POSIX shell
+				: new ProcessBuilder("/bin/sh", "-c", cmd);
+		if (inheritStandardInput) {
+			pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
 		}
+		return pb.start();
+	}
 
-		return p;
+	/**
+	 * Tells whether processes spawned on behalf of the script share the
+	 * standard input of this JVM. POSIX gives the children of {@code system()}
+	 * and of a command pipe the same standard input as awk itself, which is how
+	 * terminal-aware commands like {@code "stty size" | getline} find the
+	 * controlling terminal. That is only faithful when Jawk reads the real
+	 * standard input of the process: an embedded execution bound to a custom
+	 * stream cannot lend that stream to another OS process, and handing over
+	 * the host JVM's standard input instead would leak input the embedder never
+	 * gave to Jawk, so there the child's standard input stays closed.
+	 *
+	 * @return {@code true} when spawned processes inherit the JVM's standard
+	 *         input
+	 */
+	private boolean spawnedProcessInheritsStandardInput() {
+		return standardInput == System.in;
 	}
 
 	/**
@@ -3261,8 +3275,13 @@ public class JRT {
 		Process process = null;
 		Thread errorPump = null;
 		try {
-			process = spawnProcess(cmd);
-			process.getOutputStream().close();
+			// POSIX: the child shares awk's standard input; when that is not
+			// possible (embedded execution on a custom stream) it stays closed
+			boolean inheritStandardInput = spawnedProcessInheritsStandardInput();
+			process = spawnProcess(cmd, inheritStandardInput);
+			if (!inheritStandardInput) {
+				process.getOutputStream().close();
+			}
 			errorPump = DataPump.dumpAndReturnThread(cmd + " stderr", process.getErrorStream(), error);
 			PartitioningReader reader = new PartitioningReader(
 					new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8),
@@ -3294,7 +3313,8 @@ public class JRT {
 		PrintStream processOutput = null;
 		try {
 			processOutput = awkSink.getPrintStream();
-			process = spawnProcess(cmd);
+			// the pipe itself is the child's standard input
+			process = spawnProcess(cmd, false);
 			stderrPump = DataPump.dumpAndReturnThread(cmd + " stderr", process.getErrorStream(), error);
 			stdoutPump = DataPump.dumpAndReturnThread(cmd + " stdout", process.getInputStream(), processOutput);
 			PrintStream processInput = new PrintStream(process.getOutputStream(), true, StandardCharsets.UTF_8.name());
@@ -3502,10 +3522,11 @@ public class JRT {
 	 * Executes the command specified by cmd and waits
 	 * for termination, returning an Integer object
 	 * containing the return code.
-	 * stdin to this process is closed while
-	 * threads are created to shuttle stdout and
-	 * stderr of the command to stdout/stderr
-	 * of the calling process.
+	 * The command inherits the standard input of the JVM when Jawk reads the
+	 * real standard input (CLI runs), as POSIX requires of {@code system()};
+	 * otherwise its standard input is closed. Threads are created to shuttle
+	 * stdout and stderr of the command to stdout/stderr of the calling
+	 * process.
 	 *
 	 * @param cmd The command to execute.
 	 * @return Integer(return_code) of the created
@@ -3514,9 +3535,13 @@ public class JRT {
 	public Integer jrtSystem(String cmd) {
 		try {
 			PrintStream processOutput = awkSink.getPrintStream();
-			Process p = spawnProcess(cmd);
-			// no input to this process!
-			p.getOutputStream().close();
+			// POSIX: the child shares awk's standard input; when that is not
+			// possible (embedded execution on a custom stream) it stays closed
+			boolean inheritStandardInput = spawnedProcessInheritsStandardInput();
+			Process p = spawnProcess(cmd, inheritStandardInput);
+			if (!inheritStandardInput) {
+				p.getOutputStream().close();
+			}
 			Thread errorPump = DataPump.dumpAndReturnThread(cmd + " stderr", p.getErrorStream(), error);
 			Thread outputPump = DataPump.dumpAndReturnThread(cmd + " stdout", p.getInputStream(), processOutput);
 			boolean interrupted = false;
