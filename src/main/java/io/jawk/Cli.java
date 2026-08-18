@@ -216,6 +216,13 @@ public final class Cli {
 			if (arg.length() == 0) {
 				throw new IllegalArgumentException("zero-length argument at position " + (argIdx + 1));
 			}
+			if (isAttachedOptionArgument(arg)) {
+				// POSIX attached option-argument, e.g. -fprog.awk: split it into
+				// the option and its value so the option branches below see the
+				// same shape as the separate form -f prog.awk
+				args = splitAttachedOptionArgument(args, argIdx);
+				arg = args[argIdx];
+			}
 			if (arg.charAt(0) != '-') {
 				// end of options: remaining args are part of the script execution
 				break;
@@ -362,6 +369,40 @@ public final class Cli {
 		while (argIdx < args.length) {
 			nameValueOrFileNames.add(args[argIdx++]);
 		}
+	}
+
+	/** Single-letter options that take a value and accept it attached. */
+	private static final String VALUE_OPTION_LETTERS = "fvFLKl";
+
+	/**
+	 * Tells whether an argument is a value-taking short option with its value
+	 * attached, as in {@code -fprog.awk} for {@code -f prog.awk}.
+	 *
+	 * @param arg the raw command-line argument
+	 * @return {@code true} when the argument must be split before dispatch
+	 */
+	private static boolean isAttachedOptionArgument(String arg) {
+		return arg.length() > 2
+				&& arg.charAt(0) == '-'
+				&& VALUE_OPTION_LETTERS.indexOf(arg.charAt(1)) >= 0;
+	}
+
+	/**
+	 * Splits an attached option-argument in two, so that {@code -fprog.awk}
+	 * becomes {@code -f prog.awk} in the argument array.
+	 *
+	 * @param args full array of arguments
+	 * @param argIdx index of the attached option-argument to split
+	 * @return a copy of the array where the argument at {@code argIdx} is
+	 *         replaced by the option and its value as separate elements
+	 */
+	private static String[] splitAttachedOptionArgument(String[] args, int argIdx) {
+		String[] split = new String[args.length + 1];
+		System.arraycopy(args, 0, split, 0, argIdx);
+		split[argIdx] = args[argIdx].substring(0, 2);
+		split[argIdx + 1] = args[argIdx].substring(2);
+		System.arraycopy(args, argIdx + 1, split, argIdx + 2, args.length - argIdx - 1);
+		return split;
 	}
 
 	/**
