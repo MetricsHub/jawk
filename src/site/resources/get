@@ -56,12 +56,16 @@ fetch_checksum() {
 		esac
 	else
 		_rc=0
-		wget -qO "$1" "${SUM_URL}" 2>/dev/null || _rc=$?
-		case "${_rc}" in
-			0) return 0 ;;
-			8) return 1 ;; # server error response: a missing asset with wget
-			*) fail "Could not download ${SUM_URL}; re-run when the network is available." ;;
-		esac
+		_response="$(wget -O "$1" --server-response "${SUM_URL}" 2>&1)" || _rc=$?
+		if [ "${_rc}" -eq 0 ]; then
+			return 0
+		fi
+		# wget exit status 8 covers every HTTP error; only a definite 404
+		# means the release publishes no checksum.
+		if [ "${_rc}" -eq 8 ] && printf '%s\n' "${_response}" | grep -q "HTTP/[^ ]* 404"; then
+			return 1
+		fi
+		fail "Could not download ${SUM_URL}; re-run when the network is available."
 	fi
 }
 
