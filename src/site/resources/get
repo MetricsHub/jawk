@@ -31,14 +31,39 @@ fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 # --- Pick a download tool -------------------------------------------------
 
 if command -v curl >/dev/null 2>&1; then
+	DOWNLOADER="curl"
 	fetch() { curl -fsSL -o "$2" "$1"; }
 	fetch_optional() { curl -fsSL -o "$2" "$1" 2>/dev/null; }
 elif command -v wget >/dev/null 2>&1; then
+	DOWNLOADER="wget"
 	fetch() { wget -qO "$2" "$1"; }
 	fetch_optional() { wget -qO "$2" "$1" 2>/dev/null; }
 else
 	fail "Neither curl nor wget is available; install one of them and re-run."
 fi
+
+# Fetches the checksum asset into $1, separating "this release publishes no
+# checksum" (HTTP 404: return 1) from transport or server errors (abort):
+# a transient failure must not silently disable verification.
+fetch_checksum() {
+	if [ "${DOWNLOADER}" = "curl" ]; then
+		_status="$(curl -sSL -o "$1" -w '%{http_code}' "${SUM_URL}" 2>/dev/null)" \
+			|| fail "Could not download ${SUM_URL}; re-run when the network is available."
+		case "${_status}" in
+			200) return 0 ;;
+			404) return 1 ;;
+			*) fail "Unexpected HTTP ${_status} response for ${SUM_URL}; try again later." ;;
+		esac
+	else
+		_rc=0
+		wget -qO "$1" "${SUM_URL}" 2>/dev/null || _rc=$?
+		case "${_rc}" in
+			0) return 0 ;;
+			8) return 1 ;; # server error response: a missing asset with wget
+			*) fail "Could not download ${SUM_URL}; re-run when the network is available." ;;
+		esac
+	fi
+}
 
 # --- Resolve the download URLs --------------------------------------------
 
@@ -75,7 +100,7 @@ if ! fetch_optional "${JAR_URL}" "${TMP_DIR}/jawk-standalone.jar"; then
 		|| fail "Download failed: could not fetch the Jawk ${VERSION} standalone jar."
 fi
 
-if fetch_optional "${SUM_URL}" "${TMP_DIR}/jawk-standalone.jar.sha256"; then
+if fetch_checksum "${TMP_DIR}/jawk-standalone.jar.sha256"; then
 	EXPECTED_SUM="$(awk '{ print tolower($1); exit }' "${TMP_DIR}/jawk-standalone.jar.sha256")"
 	if command -v sha256sum >/dev/null 2>&1; then
 		ACTUAL_SUM="$(sha256sum "${TMP_DIR}/jawk-standalone.jar" | awk '{ print tolower($1) }')"
@@ -91,7 +116,7 @@ if fetch_optional "${SUM_URL}" "${TMP_DIR}/jawk-standalone.jar.sha256"; then
 		info "Checksum verified."
 	fi
 else
-	info "WARNING: no checksum published for this release; skipping verification."
+	info "WARNING: this release publishes no checksum; skipping verification."
 fi
 
 # --- Install the jar and the launcher --------------------------------------

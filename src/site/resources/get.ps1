@@ -16,16 +16,29 @@
 # locates a JRE (Java 8 or later) at run time, and adds the shim directory
 # to the user PATH.
 
+# The advertised `irm ... | iex` invocation evaluates this script in the
+# caller's scope: the whole body runs in a script block so preference and
+# helper variables cannot leak into the user's session.
+& {
+
 $ErrorActionPreference = 'Stop'
 
 $repo = 'jawkio/jawk'
 $version = if ($env:JAWK_VERSION) { $env:JAWK_VERSION } else { 'latest' }
 $installDir = if ($env:JAWK_INSTALL_DIR) { $env:JAWK_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Jawk' }
-# A relative override must not leave a working-directory-dependent entry on
-# the user PATH: resolve it against the current location.
-if (-not [System.IO.Path]::IsPathRooted($installDir)) {
-    $installDir = Join-Path (Get-Location).ProviderPath $installDir
+
+# The user PATH entry must never depend on a working directory, so resolve
+# relative, drive-relative (C:Jawk), and root-relative (\Jawk) overrides
+# with GetFullPath, aligning the process working directory with the
+# PowerShell location for the call (and restoring it right after).
+$savedCwd = [Environment]::CurrentDirectory
+[Environment]::CurrentDirectory = (Get-Location).ProviderPath
+try {
+    $installDir = [System.IO.Path]::GetFullPath($installDir)
+} finally {
+    [Environment]::CurrentDirectory = $savedCwd
 }
+
 $binDir = Join-Path $installDir 'bin'
 $jarPath = Join-Path $installDir 'jawk-standalone.jar'
 $shimPath = Join-Path $binDir 'jawk.cmd'
@@ -61,11 +74,27 @@ try {
     Invoke-WebRequest -UseBasicParsing -Uri $jarUrl -OutFile $tmpJar
 }
 
-try {
-    $expectedSum = (Invoke-RestMethod -UseBasicParsing -Uri "$jarUrl.sha256") -split '\s+' | Select-Object -First 1
-} catch {
-    $expectedSum = $null
-    Write-Host 'WARNING: no checksum published for this release; skipping verification.'
+# A missing checksum asset (HTTP 404: releases that predate the published
+# checksums) downgrades to a warning; a transport or server error must not
+# silently disable verification. Transient failures (Windows PowerShell can
+# drop a reused connection) are retried before giving up.
+$expectedSum = $null
+$sumUrl = "$jarUrl.sha256"
+for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try {
+        $expectedSum = (Invoke-RestMethod -UseBasicParsing -Uri $sumUrl) -split '\s+' | Select-Object -First 1
+        break
+    } catch {
+        $response = $_.Exception.Response
+        if ($response -and [int]$response.StatusCode -eq 404) {
+            Write-Host 'WARNING: this release publishes no checksum; skipping verification.'
+            break
+        }
+        if ($attempt -eq 3) {
+            throw "Could not download the checksum $sumUrl for verification: $($_.Exception.Message)"
+        }
+        Start-Sleep -Seconds 1
+    }
 }
 if ($expectedSum) {
     $actualSum = (Get-FileHash -Algorithm SHA256 -Path $tmpJar).Hash
@@ -115,11 +144,14 @@ if not defined JAWK_JAVA (
 exit /b %ERRORLEVEL%
 
 rem A candidate qualifies if it runs and does not report a 1.0-1.7 version
-rem ("1.8" is Java 8 in the legacy version scheme).
+rem ("1.8" is Java 8 in the legacy version scheme). The findstr result is
+rem read through errorlevel in a separate statement: an exit /b appended to
+rem the pipeline would run in the pipe's child cmd, not in this subroutine.
 :try_java
 if not exist "%~1" exit /b 0
 "%~1" -version >nul 2>&1 || exit /b 0
-"%~1" -version 2>&1 | findstr /r /c:"version .1\.[0-7]\." >nul && exit /b 0
+"%~1" -version 2>&1 | findstr /r /c:"version .1\.[0-7]\." >nul
+if not errorlevel 1 exit /b 0
 set "JAWK_JAVA=%~1"
 exit /b 0
 '@
@@ -142,4 +174,6 @@ if (-not $onPath) {
     Write-Host "Open a new terminal, then run 'jawk -?' to get started."
 } else {
     Write-Host "Run 'jawk -?' to get started."
+}
+
 }
