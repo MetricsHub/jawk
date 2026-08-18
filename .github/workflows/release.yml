@@ -267,6 +267,7 @@ jobs:
       # URL (releases/latest/download/jawk-standalone.jar), and the .sha256
       # files let them verify the download.
       - name: Create standalone jar alias and SHA-256 checksums
+        id: checksums
         if: always() && steps.release.outcome == 'success'
         run: |
           cd target/release/target
@@ -282,7 +283,7 @@ jobs:
           INPUT_RELEASE_VERSION: ${{ inputs.releaseVersion }}
 
       - name: Create GitHub Release
-        if: always() && steps.release.outcome == 'success'
+        if: always() && steps.release.outcome == 'success' && steps.checksums.outcome == 'success'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.releaseVersion }}

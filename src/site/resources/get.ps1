@@ -1,5 +1,9 @@
 # Jawk installer for Windows — https://jawk.io
 #
+# Copyright (C) 2006 - 2026 MetricsHub
+# Distributed under the GNU Lesser General Public License, version 3 or
+# later (LGPL-3.0-or-later); see <http://www.gnu.org/licenses/lgpl-3.0.html>.
+#
 # Usage (PowerShell):
 #   irm https://jawk.io/get.ps1 | iex
 #
@@ -72,8 +76,10 @@ if ($expectedSum) {
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Move-Item -Force $tmpJar $jarPath
 
-# The shim is a literal here-string so cmd metacharacters (%%, $PATH) survive;
-# the jar path is substituted through a placeholder afterwards.
+# The shim is a literal here-string so cmd metacharacters (%%, $PATH) survive.
+# It locates the jar relative to its own directory (%~dp0), so the content is
+# pure ASCII regardless of the install path (non-ASCII user names included)
+# and the installation can be relocated as a whole.
 $shim = @'
 @echo off
 rem Jawk launcher - https://jawk.io
@@ -81,7 +87,7 @@ rem Locates a JRE (Java 8 or later) and runs the Jawk standalone jar.
 rem Set JAWK_JAVA_HOME to force a specific Java installation.
 
 setlocal
-set "JAWK_JAR=__JAWK_JAR__"
+set "JAWK_JAR=%~dp0..\jawk-standalone.jar"
 
 if not exist "%JAWK_JAR%" (
     echo ERROR: %JAWK_JAR% not found; re-run the installer: 1>&2
@@ -90,20 +96,32 @@ if not exist "%JAWK_JAR%" (
 )
 
 set "JAWK_JAVA="
-if defined JAWK_JAVA_HOME if exist "%JAWK_JAVA_HOME%\bin\java.exe" set "JAWK_JAVA=%JAWK_JAVA_HOME%\bin\java.exe"
-if not defined JAWK_JAVA if defined JAVA_HOME if exist "%JAVA_HOME%\bin\java.exe" set "JAWK_JAVA=%JAVA_HOME%\bin\java.exe"
-if not defined JAWK_JAVA for %%J in (java.exe) do if not "%%~$PATH:J" == "" set "JAWK_JAVA=%%~$PATH:J"
+if defined JAWK_JAVA_HOME call :try_java "%JAWK_JAVA_HOME%\bin\java.exe"
+if not defined JAWK_JAVA if defined JAVA_HOME call :try_java "%JAVA_HOME%\bin\java.exe"
+if not defined JAWK_JAVA for %%J in (java.exe) do if not "%%~$PATH:J" == "" call :try_java "%%~$PATH:J"
 
 if not defined JAWK_JAVA (
-    echo ERROR: no Java Runtime Environment found ^(Jawk requires Java 8 or later^). 1>&2
+    echo ERROR: no suitable Java Runtime Environment found ^(Jawk requires Java 8 or later^). 1>&2
     echo Install one from https://adoptium.net, or set JAWK_JAVA_HOME. 1>&2
     exit /b 127
 )
 
 "%JAWK_JAVA%" -jar "%JAWK_JAR%" %*
 exit /b %ERRORLEVEL%
+
+rem A candidate qualifies if it runs and does not report a 1.0-1.7 version
+rem ("1.8" is Java 8 in the legacy version scheme).
+:try_java
+if not exist "%~1" exit /b 0
+"%~1" -version >nul 2>&1 || exit /b 0
+"%~1" -version 2>&1 | findstr /r /c:"version .1\.[0-7]\." >nul && exit /b 0
+set "JAWK_JAVA=%~1"
+exit /b 0
 '@
-$shim.Replace('__JAWK_JAR__', $jarPath) | Set-Content -Path $shimPath -Encoding ASCII
+# cmd only finds "call :label" targets in CRLF files, and the here-string
+# carries whatever line endings this script was downloaded with: normalize.
+$shim = ($shim -replace "`r`n", "`n") -replace "`n", "`r`n"
+$shim | Set-Content -Path $shimPath -Encoding ASCII
 
 Write-Host "Installed the Jawk jar to $jarPath"
 Write-Host "Installed the jawk launcher to $shimPath"

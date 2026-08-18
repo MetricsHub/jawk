@@ -1,6 +1,10 @@
 #!/bin/sh
 # Jawk installer for Linux and macOS — https://jawk.io
 #
+# Copyright (C) 2006 - 2026 MetricsHub
+# Distributed under the GNU Lesser General Public License, version 3 or
+# later (LGPL-3.0-or-later); see <http://www.gnu.org/licenses/lgpl-3.0.html>.
+#
 # Usage:
 #   curl -fsSL https://jawk.io/get | sh
 #
@@ -97,13 +101,17 @@ fi
 mkdir -p "${DATA_DIR}" "${BIN_DIR}"
 mv "${TMP_DIR}/jawk-standalone.jar" "${JAR_PATH}"
 
+# The jar path is embedded in the launcher as a single-quoted literal so a
+# data directory containing $, backticks, or double quotes stays inert.
+JAR_PATH_SQ="$(printf '%s' "${JAR_PATH}" | sed "s/'/'\\\\''/g")"
+
 cat > "${LAUNCHER_PATH}" <<LAUNCHER
 #!/bin/sh
 # Jawk launcher — https://jawk.io
 # Locates a JRE (Java 8 or later) and runs the Jawk standalone jar.
 # Set JAWK_JAVA_HOME to force a specific Java installation.
 
-JAWK_JAR="${JAR_PATH}"
+JAWK_JAR='${JAR_PATH_SQ}'
 
 if [ ! -f "\${JAWK_JAR}" ]; then
 	echo "ERROR: \${JAWK_JAR} not found; re-run the installer:" >&2
