@@ -2736,8 +2736,13 @@ public class JRT {
 	 *         {@link #jrtGetInputString()}), {@code 0} at end of input, and
 	 *         {@code -1} when the file cannot be opened or read, in which case
 	 *         ERRNO carries the gawk-style error description
+	 * @throws AwkRuntimeException when the filename is the empty string, the
+	 *         fatal error gawk raises for a null-string redirection
 	 */
 	public Integer jrtConsumeFileInputForGetline(String fileNameParam) {
+		if (fileNameParam.isEmpty()) {
+			throw new AwkRuntimeException("expression for `<' redirection has null string value");
+		}
 		try {
 			if (jrtConsumeFileInput(fileNameParam)) {
 				return ONE;
@@ -2761,8 +2766,13 @@ public class JRT {
 	 *         {@link #jrtGetInputString()}), {@code 0} at end of input, and
 	 *         {@code -1} when the process cannot be spawned, in which case
 	 *         ERRNO carries the error description
+	 * @throws AwkRuntimeException when the command is the empty string, the
+	 *         fatal error gawk raises for a null-string redirection
 	 */
 	public Integer jrtConsumeCommandInputForGetline(String cmdString) {
+		if (cmdString.isEmpty()) {
+			throw new AwkRuntimeException("expression for `|' redirection has null string value");
+		}
 		try {
 			if (jrtConsumeCommandInput(cmdString)) {
 				return ONE;

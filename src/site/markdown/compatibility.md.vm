@@ -293,12 +293,17 @@ Every variant returns `1` when a record was read, `0` at end of input, and the r
 return `-1` when the file cannot be opened or the command cannot be spawned, with `ERRNO`
 carrying the gawk-style description (`No such file or directory`, `Is a directory`, ...), so a
 script can probe for optional files with the idiomatic `while ((getline line < f) > 0)` loop. A
-failed open is not cached: once the file exists, the same `getline` succeeds. When `getline`
-returns `0` or `-1` it has read nothing and sets nothing: `$0`, its fields, and the target
-variable keep their previous values. One dark corner follows gawk 4.0 and later (their
-`getline5` test): with an array or field target, the subscript expression is evaluated even when
-nothing is read — after the read attempt, so `getline a[++c] < f` advances `c` on every attempt,
-and the reference creates the array element — but the element keeps whatever value it had.
+failed open is not cached: once the file exists, the same `getline` succeeds. A redirection name
+that evaluates to the empty string is a fatal error, as in gawk (`expression for `<'
+redirection has null string value`), not a `-1`. When `getline` returns `0` or `-1` it has read
+nothing and sets nothing: `$0`, its fields, and the target variable keep their previous values.
+One dark corner follows gawk 4.0 and later (their `getline5` test): with an array or field
+target, the subscript expression is still evaluated when nothing is read — `getline a[++c] < f`
+advances `c` on every attempt, the reference creates the array element, and an invalid field
+target such as `getline $(-1) < f` is rejected — but nothing is stored. The one detail Jawk does
+not reproduce is gawk's exact timing: gawk computes the subscript before attempting the read,
+Jawk after, which is only observable when the subscript expression itself inspects or assigns
+ERRNO.
 
 ${esc.h}${esc.h}${esc.h} Range patterns
 

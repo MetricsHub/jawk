@@ -23,6 +23,7 @@ package io.jawk;
  */
 
 import org.junit.Test;
+import io.jawk.jrt.AwkRuntimeException;
 
 /**
  * Tests for the redirected forms of {@code getline}: {@code getline [var] <
@@ -242,6 +243,40 @@ public class GetlineRedirectionTest {
 								+ " print (getline $(++n) < \"{{empty}}\"), n, NF, \"[\" $0 \"]\" }")
 				.file("empty", "")
 				.expectLines("0 2 2 [x y]")
+				.runAndAssert();
+	}
+
+	@Test
+	public void negativeFieldTargetIsRejectedEvenWhenNothingIsRead() throws Exception {
+		// gawk rejects the invalid field target whether or not a record was
+		// available; the target reference is evaluated either way.
+		AwkTestSupport
+				.awkTest("getline $(-1) < file is fatal at end of input too")
+				.script("BEGIN { r = (getline $(-1) < \"{{empty}}\"); print r }")
+				.file("empty", "")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void emptyFileNameIsFatal() throws Exception {
+		// gawk: fatal: expression for `<' redirection has null string value.
+		// The empty name reports a fatal error rather than -1, so an unset
+		// filename variable is not mistaken for a merely missing file.
+		AwkTestSupport
+				.awkTest("getline from an empty filename is a fatal error, as in gawk")
+				.script("BEGIN { r = (getline x < \"\"); print r }")
+				.expectThrow(AwkRuntimeException.class)
+				.runAndAssert();
+	}
+
+	@Test
+	public void emptyCommandIsFatal() throws Exception {
+		// gawk: fatal: expression for `|' redirection has null string value.
+		AwkTestSupport
+				.awkTest("getline from an empty command is a fatal error, as in gawk")
+				.script("BEGIN { r = (\"\" | getline x); print r }")
+				.expectThrow(AwkRuntimeException.class)
 				.runAndAssert();
 	}
 

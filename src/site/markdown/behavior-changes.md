@@ -32,7 +32,9 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   `-1` with `ERRNO` carrying the gawk-style description (`No such file or directory`,
   `Is a directory`, ...), so the idiomatic `while ((getline line < f) > 0)` guard and probing for
   optional files work; the failed open is not cached, so a later `getline` from the same name
-  retries it. Previously the underlying Java `IOException` aborted the whole script
+  retries it. Previously the underlying Java `IOException` aborted the whole script. A
+  redirection name that evaluates to the empty string stays fatal, with gawk's message
+  (`expression for `<' redirection has null string value`) instead of the Java exception
   ([#566](https://github.com/jawkio/jawk/issues/566)).
 - A `getline` that reads nothing now leaves its target untouched, as POSIX requires: at end of
   input (return `0`) or on error (return `-1`), `getline < file` and `cmd | getline` no longer

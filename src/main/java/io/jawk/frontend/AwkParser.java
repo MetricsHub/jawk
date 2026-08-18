@@ -6182,11 +6182,10 @@ public class AwkParser {
 				Address end = tuples.createAddress("getline_end");
 				tuples.gotoAddress(end);
 				tuples.address(noRecord);
-				if (getAst2() instanceof ArrayReferenceAst) {
-					getAst2().populateTuples(tuples);
-				} else {
-					((DollarExpressionAst) getAst2()).getAst1().populateTuples(tuples);
-				}
+				// Evaluating the target as a value creates an array element and
+				// rejects an invalid field number, exactly like the assignment
+				// would, without storing anything.
+				getAst2().populateTuples(tuples);
 				tuples.pop();
 				tuples.address(end);
 			} else {
