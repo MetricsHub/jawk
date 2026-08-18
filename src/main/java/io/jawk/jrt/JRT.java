@@ -130,6 +130,18 @@ public class JRT {
 	 * configured for the run, so that {@code getline < "/dev/stdin"} reads the
 	 * same data as the main input loop does when no operand is given.
 	 */
+	/**
+	 * The stream that was {@code System.in} when this class was initialized. In
+	 * a CLI launch that is the standard input of the JVM process, the one thing
+	 * {@code ProcessBuilder.Redirect.INHERIT} can lend to a child process. An
+	 * embedder that replaces {@code System.in} via {@code System.setIn} before
+	 * running Jawk installs a Java stream that no child can inherit, and
+	 * comparing against the captured original makes that case fail closed: the
+	 * replacement never matches, so the child's standard input stays closed
+	 * instead of silently exposing the host's real descriptor 0.
+	 */
+	private static final InputStream PROCESS_STANDARD_INPUT = System.in;
+
 	private InputStream standardInput = System.in;
 	/**
 	 * Sink writing to the standard error of the process, used by the
@@ -3185,16 +3197,19 @@ public class JRT {
 	 * and of a command pipe the same standard input as awk itself, which is how
 	 * terminal-aware commands like {@code "stty size" | getline} find the
 	 * controlling terminal. That is only faithful when Jawk reads the real
-	 * standard input of the process: an embedded execution bound to a custom
-	 * stream cannot lend that stream to another OS process, and handing over
-	 * the host JVM's standard input instead would leak input the embedder never
-	 * gave to Jawk, so there the child's standard input stays closed.
+	 * standard input of the process — the captured
+	 * {@link #PROCESS_STANDARD_INPUT}, not whatever {@code System.in} currently
+	 * returns, so a stream installed with {@code System.setIn} never qualifies.
+	 * An embedded execution bound to a custom stream cannot lend that stream to
+	 * another OS process, and handing over the host JVM's standard input
+	 * instead would leak input the embedder never gave to Jawk, so there the
+	 * child's standard input stays closed.
 	 *
 	 * @return {@code true} when spawned processes inherit the JVM's standard
 	 *         input
 	 */
 	private boolean spawnedProcessInheritsStandardInput() {
-		return standardInput == System.in;
+		return standardInput == PROCESS_STANDARD_INPUT;
 	}
 
 	/**
