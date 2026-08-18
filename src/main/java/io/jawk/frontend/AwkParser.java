@@ -3546,6 +3546,10 @@ public class AwkParser {
 					}
 					ptr = ptr.getAst2();
 				}
+				// The main-loop resume point of a runtime next executed from
+				// a user-defined function, carried as a property of the tuple
+				// stream like the per-file addresses.
+				tuples.setNextAddress(nextAddress);
 				tuples.address(nextAddress);
 
 				tuples.gotoAddress(inputLoopAddress);
@@ -6293,9 +6297,16 @@ public class AwkParser {
 			pushSourceLineNumber(tuples);
 			AST nextable = searchFor(AstFlag.NEXTABLE);
 			if (nextable == null) {
-				throw new SemanticException("cannot next; not within any input rules");
+				// Inside a user-defined function: the calling rule cannot be
+				// known statically (the same function may be called from both
+				// an input rule and a special rule), so emit the runtime form,
+				// which unwinds the function calls and resumes the main input
+				// loop, or reports a fatal error for BEGIN, END, BEGINFILE,
+				// and ENDFILE callers.
+				tuples.execNext();
+			} else {
+				tuples.gotoAddress(nextable.nextAddress());
 			}
-			tuples.gotoAddress(nextable.nextAddress());
 			popSourceLineNumber(tuples);
 			return 0;
 		}

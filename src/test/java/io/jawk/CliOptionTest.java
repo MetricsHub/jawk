@@ -140,6 +140,23 @@ public class CliOptionTest {
 		assertEquals(3, profiledFunctionCount(result.errorOutput(), "outer"));
 	}
 
+	@Test
+	public void profileOptionRecordsFunctionsUnwoundByNext() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI --profile records functions unwound by next")
+				.argument("--profile")
+				.script("function inner() { next } function outer() { inner() } { outer() }")
+				.stdin("a\nb\nc\n")
+				.expect("")
+				.run();
+
+		result.assertExpected();
+		// Each record triggers exactly one outer() -> inner() -> next chain;
+		// next abandons both calls, which must still be recorded once each.
+		assertEquals(3, profiledFunctionCount(result.errorOutput(), "inner"));
+		assertEquals(3, profiledFunctionCount(result.errorOutput(), "outer"));
+	}
+
 	/**
 	 * Extracts the execution count of one function from a {@code --profile}
 	 * report.

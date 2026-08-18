@@ -20,6 +20,13 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- The `next` statement is now accepted inside user-defined functions, as in gawk, mawk, and
+  BWK awk: when the function is called from an input rule, `next` abandons the current record,
+  unwinds the active function calls, and resumes the main input loop; when the function is
+  called from a `BEGIN`, `END`, `BEGINFILE`, or `ENDFILE` rule, it is a fatal error at runtime,
+  matching gawk. Previously any `next` inside a function was rejected at compile time with
+  `SemanticException: cannot next; not within any input rules`. Direct uses in rules are
+  unchanged ([#580](https://github.com/jawkio/jawk/issues/580)).
 - The `--profile` function timing report now records a user-defined function call abandoned by
   `nextfile` as exited when `nextfile` unwinds it, with its actual duration. Previously each such
   call leaked an entry on the internal function timing stack (unbounded memory growth on long

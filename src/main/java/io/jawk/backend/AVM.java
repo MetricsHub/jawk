@@ -620,6 +620,13 @@ public class AVM implements VariableManager, Closeable {
 	private Address nextFileAddress = null;
 
 	/**
+	 * Address of the main input loop's next-record entry point, read from the
+	 * compiled program when it consumes input, where a {@code next} statement
+	 * executed from a user-defined function resumes; {@code null} otherwise.
+	 */
+	private Address nextAddress = null;
+
+	/**
 	 * <code>true</code> if execution position is within a BEGINFILE rule;
 	 * <code>false</code> otherwise.
 	 */
@@ -636,6 +643,13 @@ public class AVM implements VariableManager, Closeable {
 	 * first input file; <code>false</code> while still in the BEGIN blocks.
 	 */
 	private boolean inputFileLoopStarted = false;
+
+	/**
+	 * <code>true</code> once the main input loop has started consuming input
+	 * records; <code>false</code> while still in the BEGIN blocks (and, for
+	 * per-file programs, while the first BEGINFILE rules run).
+	 */
+	private boolean mainInputLoopStarted = false;
 
 	/**
 	 * <code>true</code> if execution position is within an END block;
@@ -728,9 +742,11 @@ public class AVM implements VariableManager, Closeable {
 		exitAddress = null;
 		endFileAddress = null;
 		nextFileAddress = null;
+		nextAddress = null;
 		withinBeginFileBlocks = false;
 		withinEndFileBlocks = false;
 		inputFileLoopStarted = false;
+		mainInputLoopStarted = false;
 		withinEndBlocks = false;
 		exitCode = 0;
 		throwExitException = false;
@@ -765,6 +781,7 @@ public class AVM implements VariableManager, Closeable {
 		exitAddress = compiledProgram.getExitAddress();
 		endFileAddress = compiledProgram.getEndFileAddress();
 		nextFileAddress = compiledProgram.getNextFileAddress();
+		nextAddress = compiledProgram.getNextAddress();
 	}
 
 	private void rebindResolvedInputSource(InputSource resolvedSource) {
@@ -1922,6 +1939,7 @@ public class AVM implements VariableManager, Closeable {
 				case CONSUME_INPUT: {
 					// arg[0] = address
 					// store the next record into $0, $1, ...
+					mainInputLoopStarted = true;
 					if (jrt.consumeInput(resolvedInputSource)) {
 						position.next();
 					} else {
@@ -1932,6 +1950,7 @@ public class AVM implements VariableManager, Closeable {
 				case CONSUME_FILE_INPUT: {
 					// arg[0] = address of the ENDFILE section
 					// store the next record of the current file into $0, $1, ...
+					mainInputLoopStarted = true;
 					withinBeginFileBlocks = false;
 					if (jrt.consumeCurrentFileInput(resolvedInputSource)) {
 						position.next();
@@ -1955,6 +1974,10 @@ public class AVM implements VariableManager, Closeable {
 				}
 				case EXEC_NEXTFILE: {
 					executeNextfile(position);
+					break;
+				}
+				case EXEC_NEXT: {
+					executeNext(position);
 					break;
 				}
 
@@ -4199,6 +4222,50 @@ public class AVM implements VariableManager, Closeable {
 			withinEndFileBlocks = true;
 			position.jump(endFileAddress);
 		}
+	}
+
+	/**
+	 * Executes the {@code next} statement when it is reached through a
+	 * user-defined function call: abandons the current input record and
+	 * resumes the main input loop. The runtime and operand stacks are
+	 * cleared, so {@code next} unwinds user-defined function calls, mirroring
+	 * {@code nextfile}.
+	 * <p>
+	 * A {@code next} written directly inside an input rule compiles to a
+	 * plain jump, and direct uses inside BEGIN, END, BEGINFILE, or ENDFILE
+	 * rules are rejected at compile time by the parser. The checks below
+	 * cover the uses reached through user-defined functions, where the
+	 * calling rule cannot be known statically (the same function may be
+	 * called from both an input rule and a special rule); gawk performs the
+	 * same checks at runtime.
+	 * </p>
+	 *
+	 * @param position the tuple position tracker to redirect
+	 */
+	private void executeNext(PositionTracker position) {
+		if (withinEndBlocks) {
+			throw new AwkRuntimeException(
+					position.lineNumber(),
+					"`next' cannot be called from a `END' rule");
+		}
+		if (withinBeginFileBlocks) {
+			throw new AwkRuntimeException(
+					position.lineNumber(),
+					"`next' cannot be called from a `BEGINFILE' rule");
+		}
+		if (withinEndFileBlocks) {
+			throw new AwkRuntimeException(
+					position.lineNumber(),
+					"`next' cannot be called from a `ENDFILE' rule");
+		}
+		if (nextAddress == null || !mainInputLoopStarted) {
+			throw new AwkRuntimeException(
+					position.lineNumber(),
+					"`next' cannot be called from a `BEGIN' rule");
+		}
+		// next can be invoked from user-defined functions: unwind them.
+		resetCallState();
+		position.jump(nextAddress);
 	}
 
 	/**
