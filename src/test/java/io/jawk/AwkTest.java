@@ -1594,7 +1594,15 @@ public class AwkTest {
 	@Test
 	public void compileTuplesViaCLI() throws Exception {
 		File tmp = File.createTempFile("jawk", ".tpl");
-		Cli.main(new String[] { "-K", tmp.getAbsolutePath(), "{ print toupper($0) }" });
+		// Cli.main is reserved for the process launch (its children may inherit
+		// the JVM's standard input); programmatic callers go through create()
+		Cli
+				.create(
+						new String[]
+						{ "-K", tmp.getAbsolutePath(), "{ print toupper($0) }" },
+						new ByteArrayInputStream(new byte[0]),
+						System.out,
+						System.err);
 
 		Cli cli = Cli.parseCommandLineArguments(new String[] { "-L", tmp.getAbsolutePath() });
 
