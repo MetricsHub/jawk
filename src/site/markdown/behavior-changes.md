@@ -20,6 +20,12 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- The `--profile` function timing report now records a user-defined function call abandoned by
+  `nextfile` as exited when `nextfile` unwinds it, with its actual duration. Previously each such
+  call leaked an entry on the internal function timing stack (unbounded memory growth on long
+  profiled runs), and the abandoned calls were either missing from the report or accounted with
+  wildly wrong durations at program exit
+  ([#557](https://github.com/jawkio/jawk/issues/557)).
 - A conditional expression whose result feeds a further operation on a literal — shapes like
   `(v ? v : 24) * 2`, `-(v ? 5 : 24)`, or `$(v ? 1 : 2)` — now evaluates correctly under the
   default tuple optimization. Previously the peephole literal fold merged the false branch's

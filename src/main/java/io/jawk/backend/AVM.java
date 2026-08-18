@@ -2889,9 +2889,15 @@ public class AVM implements VariableManager, Closeable {
 
 	/**
 	 * Unwinds every call frame and clears the per-call runtime state, after an
-	 * {@code exit} statement or an abandoned execution.
+	 * {@code exit} or {@code nextfile} statement or an abandoned execution.
+	 * When profiling, the abandoned function calls are recorded as exited at
+	 * this point, so the timing report stays accurate and the active-function
+	 * stack does not leak entries (see #557).
 	 */
 	private void resetCallState() {
+		if (profiling) {
+			recordAllFunctionExits(System.nanoTime());
+		}
 		runtimeStack.popAllFrames();
 		elementArgumentReferences.clear();
 		clearOperandStack();
@@ -4180,8 +4186,7 @@ public class AVM implements VariableManager, Closeable {
 					"`nextfile' cannot be called from an ENDFILE rule");
 		}
 		// nextfile can be invoked from user-defined functions: unwind them.
-		runtimeStack.popAllFrames();
-		clearOperandStack();
+		resetCallState();
 		if (endFileAddress == null
 				|| withinBeginFileBlocks && jrt.hasPendingInputFileError(resolvedInputSource)) {
 			// No ENDFILE rules to run, or the file could not be opened: skip
