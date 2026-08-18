@@ -41,6 +41,8 @@ import java.nio.file.Files;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.Test;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
@@ -116,6 +118,44 @@ public class CliOptionTest {
 		assertTrue(result.errorOutput().contains("inner"));
 		assertTrue(result.errorOutput().contains("outer"));
 		assertTrue(result.errorOutput().contains("typeof"));
+	}
+
+	@Test
+	public void profileOptionRecordsFunctionsUnwoundByNextfile() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI --profile records functions unwound by nextfile")
+				.argument("--profile")
+				.script("function inner() { nextfile } function outer() { inner() } { outer() }")
+				.file("f1", "a1\na2\n")
+				.file("f2", "b1\nb2\n")
+				.file("f3", "c1\nc2\n")
+				.operand("{{f1}}", "{{f2}}", "{{f3}}")
+				.expect("")
+				.run();
+
+		result.assertExpected();
+		// Each file triggers exactly one outer() -> inner() -> nextfile chain;
+		// nextfile abandons both calls, which must still be recorded once each.
+		assertEquals(3, profiledFunctionCount(result.errorOutput(), "inner"));
+		assertEquals(3, profiledFunctionCount(result.errorOutput(), "outer"));
+	}
+
+	/**
+	 * Extracts the execution count of one function from a {@code --profile}
+	 * report.
+	 *
+	 * @param report the profiling report text
+	 * @param functionName the function to look up
+	 * @return the reported execution count
+	 */
+	private static long profiledFunctionCount(String report, String functionName) {
+		Matcher matcher = Pattern
+				.compile("^\\s{2}" + Pattern.quote(functionName) + "\\s+(\\d+)\\s", Pattern.MULTILINE)
+				.matcher(report);
+		assertTrue(
+				"function `" + functionName + "' missing from profiling report:\n" + report,
+				matcher.find());
+		return Long.parseLong(matcher.group(1));
 	}
 
 	@Test
