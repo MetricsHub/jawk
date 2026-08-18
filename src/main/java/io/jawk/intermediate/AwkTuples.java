@@ -50,10 +50,10 @@ import io.jawk.jrt.JRT;
  */
 public class AwkTuples implements Serializable {
 
-	// Bumped to 5 when arithmetic on integral operands became exact in 64
-	// bits: older tuple streams carry constants folded in floating point and
-	// must be recompiled.
-	private static final long serialVersionUID = 5L;
+	// Bumped to 6 when the getline opcodes gained a no-record jump address:
+	// older tuple streams emit them without one and must be recompiled.
+	// (5 = exact 64-bit integral arithmetic.)
+	private static final long serialVersionUID = 6L;
 
 	/** Address manager */
 	private final AddressManager addressManager = new AddressManager();
@@ -1257,30 +1257,35 @@ public class AwkTuples implements Serializable {
 	}
 
 	/**
-	 * <p>
-	 * getlineInputToTarget.
-	 * </p>
+	 * Reads one record of the main input for {@code getline target} without
+	 * touching the current record.
+	 *
+	 * @param noRecordAddress address to jump to when no record was read, with
+	 *        only the return code pushed
 	 */
-	public void getlineInputToTarget() {
-		queue.add(new Tuple.NoOperandTuple(Opcode.GETLINE_INPUT_TO_TARGET));
+	public void getlineInputToTarget(Address noRecordAddress) {
+		queue.add(new Tuple.AddressTuple(Opcode.GETLINE_INPUT_TO_TARGET, noRecordAddress));
 	}
 
 	/**
-	 * <p>
-	 * useAsFileInput.
-	 * </p>
+	 * Reads one record from a file for a redirected {@code getline}.
+	 *
+	 * @param noRecordAddress address to jump to when no record was read, with
+	 *        only the return code pushed
 	 */
-	public void useAsFileInput() {
-		queue.add(new Tuple.NoOperandTuple(Opcode.USE_AS_FILE_INPUT));
+	public void useAsFileInput(Address noRecordAddress) {
+		queue.add(new Tuple.AddressTuple(Opcode.USE_AS_FILE_INPUT, noRecordAddress));
 	}
 
 	/**
-	 * <p>
-	 * useAsCommandInput.
-	 * </p>
+	 * Reads one record from the output of a command for a redirected
+	 * {@code getline}.
+	 *
+	 * @param noRecordAddress address to jump to when no record was read, with
+	 *        only the return code pushed
 	 */
-	public void useAsCommandInput() {
-		queue.add(new Tuple.NoOperandTuple(Opcode.USE_AS_COMMAND_INPUT));
+	public void useAsCommandInput(Address noRecordAddress) {
+		queue.add(new Tuple.AddressTuple(Opcode.USE_AS_COMMAND_INPUT, noRecordAddress));
 	}
 
 	/**

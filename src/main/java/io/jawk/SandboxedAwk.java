@@ -27,6 +27,7 @@ import java.util.List;
 import io.jawk.backend.AVM;
 import io.jawk.backend.SandboxedAVM;
 import io.jawk.ext.JawkExtension;
+import io.jawk.intermediate.Address;
 import io.jawk.util.AwkSettings;
 import io.jawk.util.ScriptSource;
 
@@ -146,12 +147,12 @@ final class SandboxedCompiledAwkProgram extends AwkProgram {
 	}
 
 	@Override
-	public void useAsCommandInput() {
+	public void useAsCommandInput(Address noRecordAddress) {
 		deny("Command execution through pipelines is disabled in sandbox mode");
 	}
 
 	@Override
-	public void useAsFileInput() {
+	public void useAsFileInput(Address noRecordAddress) {
 		deny("Input redirection is disabled in sandbox mode");
 	}
 
@@ -206,12 +207,12 @@ final class SandboxedCompiledAwkExpression extends AwkExpression {
 	}
 
 	@Override
-	public void useAsCommandInput() {
+	public void useAsCommandInput(Address noRecordAddress) {
 		deny("Command execution through pipelines is disabled in sandbox mode");
 	}
 
 	@Override
-	public void useAsFileInput() {
+	public void useAsFileInput(Address noRecordAddress) {
 		deny("Input redirection is disabled in sandbox mode");
 	}
 

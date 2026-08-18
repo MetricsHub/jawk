@@ -6125,18 +6125,23 @@ public class AwkParser {
 				popSourceLineNumber(tuples);
 				return 1;
 			}
+			// When no record is read (EOF or, for the redirected forms, an I/O
+			// error), the read opcode pushes only the return code and jumps
+			// here, past the assignment, so the target keeps its previous
+			// value, as POSIX and gawk require.
+			Address noRecord = tuples.createAddress("getline_no_record");
 			if (getAst1() != null) {
 				getAst1().populateTuples(tuples);// stack has getAst1() (i.e., "command")
-				tuples.useAsCommandInput();
+				tuples.useAsCommandInput(noRecord);
 			} else if (getAst3() != null) {
 // getline ... < getAst3()
 				getAst3().populateTuples(tuples); // stack has getAst3() (i.e., "filename")
-				tuples.useAsFileInput();
+				tuples.useAsFileInput(noRecord);
 			} else {
-				tuples.getlineInputToTarget();
+				tuples.getlineInputToTarget(noRecord);
 			}
-			// 2 resultant values on the stack!
-			// 2nd - -1/0/1 for io-err,eof,success
+			// A record was read: 2 resultant values on the stack!
+			// 2nd - 1 for success
 			// 1st(top) - the input
 			if (getAst2() == null) {
 				tuples.assignAsInput();
@@ -6161,17 +6166,33 @@ public class AwkParser {
 				tuples.assignMapElement();
 			} else if (getAst2() instanceof DollarExpressionAst) {
 				DollarExpressionAst dollarExpr = (DollarExpressionAst) getAst2();
-				if (dollarExpr.getAst2() != null) {
-					dollarExpr.getAst2().populateTuples(tuples);
-				}
-				// stack contains eval of dollar arg
+				// stack gets the eval of the dollar arg, kept in ast1
+				dollarExpr.getAst1().populateTuples(tuples);
 				tuples.assignAsInputField();
 			} else {
 				throw new SemanticException("Cannot getline into a " + getAst2());
 			}
 			// get rid of value left by the assignment
 			tuples.pop();
-			// one value is left on the stack
+			if (getAst2() instanceof ArrayReferenceAst || getAst2() instanceof DollarExpressionAst) {
+				// gawk evaluates the subscript of an array or field target even
+				// when nothing was read — and the mere reference creates the
+				// array element — a dark corner the getline5 gawk test pins.
+				// Replay that evaluation on the no-record path.
+				Address end = tuples.createAddress("getline_end");
+				tuples.gotoAddress(end);
+				tuples.address(noRecord);
+				if (getAst2() instanceof ArrayReferenceAst) {
+					getAst2().populateTuples(tuples);
+				} else {
+					((DollarExpressionAst) getAst2()).getAst1().populateTuples(tuples);
+				}
+				tuples.pop();
+				tuples.address(end);
+			} else {
+				tuples.address(noRecord);
+			}
+			// one value (the return code) is left on the stack
 			popSourceLineNumber(tuples);
 			return 1;
 		}

@@ -20,6 +20,33 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- A redirected `getline` now sets exactly the variables gawk documents for each form:
+  `getline < file` and `cmd | getline` set `$0` and `NF` only, and `getline var < file` and
+  `cmd | getline var` set `var` only. Previously every redirected form also advanced `NR` — so a
+  side read shifted the record numbers of the whole main input — and took over `FILENAME`, and
+  `getline var < file` clobbered `$0` while leaving `NF` describing the previous record. Note
+  that for the pipe forms POSIX prescribes updating `NR`, but gawk documents and implements
+  leaving it alone, and Jawk follows gawk
+  ([#565](https://github.com/jawkio/jawk/issues/565)).
+- `getline` from a file that cannot be opened, or a command that cannot be spawned, now returns
+  `-1` with `ERRNO` carrying the gawk-style description (`No such file or directory`,
+  `Is a directory`, ...), so the idiomatic `while ((getline line < f) > 0)` guard and probing for
+  optional files work; the failed open is not cached, so a later `getline` from the same name
+  retries it. Previously the underlying Java `IOException` aborted the whole script
+  ([#566](https://github.com/jawkio/jawk/issues/566)).
+- A `getline` that reads nothing now leaves its target untouched, as POSIX requires: at end of
+  input (return `0`) or on error (return `-1`), `getline < file` and `cmd | getline` no longer
+  replace `$0` with the empty string and reset `NF` to 0, and the `var` forms — the redirected
+  ones and the plain `getline var` at the end of the main input — no longer assign the empty
+  string to the variable. As in gawk 4.0 and later, the subscript of an array target and the
+  index of a field target are still evaluated on that path (so `getline a[++c] < f` advances
+  `c`, and the reference creates the array element), only the assignment is skipped
+  ([#569](https://github.com/jawkio/jawk/issues/569)).
+- `getline` into a field — `getline $n < file`, `cmd | getline $n`, and the plain `getline $n` —
+  now stores the record into that field, extending `NF` and rebuilding `$0` like any field
+  assignment. Previously the field number was never emitted, so any of these forms corrupted the
+  interpreter's operand stack and crashed the script as soon as a record was read
+  ([#570](https://github.com/jawkio/jawk/issues/570)).
 - On Windows, the filename `/dev/null` now designates the platform's null device (`NUL`) in
   redirections, in `getline`, and as an input operand, as gawk's Windows port does:
   `print > "/dev/null"` discards its output and creates no file, `getline < "/dev/null"` reports

@@ -560,16 +560,7 @@ public class StreamInputSource implements InputSource, Closeable {
 			partitioningReader = openFileListReader(arg);
 			return null;
 		} catch (IOException e) {
-			String message = e.getMessage();
-			if (message == null || message.isEmpty()) {
-				return "Permission denied";
-			}
-			// Java prefixes the failing path: "path (reason)". Keep the reason.
-			int open = message.lastIndexOf('(');
-			if (open >= 0 && message.endsWith(")")) {
-				return message.substring(open + 1, message.length() - 1);
-			}
-			return message;
+			return JRT.describeIoReason(e);
 		}
 	}
 
