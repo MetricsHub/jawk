@@ -2259,9 +2259,15 @@ public class AwkTuples implements Serializable {
 				}
 			}
 
+			// A fold may only consume tuples no branch jumps to: a jump into the
+			// middle of the folded range would be remapped onto the replacement
+			// and execute the whole fold, corrupting the operand stack — the join
+			// point of a ternary, for example, is exactly such a target. A jump
+			// to the first tuple of the range is fine: it lands on the
+			// replacement, which computes the same value.
 			Object literal = literalValue(tuple);
 			if (literal != null) {
-				if ((oldIndex + 1) < originalSize) {
+				if ((oldIndex + 1) < originalSize && !isAddressTarget[oldIndex + 1]) {
 					Tuple nextTuple = original.get(oldIndex + 1);
 					if (nextTuple.getOpcode() == Opcode.GET_INPUT_FIELD) {
 						// Replace PUSH literal + GET_INPUT_FIELD with the constant-field
@@ -2279,7 +2285,9 @@ public class AwkTuples implements Serializable {
 						continue;
 					}
 				}
-				if ((oldIndex + 2) < originalSize) {
+				if ((oldIndex + 2) < originalSize
+						&& !isAddressTarget[oldIndex + 1]
+						&& !isAddressTarget[oldIndex + 2]) {
 					Tuple nextTuple = original.get(oldIndex + 1);
 					Tuple opTuple = original.get(oldIndex + 2);
 					Object secondLiteral = literalValue(nextTuple);
@@ -2299,7 +2307,7 @@ public class AwkTuples implements Serializable {
 						}
 					}
 				}
-				if ((oldIndex + 1) < originalSize) {
+				if ((oldIndex + 1) < originalSize && !isAddressTarget[oldIndex + 1]) {
 					Tuple opTuple = original.get(oldIndex + 1);
 					Object folded = foldUnary(literal, opTuple);
 					if (folded != null) {
