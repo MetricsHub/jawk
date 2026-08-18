@@ -24,8 +24,6 @@ REPO="jawkio/jawk"
 VERSION="${JAWK_VERSION:-latest}"
 BIN_DIR="${JAWK_INSTALL_DIR:-${HOME}/.local/bin}"
 DATA_DIR="${JAWK_DATA_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/jawk}"
-JAR_PATH="${DATA_DIR}/jawk-standalone.jar"
-LAUNCHER_PATH="${BIN_DIR}/jawk"
 
 info() { printf '%s\n' "$*"; }
 fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -99,6 +97,14 @@ fi
 # --- Install the jar and the launcher --------------------------------------
 
 mkdir -p "${DATA_DIR}" "${BIN_DIR}"
+
+# Resolve the directories to absolute paths: the launcher must find the jar
+# from any working directory, even when the overrides were given relative.
+DATA_DIR="$(cd "${DATA_DIR}" && pwd)"
+BIN_DIR="$(cd "${BIN_DIR}" && pwd)"
+JAR_PATH="${DATA_DIR}/jawk-standalone.jar"
+LAUNCHER_PATH="${BIN_DIR}/jawk"
+
 mv "${TMP_DIR}/jawk-standalone.jar" "${JAR_PATH}"
 
 # Serializes a value as a single-quoted shell literal, so paths containing

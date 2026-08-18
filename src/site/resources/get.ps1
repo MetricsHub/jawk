@@ -21,6 +21,11 @@ $ErrorActionPreference = 'Stop'
 $repo = 'jawkio/jawk'
 $version = if ($env:JAWK_VERSION) { $env:JAWK_VERSION } else { 'latest' }
 $installDir = if ($env:JAWK_INSTALL_DIR) { $env:JAWK_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Jawk' }
+# A relative override must not leave a working-directory-dependent entry on
+# the user PATH: resolve it against the current location.
+if (-not [System.IO.Path]::IsPathRooted($installDir)) {
+    $installDir = Join-Path (Get-Location).ProviderPath $installDir
+}
 $binDir = Join-Path $installDir 'bin'
 $jarPath = Join-Path $installDir 'jawk-standalone.jar'
 $shimPath = Join-Path $binDir 'jawk.cmd'
