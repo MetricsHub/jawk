@@ -101,9 +101,11 @@ fi
 mkdir -p "${DATA_DIR}" "${BIN_DIR}"
 mv "${TMP_DIR}/jawk-standalone.jar" "${JAR_PATH}"
 
-# The jar path is embedded in the launcher as a single-quoted literal so a
-# data directory containing $, backticks, or double quotes stays inert.
-JAR_PATH_SQ="$(printf '%s' "${JAR_PATH}" | sed "s/'/'\\\\''/g")"
+# Serializes a value as a single-quoted shell literal, so paths containing
+# $, backticks, or double quotes stay inert in generated or printed shell code.
+shell_quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+JAR_PATH_SQ="$(shell_quote "${JAR_PATH}")"
 
 cat > "${LAUNCHER_PATH}" <<LAUNCHER
 #!/bin/sh
@@ -111,7 +113,7 @@ cat > "${LAUNCHER_PATH}" <<LAUNCHER
 # Locates a JRE (Java 8 or later) and runs the Jawk standalone jar.
 # Set JAWK_JAVA_HOME to force a specific Java installation.
 
-JAWK_JAR='${JAR_PATH_SQ}'
+JAWK_JAR=${JAR_PATH_SQ}
 
 if [ ! -f "\${JAWK_JAR}" ]; then
 	echo "ERROR: \${JAWK_JAR} not found; re-run the installer:" >&2
@@ -182,7 +184,7 @@ case ":${PATH}:" in
 		info ""
 		info "NOTE: ${BIN_DIR} is not on your PATH. Add it with:"
 		info ""
-		info "  export PATH=\"${BIN_DIR}:\${PATH}\""
+		info "  export PATH=$(shell_quote "${BIN_DIR}"):\"\${PATH}\""
 		info ""
 		info "and append that line to your shell profile (e.g. ~/.bashrc or ~/.zshrc)."
 		;;
