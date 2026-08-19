@@ -1,0 +1,206 @@
+name: Installer Smoke Tests
+
+# Exercises the one-command installers served from jawk.io (src/site/resources/get
+# and get.ps1) against the real latest GitHub release. The weekly run also guards
+# against GitHub-side changes (release asset URL behavior, API response shape)
+# that the installers depend on.
+
+on:
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - src/site/resources/get
+      - src/site/resources/get.ps1
+      - .github/workflows/installers.yml
+  push:
+    branches: [ "main" ]
+    paths:
+      - src/site/resources/get
+      - src/site/resources/get.ps1
+      - .github/workflows/installers.yml
+  schedule:
+    # Weekly, Monday 06:23 UTC
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # An old release with a versioned standalone asset, used to test JAWK_VERSION
+  # pinning and to verify that older releases stay installable.
+  PINNED_VERSION: "7.0.00"
+
+jobs:
+  posix:
+    name: POSIX installer on ubuntu-latest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Temurin JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Probe the latest release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          release_json="$(gh api repos/jawkio/jawk/releases/latest)"
+          version="$(printf '%s' "${release_json}" | jq -r '.tag_name | ltrimstr("v")')"
+          has_checksum="$(printf '%s' "${release_json}" | jq -r '[.assets[].name | select(endswith(".sha256"))] | length > 0')"
+          echo "Latest release: ${version} (publishes checksums: ${has_checksum})"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "has_checksum=${has_checksum}" >> "${GITHUB_OUTPUT}"
+
+      - name: Install the latest release
+        shell: bash
+        run: |
+          sh src/site/resources/get 2>&1 | tee install.log
+          test -x "${HOME}/.local/bin/jawk" || { echo "ERROR: the launcher was not installed at ~/.local/bin/jawk" >&2; exit 1; }
+
+      - name: Assert checksum verification
+        shell: bash
+        run: |
+          # Once the release publishes .sha256 assets, verification is mandatory;
+          # until then the installer must say explicitly that it skipped it.
+          if [ "${{ steps.release.outputs.has_checksum }}" = "true" ]; then
+            grep -Fq 'Checksum verified.' install.log \
+              || { echo "ERROR: the release publishes checksums but the installer did not verify one." >&2; exit 1; }
+          else
+            grep -Fq 'publishes no checksum' install.log \
+              || { echo "ERROR: no checksum warning found even though the release publishes no checksum." >&2; exit 1; }
+          fi
+
+      - name: Run AWK one-liners through the launcher
+        shell: bash
+        run: |
+          out="$("${HOME}/.local/bin/jawk" 'BEGIN { print 6 * 7 }')"
+          [ "${out}" = "42" ] || { echo "ERROR: expected '42' but got '${out}'." >&2; exit 1; }
+          out="$(printf 'hello world\n' | "${HOME}/.local/bin/jawk" '{ print $2 }')"
+          [ "${out}" = "world" ] || { echo "ERROR: expected 'world' but got '${out}'." >&2; exit 1; }
+
+      - name: Install a pinned version with JAWK_VERSION
+        shell: bash
+        run: |
+          JAWK_VERSION="${PINNED_VERSION}" \
+          JAWK_INSTALL_DIR="${RUNNER_TEMP}/pinned/bin" \
+          JAWK_DATA_DIR="${RUNNER_TEMP}/pinned/share" \
+            sh src/site/resources/get 2>&1 | tee pinned.log
+          jar_version="$(unzip -p "${RUNNER_TEMP}/pinned/share/jawk-standalone.jar" META-INF/maven/io.jawk/jawk/pom.properties \
+            | awk -F= '/^version=/ { print $2 }' | tr -d '\r')"
+          [ "${jar_version}" = "${PINNED_VERSION}" ] \
+            || { echo "ERROR: pinned ${PINNED_VERSION} but the installed jar reports '${jar_version}'." >&2; exit 1; }
+          out="$("${RUNNER_TEMP}/pinned/bin/jawk" 'BEGIN { print 6 * 7 }')"
+          [ "${out}" = "42" ] || { echo "ERROR: expected '42' from the pinned launcher but got '${out}'." >&2; exit 1; }
+
+      - name: Exit 127 with the Adoptium message when no JRE is findable
+        shell: bash
+        run: |
+          # Hide every JRE the launcher can discover: JAWK_JAVA_HOME/JAVA_HOME and
+          # PATH go away with env -i, ~/.sdkman with a fake HOME, and the
+          # /usr/lib/jvm well-known root is moved aside for the duration.
+          mkdir -p "${RUNNER_TEMP}/nohome"
+          if [ -d /usr/lib/jvm ]; then sudo mv /usr/lib/jvm /usr/lib/jvm.hidden; fi
+          set +e
+          err="$(env -i HOME="${RUNNER_TEMP}/nohome" PATH=/nonexistent /bin/sh "${HOME}/.local/bin/jawk" 'BEGIN { print 1 }' 2>&1 >/dev/null)"
+          rc=$?
+          set -e
+          if [ -d /usr/lib/jvm.hidden ]; then sudo mv /usr/lib/jvm.hidden /usr/lib/jvm; fi
+          printf '%s\n' "${err}"
+          [ "${rc}" -eq 127 ] || { echo "ERROR: expected exit code 127 but got ${rc}." >&2; exit 1; }
+          printf '%s\n' "${err}" | grep -Fq 'adoptium.net' \
+            || { echo "ERROR: the error message does not point to adoptium.net." >&2; exit 1; }
+
+  windows:
+    name: Windows installer with ${{ matrix.shell }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # powershell is Windows PowerShell 5.1, pwsh is PowerShell 7.
+        shell: [ powershell, pwsh ]
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Temurin JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install the latest release
+        run: |
+          iex (Get-Content -Raw src/site/resources/get.ps1)
+          $jarPath = Join-Path $env:LOCALAPPDATA 'Jawk\jawk-standalone.jar'
+          if (-not (Test-Path $jarPath)) { throw "The jar was not installed at $jarPath." }
+          $shimPath = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          if (-not (Test-Path $shimPath)) { throw "The jawk.cmd shim was not installed at $shimPath." }
+          $binDir = Join-Path $env:LOCALAPPDATA 'Jawk\bin'
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          if (-not (($userPath -split ';') -contains $binDir)) { throw "$binDir was not added to the user PATH." }
+
+      - name: Run an AWK one-liner through the shim
+        run: |
+          $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          $out = & $shim 'BEGIN { print 6 * 7 }'
+          if ($LASTEXITCODE -ne 0) { throw "jawk.cmd exited with $LASTEXITCODE." }
+          if ("$out" -ne '42') { throw "Expected '42' but got '$out'." }
+
+      - name: Honor JAWK_JAVA_HOME when no other JRE is findable
+        run: |
+          $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          $realJavaHome = $env:JAVA_HOME
+          Remove-Item Env:JAVA_HOME -ErrorAction SilentlyContinue
+          $env:Path = "$env:SystemRoot\System32;$env:SystemRoot"
+          $ErrorActionPreference = 'Continue'
+          # Without any JRE hint the shim must fail with the Adoptium message...
+          $lines = & $shim 'BEGIN { print 6 * 7 }' 2>&1 | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 127) { throw "Expected exit code 127 without a JRE but got $LASTEXITCODE." }
+          if (($lines -join "`n") -notmatch 'adoptium\.net') { throw "The error message does not point to adoptium.net." }
+          # ...and must succeed through JAWK_JAVA_HOME alone.
+          $env:JAWK_JAVA_HOME = $realJavaHome
+          $out = & $shim 'BEGIN { print 6 * 7 }'
+          if ($LASTEXITCODE -ne 0) { throw "jawk.cmd exited with $LASTEXITCODE despite JAWK_JAVA_HOME." }
+          if ("$out" -ne '42') { throw "Expected '42' through JAWK_JAVA_HOME but got '$out'." }
+          exit 0
+
+      - name: Reject a pre-8 JRE
+        run: |
+          # Compile a fake java.exe that reports version 1.7, the newest version
+          # the shim must reject.
+          $fakeHome = Join-Path $env:RUNNER_TEMP 'fake-java7'
+          New-Item -ItemType Directory -Force -Path (Join-Path $fakeHome 'bin') | Out-Null
+          $source = @'
+          using System;
+          class FakeJava {
+              static int Main(string[] args) {
+                  Console.Error.WriteLine("java version \"1.7.0_80\"");
+                  Console.Error.WriteLine("Java(TM) SE Runtime Environment (build 1.7.0_80-b15)");
+                  return 0;
+              }
+          }
+          '@
+          $sourcePath = Join-Path $fakeHome 'FakeJava.cs'
+          Set-Content -Path $sourcePath -Value $source
+          & "$env:SystemRoot\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /out:"$fakeHome\bin\java.exe" $sourcePath
+          if ($LASTEXITCODE -ne 0) { throw "Could not compile the fake java.exe." }
+
+          $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          Remove-Item Env:JAVA_HOME -ErrorAction SilentlyContinue
+          $env:Path = "$env:SystemRoot\System32;$env:SystemRoot"
+          $env:JAWK_JAVA_HOME = $fakeHome
+          $ErrorActionPreference = 'Continue'
+          $lines = & $shim 'BEGIN { print 6 * 7 }' 2>&1 | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 127) { throw "Expected exit code 127 with a Java 7 JAWK_JAVA_HOME but got $LASTEXITCODE." }
+          if (($lines -join "`n") -notmatch 'adoptium\.net') { throw "The error message does not point to adoptium.net." }
+          exit 0
