@@ -227,10 +227,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'javac failed to compile the demo extension.' }
           & jar cf (Join-Path $extDir 'demo-extension.jar') -C (Join-Path $extDir 'classes') .
           if ($LASTEXITCODE -ne 0) { throw 'jar failed to package the demo extension.' }
+          # The script goes through -f: PowerShell's native argument passing to a
+          # .cmd file strips embedded double quotes from an inline script, which
+          # would turn the "ha" string literal into an uninitialized variable.
+          Set-Content -Path (Join-Path $extDir 'repeat.awk') -Value 'BEGIN { print Repeat(3, "ha") }'
           $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
           $env:JAWK_CLASSPATH = Join-Path $extDir 'demo-extension.jar'
           try {
-              $out = & $shim -l com.example.DemoExtension 'BEGIN { print Repeat(3, "ha") }'
+              $out = & $shim -l com.example.DemoExtension -f (Join-Path $extDir 'repeat.awk')
           } finally {
               Remove-Item Env:JAWK_CLASSPATH
           }
