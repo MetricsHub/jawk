@@ -20,6 +20,17 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- New `-V` / `--version` option: prints the Jawk version and the Java runtime that executes
+  it, then exits with status 0. Like `-h`, it must be used by itself, and once the program
+  text has been supplied it still flows to the AWK program through `ARGV`. Previously
+  `--version` was rejected with `Unknown parameter` and exit status 1
+  ([#590](https://github.com/jawkio/jawk/issues/590)).
+- The usage printed by `-h` now names the command Jawk was invoked as: the `jawk` launchers
+  written by the one-command installer pass their invocation name through the new
+  `JAWK_PROGRAM_NAME` environment variable, and without that variable the usage keeps the
+  `java -jar <jar>` form. Previously `jawk -h` always described a
+  `java -jar jawk-standalone.jar` invocation the user never typed
+  ([#591](https://github.com/jawkio/jawk/issues/591)).
 - The `jawk` launcher installed by the one-command installer now honors the `JAWK_CLASSPATH`
   environment variable: when set, the launcher runs the CLI with the standalone jar and the
   given entries on the JVM class path, so custom [extension](extensions.html) jars can be

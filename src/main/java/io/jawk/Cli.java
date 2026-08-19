@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import io.jawk.ext.ExtensionRegistry;
@@ -63,6 +64,7 @@ public final class Cli {
 	private static final String JAR_NAME;
 	private static final String POSIX_LOAD_CONFLICT_MESSAGE = "--posix cannot be combined with -L because -L loads a precompiled program.";
 	private static final String PERSISTENT_MEMORY_ENVIRONMENT_VARIABLE = "JAWK_PERSISTENT_MEMORY";
+	private static final String PROGRAM_NAME_ENVIRONMENT_VARIABLE = "JAWK_PROGRAM_NAME";
 
 	static {
 		String myName;
@@ -91,6 +93,7 @@ public final class Cli {
 	private boolean dumpIntermediateCode;
 	private File compileOutputFile;
 	private boolean printUsage;
+	private boolean printVersion;
 	private boolean sandbox;
 	private boolean processStandardInput;
 	private boolean disableOptimize;
@@ -333,6 +336,13 @@ public final class Cli {
 				}
 				printUsage = true;
 				return;
+			} else if (arg.equals("-V") || arg.equals("--version")) {
+				// -V/--version : display version information and exit
+				if (argIdx != 0 || args.length != 1) {
+					throw new IllegalArgumentException("When printing the version, we do not accept other arguments.");
+				}
+				printVersion = true;
+				return;
 			} else {
 				// Like gawk: once the program text has been supplied, an
 				// unknown option ends option processing and is passed on to
@@ -451,6 +461,10 @@ public final class Cli {
 	public void run() throws Exception {
 		if (printUsage) {
 			usage(out);
+			return;
+		}
+		if (printVersion) {
+			version(out);
 			return;
 		}
 		if (listExtensions) {
@@ -653,16 +667,36 @@ public final class Cli {
 	}
 
 	/**
+	 * Resolves the name to print in usage output for the command Jawk was
+	 * invoked as.
+	 * <p>
+	 * Launchers such as the installed {@code jawk} script pass their own
+	 * invocation name through the {@value #PROGRAM_NAME_ENVIRONMENT_VARIABLE}
+	 * environment variable; without it, the CLI can only describe the direct
+	 * {@code java -jar} invocation of its own jar.
+	 *
+	 * @return the launcher-provided program name, or the {@code java -jar}
+	 *         invocation of this jar when no launcher provided one
+	 */
+	private String resolveProgramName() {
+		String name = environment.get(PROGRAM_NAME_ENVIRONMENT_VARIABLE);
+		if (name != null && !name.trim().isEmpty()) {
+			return name.trim();
+		}
+		return "java -jar " + JAR_NAME;
+	}
+
+	/**
 	 * Prints usage/help information to the provided destination stream.
 	 *
 	 * @param dest stream to write usage information to
 	 */
-	private static void usage(PrintStream dest) {
+	private void usage(PrintStream dest) {
+		String programName = resolveProgramName();
 		dest.println("Usage:");
 		dest
 				.println(
-						"java -jar " +
-								JAR_NAME +
+						programName +
 								" [-F fs_val]" +
 								" [-f script-filename]" +
 								" [-L program-filename]" +
@@ -682,7 +716,7 @@ public final class Cli {
 								" [script]" +
 								" [name=val | input_filename | -]...");
 		dest.println();
-		dest.println("java -jar " + JAR_NAME + " --list-ext");
+		dest.println(programName + " --list-ext");
 		dest.println();
 		dest.println(" -F fs_val = Use fs_val for FS.");
 		dest.println(" -f filename = Use contents of filename for script.");
@@ -721,6 +755,65 @@ public final class Cli {
 		dest.println(" --list-ext = (extension) List available extensions.");
 		dest.println();
 		dest.println(" -h or -? = (extension) This help screen.");
+		dest.println(" -V or --version = (extension) Print the Jawk and Java versions.");
+	}
+
+	/**
+	 * Prints the Jawk version and the Java runtime that executes it to the
+	 * provided destination stream.
+	 *
+	 * @param dest stream to write version information to
+	 */
+	private static void version(PrintStream dest) {
+		dest.println("jawk " + resolveVersion());
+		dest
+				.println(
+						"Java " + System.getProperty("java.version")
+								+ " (" + System.getProperty("java.vendor")
+								+ " " + System.getProperty("java.vm.name") + ")");
+	}
+
+	/**
+	 * Resolves the Jawk version from the jar metadata.
+	 * <p>
+	 * The manifest's {@code Implementation-Version} entry is the primary
+	 * source; the Maven {@code pom.properties} resource is the fallback for
+	 * jars built without that entry. Both are absent when Jawk runs from a
+	 * plain class directory (IDE runs, unit tests), where the version is
+	 * reported as {@code unknown}.
+	 *
+	 * @return the version string, or {@code unknown} when no metadata is
+	 *         available
+	 */
+	private static String resolveVersion() {
+		Package myPackage = Cli.class.getPackage();
+		String version = myPackage != null ? myPackage.getImplementationVersion() : null;
+		if (version == null) {
+			version = readVersionFromPomProperties();
+		}
+		return version != null ? version : "unknown";
+	}
+
+	/**
+	 * Reads the Jawk version from the Maven {@code pom.properties} resource
+	 * packaged in the jar.
+	 *
+	 * @return the version string, or {@code null} when the resource is absent
+	 *         or unreadable
+	 */
+	private static String readVersionFromPomProperties() {
+		try (InputStream stream = Cli.class.getResourceAsStream("/META-INF/maven/io.jawk/jawk/pom.properties")) {
+			if (stream == null) {
+				return null;
+			}
+			Properties properties = new Properties();
+			properties.load(stream);
+			return properties.getProperty("version");
+		} catch (IOException ex) {
+			// The version is informational: failing to read the metadata must
+			// not prevent the CLI from answering --version at all.
+			return null;
+		}
 	}
 
 	/**

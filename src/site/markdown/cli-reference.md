@@ -20,10 +20,11 @@ jawk [options] [--] [script] [name=value | input_filename | -]...
 
 `jawk` is the launcher set up by the [one-command install](install.html); `java -jar jawk-${project.version}-standalone.jar` accepts exactly the same arguments.
 
-The extension listing mode is separate:
+The extension listing and version reporting modes are separate:
 
 ```shell
 jawk --list-ext
+jawk --version
 ```
 
 ## Option Groups
@@ -73,12 +74,14 @@ jawk --list-ext
 > - Help and errors
 >
 >   - `-h` and `-?` print usage and exit. They must be used by themselves.
+>   - `-V` and `--version` print the Jawk version and the Java runtime that executes it, then exit. They must be used by themselves.
+>   - Usage output names the command Jawk was invoked as: the installed `jawk` launcher passes its invocation name through the `JAWK_PROGRAM_NAME` environment variable, and without that variable the output falls back to the direct `java -jar <jar>` form.
 >   - Missing option arguments, invalid `-v` syntax, or missing scripts cause argument parsing to fail. An unknown option is rejected only when no program text has been supplied yet; otherwise it flows to `ARGV` as described above.
 >   - A run that fails reports the problem on standard error and exits with a non-zero status.
 
 ## Execution Notes
 
-- `--dump-syntax`, `--dump-intermediate`, `-K`, `-h`, `-?`, and `--list-ext` do not execute the script, and ignore `--persist` and `JAWK_PERSISTENT_MEMORY`. `--profile` does execute it, and keeps the normal AWK output on stdout.
+- `--dump-syntax`, `--dump-intermediate`, `-K`, `-h`, `-?`, `-V`, `--version`, and `--list-ext` do not execute the script, and ignore `--persist` and `JAWK_PERSISTENT_MEMORY`. `--profile` does execute it, and keeps the normal AWK output on stdout.
 - `-f` compiles source now, `-L` loads a program compiled earlier. `--posix` is rejected together with `-L`: loading a precompiled program bypasses source compilation, so there is no compile-time behavior left to restrict.
 - `-S` applies at compile time as well as at run time — a sandboxed run rejects the forbidden constructs while compiling the script.
 

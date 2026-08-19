@@ -85,6 +85,28 @@ jobs:
           out="$(printf 'hello world\n' | "${HOME}/.local/bin/jawk" '{ print $2 }')"
           [ "${out}" = "world" ] || { echo "ERROR: expected 'world' but got '${out}'." >&2; exit 1; }
 
+      - name: Check the version and help output of the launcher
+        shell: bash
+        run: |
+          # The launcher exports JAWK_PROGRAM_NAME so the CLI names the jawk
+          # command in its help instead of "java -jar ...". Releases up to
+          # 7.1.00 predate --version and JAWK_PROGRAM_NAME, so probe with
+          # --version first and only assert on releases that support it.
+          if out="$("${HOME}/.local/bin/jawk" --version 2>/dev/null)"; then
+            printf '%s\n' "${out}"
+            printf '%s\n' "${out}" | head -n 1 | grep -Eq '^jawk [0-9]' \
+              || { echo "ERROR: --version does not report 'jawk <version>'." >&2; exit 1; }
+            help="$("${HOME}/.local/bin/jawk" -h)"
+            printf '%s\n' "${help}" | grep -q '^jawk ' \
+              || { echo "ERROR: the help output does not name the jawk launcher." >&2; exit 1; }
+            if printf '%s\n' "${help}" | grep -Fq 'java -jar'; then
+              echo "ERROR: the help of the installed launcher mentions 'java -jar'." >&2
+              exit 1
+            fi
+          else
+            echo "This release predates --version; skipping the version and help assertions."
+          fi
+
       - name: Load a custom extension through JAWK_CLASSPATH
         shell: bash
         run: |
@@ -191,6 +213,27 @@ jobs:
           $out = & $shim 'BEGIN { print 6 * 7 }'
           if ($LASTEXITCODE -ne 0) { throw "jawk.cmd exited with $LASTEXITCODE." }
           if ("$out" -ne '42') { throw "Expected '42' but got '$out'." }
+
+      - name: Check the version and help output of the shim
+        run: |
+          # The shim sets JAWK_PROGRAM_NAME so the CLI names the jawk command
+          # in its help instead of "java -jar ...". Releases up to 7.1.00
+          # predate --version and JAWK_PROGRAM_NAME, so probe with --version
+          # first and only assert on releases that support it.
+          $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          $ErrorActionPreference = 'Continue'
+          $out = & $shim --version 2>&1 | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host ($out -join "`n")
+            if ("$($out | Select-Object -First 1)" -notmatch '^jawk [0-9]') { throw "--version does not report 'jawk <version>'." }
+            $help = & $shim -h | ForEach-Object { "$_" }
+            if ($LASTEXITCODE -ne 0) { throw "jawk.cmd -h exited with $LASTEXITCODE." }
+            if (-not ($help | Where-Object { $_ -match '^jawk ' })) { throw 'The help output does not name the jawk launcher.' }
+            if (($help -join "`n") -match 'java -jar') { throw "The help of the installed shim mentions 'java -jar'." }
+          } else {
+            Write-Host 'This release predates --version; skipping the version and help assertions.'
+          }
+          exit 0
 
       - name: Load a custom extension through JAWK_CLASSPATH
         run: |

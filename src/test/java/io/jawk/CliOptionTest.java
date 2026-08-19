@@ -474,6 +474,107 @@ public class CliOptionTest {
 	}
 
 	@Test
+	public void versionOptionPrintsVersionAndJavaRuntime() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI --version prints the Jawk and Java versions")
+				.argument("--version")
+				.expectExit(0)
+				.run();
+
+		result.assertExpected();
+		String[] lines = result.lines();
+		assertEquals(2, lines.length);
+		assertTrue(lines[0].matches("jawk \\S+"));
+		assertTrue(lines[1].startsWith("Java " + System.getProperty("java.version")));
+		assertTrue(lines[1].contains(System.getProperty("java.vm.name")));
+	}
+
+	@Test
+	public void shortVersionOptionPrintsTheSameReport() throws Exception {
+		AwkTestSupport.TestResult longForm = AwkTestSupport
+				.cliTest("CLI --version output")
+				.argument("--version")
+				.run();
+		AwkTestSupport.TestResult shortForm = AwkTestSupport
+				.cliTest("CLI -V output")
+				.argument("-V")
+				.run();
+
+		assertEquals(longForm.output(), shortForm.output());
+	}
+
+	@Test
+	public void versionOptionRejectsOtherArguments() {
+		IllegalArgumentException after = assertThrows(
+				IllegalArgumentException.class,
+				() -> new Cli().parse(new String[]
+				{ "--version", "-t" }));
+		assertTrue(after.getMessage().contains("When printing the version"));
+
+		IllegalArgumentException before = assertThrows(
+				IllegalArgumentException.class,
+				() -> new Cli().parse(new String[]
+				{ "-t", "-V" }));
+		assertTrue(before.getMessage().contains("When printing the version"));
+	}
+
+	@Test
+	public void versionOptionAfterProgramTextStaysInArgv() throws Exception {
+		// Like any option after the program text, --version belongs to the
+		// script through ARGV (gawk behavior), not to the CLI
+		AwkTestSupport
+				.cliTest("CLI --version after the program text stays in ARGV")
+				.script("BEGIN { print ARGV[1] }")
+				.operand("--version")
+				.expectLines("--version")
+				.runAndAssert();
+	}
+
+	@Test
+	public void helpOutputUsesLauncherProgramName() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI help names the command from JAWK_PROGRAM_NAME")
+				.env("JAWK_PROGRAM_NAME", "jawk")
+				.argument("-h")
+				.run();
+
+		assertTrue(result.output().contains("jawk [-F fs_val]"));
+		assertTrue(result.output().contains("jawk --list-ext"));
+		assertFalse(result.output().contains("java -jar"));
+	}
+
+	@Test
+	public void helpOutputFallsBackToJavaJarInvocation() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI help falls back to the java -jar invocation")
+				.argument("-h")
+				.run();
+
+		assertTrue(result.output().contains("java -jar"));
+	}
+
+	@Test
+	public void blankProgramNameFallsBackToJavaJarInvocation() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI help ignores a blank JAWK_PROGRAM_NAME")
+				.env("JAWK_PROGRAM_NAME", "   ")
+				.argument("-h")
+				.run();
+
+		assertTrue(result.output().contains("java -jar"));
+	}
+
+	@Test
+	public void helpOutputAdvertisesVersionOption() throws Exception {
+		AwkTestSupport.TestResult result = AwkTestSupport
+				.cliTest("CLI help advertises the version option")
+				.argument("-h")
+				.run();
+
+		assertTrue(result.output().contains("-V or --version"));
+	}
+
+	@Test
 	public void helpOutputDoesNotAdvertiseUnsupportedOutputOption() throws Exception {
 		AwkTestSupport.TestResult result = AwkTestSupport
 				.cliTest("CLI help omits unsupported -o option")
