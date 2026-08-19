@@ -24,7 +24,7 @@ If you do neither, the default extension set applies: the gawk compatibility ext
 From the CLI, print the currently registered extension identifiers:
 
 ```shell-session
-$ java -jar jawk-${project.version}-standalone.jar --list-ext
+$ jawk --list-ext
 ```
 
 From Java, inspect the registry directly:
@@ -41,11 +41,11 @@ The registry may expose multiple identifiers for the same implementation, for ex
 Load an extension with any supported identifier:
 
 ```shell-session
-$ java -jar jawk-${project.version}-standalone.jar -l stdin -f script.awk
+$ jawk -l stdin -f script.awk
 ```
 
 ```shell-session
-$ java -jar jawk-${project.version}-standalone.jar -l io.jawk.ext.StdinExtension -f script.awk
+$ jawk -l io.jawk.ext.StdinExtension -f script.awk
 ```
 
 If the extension class is not already registered, the CLI can still resolve it by fully qualified class name as long as the class is available on the JVM classpath.

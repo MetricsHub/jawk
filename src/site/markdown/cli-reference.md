@@ -15,13 +15,15 @@ This page documents the CLI surface implemented by [`Cli`](apidocs/io/jawk/Cli.h
 The common command shape is:
 
 ```shell
-java -jar jawk-${project.version}-standalone.jar [options] [--] [script] [name=value | input_filename | -]...
+jawk [options] [--] [script] [name=value | input_filename | -]...
 ```
+
+`jawk` is the launcher set up by the [one-command install](install.html); `java -jar jawk-${project.version}-standalone.jar` accepts exactly the same arguments.
 
 The extension listing mode is separate:
 
 ```shell
-java -jar jawk-${project.version}-standalone.jar --list-ext
+jawk --list-ext
 ```
 
 ## Option Groups

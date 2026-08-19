@@ -1,0 +1,226 @@
+#!/bin/sh
+# Jawk installer for Linux and macOS — https://jawk.io
+#
+# Copyright (C) 2006 - 2026 MetricsHub
+# Distributed under the GNU Lesser General Public License, version 3 or
+# later (LGPL-3.0-or-later); see <http://www.gnu.org/licenses/lgpl-3.0.html>.
+#
+# Usage:
+#   curl -fsSL https://jawk.io/get | sh
+#
+# Environment variables:
+#   JAWK_VERSION      Pin a specific release (e.g. "3.5.0"); default: latest.
+#   JAWK_INSTALL_DIR  Directory for the jawk launcher; default: ~/.local/bin.
+#   JAWK_DATA_DIR     Directory for the jar; default: $XDG_DATA_HOME/jawk
+#                     or ~/.local/share/jawk.
+#
+# The installer downloads the standalone jar of the requested Jawk release
+# from GitHub, verifies its SHA-256 checksum, and writes a small `jawk`
+# launcher script that locates a JRE (Java 8 or later) at run time.
+
+set -eu
+
+REPO="jawkio/jawk"
+VERSION="${JAWK_VERSION:-latest}"
+BIN_DIR="${JAWK_INSTALL_DIR:-${HOME}/.local/bin}"
+DATA_DIR="${JAWK_DATA_DIR:-${XDG_DATA_HOME:-${HOME}/.local/share}/jawk}"
+
+info() { printf '%s\n' "$*"; }
+fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+
+# --- Pick a download tool -------------------------------------------------
+
+if command -v curl >/dev/null 2>&1; then
+	DOWNLOADER="curl"
+	fetch() { curl -fsSL -o "$2" "$1"; }
+	fetch_optional() { curl -fsSL -o "$2" "$1" 2>/dev/null; }
+elif command -v wget >/dev/null 2>&1; then
+	DOWNLOADER="wget"
+	fetch() { wget -qO "$2" "$1"; }
+	fetch_optional() { wget -qO "$2" "$1" 2>/dev/null; }
+else
+	fail "Neither curl nor wget is available; install one of them and re-run."
+fi
+
+# Fetches the checksum asset into $1, separating "this release publishes no
+# checksum" (HTTP 404: return 1) from transport or server errors (abort):
+# a transient failure must not silently disable verification.
+fetch_checksum() {
+	if [ "${DOWNLOADER}" = "curl" ]; then
+		_status="$(curl -sSL -o "$1" -w '%{http_code}' "${SUM_URL}" 2>/dev/null)" \
+			|| fail "Could not download ${SUM_URL}; re-run when the network is available."
+		case "${_status}" in
+			200) return 0 ;;
+			404) return 1 ;;
+			*) fail "Unexpected HTTP ${_status} response for ${SUM_URL}; try again later." ;;
+		esac
+	else
+		_rc=0
+		_response="$(wget -O "$1" --server-response "${SUM_URL}" 2>&1)" || _rc=$?
+		if [ "${_rc}" -eq 0 ]; then
+			return 0
+		fi
+		# wget exit status 8 covers every HTTP error; only a definite 404
+		# means the release publishes no checksum.
+		if [ "${_rc}" -eq 8 ] && printf '%s\n' "${_response}" | grep -q "HTTP/[^ ]* 404"; then
+			return 1
+		fi
+		fail "Could not download ${SUM_URL}; re-run when the network is available."
+	fi
+}
+
+# --- Resolve the download URLs --------------------------------------------
+
+# Releases publish a version-less "jawk-standalone.jar" alias, which makes
+# "latest" resolvable without any API call. Releases older than that alias
+# are still reachable through their versioned asset name, resolved below.
+if [ "${VERSION}" = "latest" ]; then
+	JAR_URL="https://github.com/${REPO}/releases/latest/download/jawk-standalone.jar"
+else
+	JAR_URL="https://github.com/${REPO}/releases/download/v${VERSION}/jawk-${VERSION}-standalone.jar"
+fi
+SUM_URL="${JAR_URL}.sha256"
+
+# --- Download the jar and verify its checksum ------------------------------
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+
+info "Downloading ${JAR_URL} ..."
+if ! fetch_optional "${JAR_URL}" "${TMP_DIR}/jawk-standalone.jar"; then
+	if [ "${VERSION}" != "latest" ]; then
+		fail "Download failed: check that release v${VERSION} exists and that you are online."
+	fi
+	# The latest release predates the version-less alias: resolve its version
+	# through the GitHub API and retry with the versioned asset name.
+	fetch "https://api.github.com/repos/${REPO}/releases/latest" "${TMP_DIR}/release.json" \
+		|| fail "Download failed: could not reach github.com."
+	VERSION="$(awk -F '"' '/"tag_name"/{ sub(/^v/, "", $4); print $4; exit }' "${TMP_DIR}/release.json")"
+	[ -n "${VERSION}" ] || fail "Could not determine the latest Jawk release version."
+	JAR_URL="https://github.com/${REPO}/releases/download/v${VERSION}/jawk-${VERSION}-standalone.jar"
+	SUM_URL="${JAR_URL}.sha256"
+	info "Downloading ${JAR_URL} ..."
+	fetch "${JAR_URL}" "${TMP_DIR}/jawk-standalone.jar" \
+		|| fail "Download failed: could not fetch the Jawk ${VERSION} standalone jar."
+fi
+
+if fetch_checksum "${TMP_DIR}/jawk-standalone.jar.sha256"; then
+	EXPECTED_SUM="$(awk '{ print tolower($1); exit }' "${TMP_DIR}/jawk-standalone.jar.sha256")"
+	if command -v sha256sum >/dev/null 2>&1; then
+		ACTUAL_SUM="$(sha256sum "${TMP_DIR}/jawk-standalone.jar" | awk '{ print tolower($1) }')"
+	elif command -v shasum >/dev/null 2>&1; then
+		ACTUAL_SUM="$(shasum -a 256 "${TMP_DIR}/jawk-standalone.jar" | awk '{ print tolower($1) }')"
+	else
+		ACTUAL_SUM=""
+		info "WARNING: no sha256sum or shasum tool found; skipping checksum verification."
+	fi
+	if [ -n "${ACTUAL_SUM}" ]; then
+		[ "${ACTUAL_SUM}" = "${EXPECTED_SUM}" ] \
+			|| fail "Checksum mismatch: expected ${EXPECTED_SUM}, got ${ACTUAL_SUM}. Aborting."
+		info "Checksum verified."
+	fi
+else
+	info "WARNING: this release publishes no checksum; skipping verification."
+fi
+
+# --- Install the jar and the launcher --------------------------------------
+
+mkdir -p "${DATA_DIR}" "${BIN_DIR}"
+
+# Resolve the directories to absolute paths: the launcher must find the jar
+# from any working directory, even when the overrides were given relative.
+DATA_DIR="$(cd "${DATA_DIR}" && pwd)"
+BIN_DIR="$(cd "${BIN_DIR}" && pwd)"
+JAR_PATH="${DATA_DIR}/jawk-standalone.jar"
+LAUNCHER_PATH="${BIN_DIR}/jawk"
+
+mv "${TMP_DIR}/jawk-standalone.jar" "${JAR_PATH}"
+
+# Serializes a value as a single-quoted shell literal, so paths containing
+# $, backticks, or double quotes stay inert in generated or printed shell code.
+shell_quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+
+JAR_PATH_SQ="$(shell_quote "${JAR_PATH}")"
+
+cat > "${LAUNCHER_PATH}" <<LAUNCHER
+#!/bin/sh
+# Jawk launcher — https://jawk.io
+# Locates a JRE (Java 8 or later) and runs the Jawk standalone jar.
+# Set JAWK_JAVA_HOME to force a specific Java installation.
+
+JAWK_JAR=${JAR_PATH_SQ}
+
+if [ ! -f "\${JAWK_JAR}" ]; then
+	echo "ERROR: \${JAWK_JAR} not found; re-run the installer:" >&2
+	echo "  curl -fsSL https://jawk.io/get | sh" >&2
+	exit 127
+fi
+
+# A candidate qualifies if it is executable and reports version 8 or later
+# ("1.8.x" in the legacy version scheme).
+java_ok() {
+	[ -x "\$1" ] || return 1
+	_v="\$("\$1" -version 2>&1 | awk -F '"' '/ version /{ print \$2; exit }')"
+	case "\${_v}" in
+		1.[89]*) return 0 ;;
+		1.*) return 1 ;;
+		[0-9]*) [ "\${_v%%.*}" -ge 8 ] 2>/dev/null ;;
+		*) return 1 ;;
+	esac
+}
+
+JAVA=""
+for _candidate in \\
+	"\${JAWK_JAVA_HOME:+\${JAWK_JAVA_HOME}/bin/java}" \\
+	"\${JAVA_HOME:+\${JAVA_HOME}/bin/java}" \\
+	"\$(command -v java 2>/dev/null)"; do
+	if [ -n "\${_candidate}" ] && java_ok "\${_candidate}"; then
+		JAVA="\${_candidate}"
+		break
+	fi
+done
+
+# macOS: ask the system locator for the best JDK.
+if [ -z "\${JAVA}" ] && [ -x /usr/libexec/java_home ]; then
+	_home="\$(/usr/libexec/java_home 2>/dev/null)" \\
+		&& java_ok "\${_home}/bin/java" && JAVA="\${_home}/bin/java"
+fi
+
+# Well-known installation roots (Linux distributions, sdkman).
+if [ -z "\${JAVA}" ]; then
+	for _home in "\${HOME}/.sdkman/candidates/java/current" /usr/lib/jvm/*; do
+		if java_ok "\${_home}/bin/java"; then
+			JAVA="\${_home}/bin/java"
+			break
+		fi
+	done
+fi
+
+if [ -z "\${JAVA}" ]; then
+	echo "ERROR: no suitable Java Runtime Environment found (Jawk requires Java 8 or later)." >&2
+	echo "Install one from https://adoptium.net and re-run, or set JAWK_JAVA_HOME." >&2
+	exit 127
+fi
+
+exec "\${JAVA}" -jar "\${JAWK_JAR}" "\$@"
+LAUNCHER
+chmod +x "${LAUNCHER_PATH}"
+
+info "Installed the Jawk jar to ${JAR_PATH}"
+info "Installed the jawk launcher to ${LAUNCHER_PATH}"
+
+# --- PATH check -------------------------------------------------------------
+
+case ":${PATH}:" in
+	*":${BIN_DIR}:"*)
+		info "Run 'jawk -?' to get started."
+		;;
+	*)
+		info ""
+		info "NOTE: ${BIN_DIR} is not on your PATH. Add it with:"
+		info ""
+		info "  export PATH=$(shell_quote "${BIN_DIR}"):\"\${PATH}\""
+		info ""
+		info "and append that line to your shell profile (e.g. ~/.bashrc or ~/.zshrc)."
+		;;
+esac

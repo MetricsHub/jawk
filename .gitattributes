@@ -41,6 +41,10 @@
 mvnw            text eol=lf
 gradlew         text eol=lf
 
+# The sh installer served from jawk.io must keep Unix line endings everywhere,
+# or a site built from a CRLF checkout would ship a script that sh rejects
+src/site/resources/get  text eol=lf
+
 # These are explicitly windows files and should use crlf
 *.bat           text eol=crlf
 *.cmd           text eol=crlf

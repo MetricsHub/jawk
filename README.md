@@ -24,10 +24,26 @@ The gawk-specific `@` syntax and arrays-of-arrays syntax are rejected in `--posi
 
 See the [compatibility page](https://jawk.io/compatibility.html) for detailed behavior notes and live compatibility reports against the POSIX, One True Awk, and gawk test suites.
 
+## Installation
+
+Install the `jawk` command with one line; the launcher finds a Java runtime (Java 8 or later) automatically:
+
+```shell
+curl -fsSL https://jawk.io/get | sh
+```
+
+On Windows (PowerShell):
+
+```powershell
+irm https://jawk.io/get.ps1 | iex
+```
+
+See the [installation page](https://jawk.io/install.html) for details, Maven/Gradle coordinates, and the standalone jar.
+
 ## CLI Example
 
 ```shell
-echo "hello world" | java -jar jawk-${project.version}-standalone.jar '{ print $2 ", " $1 "!" }'
+echo "hello world" | jawk '{ print $2 ", " $1 "!" }'
 ```
 
 The CLI follows the POSIX argument conventions: `--` marks the end of options, and the `-` operand designates standard input as an input file (with `FILENAME` set to `-`). As in gawk, once the program text has been supplied (with `-f` or `-L`), an unknown option ends option processing and is passed on to the AWK script through `ARGV`, which makes `#!` interpreter scripts work. See the [CLI documentation](https://jawk.io/cli.html) for details.

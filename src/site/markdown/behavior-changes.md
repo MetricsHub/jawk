@@ -20,6 +20,13 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- Jawk can now be installed as a `jawk` executable with one command: `curl -fsSL
+  https://jawk.io/get | sh` on Linux/macOS, `irm https://jawk.io/get.ps1 | iex` on Windows.
+  The installed launcher locates a Java Runtime Environment (Java 8 or later) at run time and
+  runs the standalone jar, and each GitHub release now also publishes a version-less
+  `jawk-standalone.jar` alias with `.sha256` checksum files. Previously the versioned
+  standalone jar had to be downloaded from the releases page by hand and invoked with
+  `java -jar` ([#583](https://github.com/jawkio/jawk/issues/583)).
 - The `next` statement is now accepted inside user-defined functions, as in gawk, mawk, and
   BWK awk: when the function is called from an input rule, `next` abandons the current record,
   unwinds the active function calls, and resumes the main input loop; when the function is

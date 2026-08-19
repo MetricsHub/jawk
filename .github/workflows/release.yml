@@ -263,8 +263,27 @@ jobs:
         if: always() && (failure() || steps.release.outcome != 'success') && hashFiles('release.properties') != ''
         run: mvn -B -U -Prelease release:rollback
 
-      - name: Create GitHub Release
+      # The version-less alias gives the jawk.io installers a stable download
+      # URL (releases/latest/download/jawk-standalone.jar), and the .sha256
+      # files let them verify the download.
+      - name: Create standalone jar alias and SHA-256 checksums
+        id: checksums
         if: always() && steps.release.outcome == 'success'
+        run: |
+          cd target/release/target
+          standalone_jar="jawk-${INPUT_RELEASE_VERSION}-standalone.jar"
+          if [ ! -f "${standalone_jar}" ]; then
+            echo "ERROR: ${standalone_jar} was not produced by the release build." >&2
+            exit 1
+          fi
+          cp "${standalone_jar}" jawk-standalone.jar
+          sha256sum "${standalone_jar}" > "${standalone_jar}.sha256"
+          sha256sum jawk-standalone.jar > jawk-standalone.jar.sha256
+        env:
+          INPUT_RELEASE_VERSION: ${{ inputs.releaseVersion }}
+
+      - name: Create GitHub Release
+        if: always() && steps.release.outcome == 'success' && steps.checksums.outcome == 'success'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ inputs.releaseVersion }}
@@ -273,6 +292,7 @@ jobs:
           files: |
             ./target/release/target/*.jar
             ./target/release/target/*.buildinfo
+            ./target/release/target/*.sha256
 
       - name: Create pull request for next development version
         if: always() && steps.release.outcome == 'success'
