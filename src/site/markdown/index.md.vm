@@ -16,7 +16,7 @@ application and integrate with your Java code:
 > - CLI
 >
 >   ```shell-session
->   $ echo "hello world" | java -jar jawk-${project.version}-standalone.jar '{ print $2 ", " $1 "!" }'
+>   $ echo "hello world" | jawk '{ print $2 ", " $1 "!" }'
 >   world, hello!
 >   ```
 >
