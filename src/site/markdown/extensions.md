@@ -120,8 +120,14 @@ The built-in registry also includes the stdin extension, which is exposed throug
 
 It provides three functions for scripts that consume standard input themselves: `StdinHasInput()`
 reports whether a line can be read without waiting, `StdinGetline()` reads the next line and blocks
-until one arrives or input ends — guard it with `StdinHasInput()` when the script must not wait —
-and `StdinBlock()` returns a block object that waits for standard input to become readable.
+until one arrives or input ends, and `StdinBlock()` returns a block object that waits for standard
+input to become readable.
+
+> [!WARNING]
+> End of input is only observable through `StdinGetline()`, which returns `0` there. Both
+> `StdinHasInput()` and `StdinBlock()` currently report a pending end of input as "nothing to read"
+> ([#592](https://github.com/jawkio/jawk/issues/592)), so a loop that reads only when they say so
+> never terminates.
 
 ## Sandbox Interaction
 
