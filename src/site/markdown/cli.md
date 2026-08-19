@@ -7,7 +7,7 @@ description: Quickstart guide for running Jawk from the command line.
 
 Jawk CLI behaves like AWK, but runs entirely on the JVM. You can pass an inline program, read a script from a file, feed input through standard input or filenames, assign variables, load extensions, precompile a script for later runs, and switch to a sandboxed runtime when needed.
 
-The examples below use the `jawk` command set up by the [one-command install](install.html). Running the standalone jar directly with `java -jar jawk-${project.version}-standalone.jar` accepts exactly the same arguments. The `jawk` launcher locates a Java runtime (Java 8 or later) every time it runs — `JAWK_JAVA_HOME`, then `JAVA_HOME`, then `java` on the `PATH`, then the usual platform locations — so installing or upgrading Java later needs no Jawk reinstall.
+The examples below use the `jawk` command set up by the [one-command install](install.html). Running the standalone jar directly with `java -jar jawk-${project.version}-standalone.jar` accepts exactly the same arguments. The `jawk` launcher locates a Java runtime (Java 8 or later) every time it runs, checking `JAWK_JAVA_HOME`, `JAVA_HOME`, and the `PATH` in that order, so installing or upgrading Java later needs no Jawk reinstall.
 
 > [!WARNING]
 > Shell quoting differs by platform. The examples below use separate command forms where quoting is meaningfully different. If a script works in one shell but not another, the quoting is usually the first thing to check.
