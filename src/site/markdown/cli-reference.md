@@ -5,10 +5,10 @@ description: Reference for Jawk command-line options and runtime operands.
 
 <!-- MACRO{toc|fromDepth=2|toDepth=3|id=toc} -->
 
-This page documents the CLI surface implemented by [`Cli`](apidocs/io/jawk/Cli.html). It focuses on the actual parser-backed options in the current codebase rather than historical flags from older Jawk documentation.
+This page documents every option accepted by the [`jawk` CLI](apidocs/io/jawk/Cli.html).
 
 > [!CAUTION]
-> Precompiled tuples loaded with `-L` use Java serialization and are version-sensitive. If Jawk reports that a tuples file is incompatible, recompile it with the current Jawk version instead of trying to reuse the old file.
+> The precompiled programs written by `-K` and loaded with `-L`, and the state files used by `--persist`, rely on Java serialization and are tied to the Jawk version that produced them. When Jawk reports that such a file is incompatible, recompile or discard it instead of trying to reuse it.
 
 ## Invocation Shape
 
@@ -33,9 +33,9 @@ jawk --list-ext
 >
 >   - `script` is the inline AWK program used when you do not pass `-f` or `-L`.
 >   - `-f <filename>` reads a script from a file. You can repeat `-f` to combine multiple script sources.
->   - `-L <filename>` loads previously serialized `AwkTuples` instead of compiling source now.
->   - `--persist <filename>` loads retained user-defined globals from a serialized state file before execution and writes them back after the run finishes.
->   - `-K <filename>` compiles the current script sources to a tuples file and exits without executing the script.
+>   - `-L <filename>` loads a program previously compiled with `-K` instead of compiling source now.
+>   - `--persist <filename>` loads retained user-defined globals from a state file before execution and writes them back after the run finishes. The `JAWK_PERSISTENT_MEMORY` environment variable can point at the same file; `--persist` wins when both are present.
+>   - `-K <filename>` compiles the current script sources to a program file and exits without executing the script.
 >
 > - Input and `ARGV`
 >
@@ -52,11 +52,9 @@ jawk --list-ext
 >
 >   - `-v <name=value>` assigns a variable before execution begins.
 >   - `-F <fs>` sets the initial field separator.
->   - `-r` disables Jawk's default trapping of `IllegalFormatException` for `printf` and `sprintf`.
->   - `--locale <locale>` sets the locale through `Locale.forLanguageTag(...)`.
+>   - `--locale <locale>` sets the locale used to format numbers, through `Locale.forLanguageTag(...)`.
 >   - `-t` keeps associative array keys sorted.
 >   - `--posix` enforces POSIX-oriented compile-time behavior such as disabling gawk-style nested arrays, all gawk `@` forms, and the `BEGINFILE` / `ENDFILE` special patterns.
->   - `JAWK_PERSISTENT_MEMORY` can also point at the persistent-memory file when you do not want to pass `--persist` explicitly. `--persist` wins when both are present.
 >
 > - Extensions and sandbox
 >
@@ -76,33 +74,16 @@ jawk --list-ext
 >
 >   - `-h` and `-?` print usage and exit. They must be used by themselves.
 >   - Missing option arguments, invalid `-v` syntax, or missing scripts cause argument parsing to fail. An unknown option is rejected only when no program text has been supplied yet; otherwise it flows to `ARGV` as described above.
->   - Jawk reports runtime problems through exceptions and exits with a non-zero status when execution fails.
+>   - A run that fails reports the problem on standard error and exits with a non-zero status.
 
 ## Execution Notes
 
-- `--dump-syntax`, `--dump-intermediate`, `-K`, `-h`, `-?`, and `--list-ext` are non-executing modes.
-- `--profile` is an executing mode. It keeps normal AWK output on stdout and writes the profiling report to stderr after execution finishes.
-- `--profile=<filename>` keeps normal AWK output on stdout and writes only the profiling report to the file.
-- `-S` affects compilation and execution, not just runtime behavior.
-- `--posix` disables arrays-of-arrays syntax, related subarray-only operands, and all gawk `@` forms, and stops treating gawk's `BEGINFILE` / `ENDFILE` patterns as special, in order to keep CLI compilation aligned with classic POSIX-style AWK expectations.
-- `--posix` is rejected together with `-L`, because loading precompiled tuples bypasses source compilation entirely.
-- `-L` lets you skip source compilation, but the loaded tuples must still be compatible with the current runtime.
-- `-f` and `-L` are distinct paths: source files compile now, tuple files load now.
-- `--persist` and `JAWK_PERSISTENT_MEMORY` affect only real execution. Non-executing modes such as `-K`, `--dump-syntax`, and `--dump-intermediate` ignore persistent memory.
-
-## Tuple Serialization Compatibility
-
-Jawk tuples are reusable, but they should be treated as internal artifacts tied to the Jawk version that produced them.
-
-- `-K` writes tuples to a file
-- `-L` reads those tuples back
-- version mismatches can cause tuple loading to fail
-- the safe fix is to recompile the tuples with the current Jawk version
-
-Persistent memory files use the same Java serialization machinery. They are therefore version-sensitive as well and should be discarded when Jawk reports an incompatibility.
+- `--dump-syntax`, `--dump-intermediate`, `-K`, `-h`, `-?`, and `--list-ext` do not execute the script, and ignore `--persist` and `JAWK_PERSISTENT_MEMORY`. `--profile` does execute it, and keeps the normal AWK output on stdout.
+- `-f` compiles source now, `-L` loads a program compiled earlier. `--posix` is rejected together with `-L`: loading a precompiled program bypasses source compilation, so there is no compile-time behavior left to restrict.
+- `-S` applies at compile time as well as at run time — a sandboxed run rejects the forbidden constructs while compiling the script.
 
 ## See Also
 
-- [Quickstart examples](cli.html)
-- [Java API equivalent flows](java.html)
-- [Compatibility caveats](compatibility.html)
+- [CLI Quickstart](cli.html)
+- [Java Quickstart](java.html)
+- [Compatibility and Compliance](compatibility.html)

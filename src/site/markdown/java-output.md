@@ -106,7 +106,12 @@ public final class CollectingSink extends AwkSink {
 
 ### getPrintStream
 
-`getPrintStream()` provides the `PrintStream` used for pumping the stdout of spawned processes (`system("...")` and pipe output from `print ... | "cmd"`) back into the host output. File redirection (`print > "file"`) does _not_ use this stream — it creates its own file-backed sink internally.
+`getPrintStream()` provides the `PrintStream` that receives the stdout of the processes a script
+spawns with `system("...")` or an output pipe (`print ... | "cmd"`). The default implementation
+discards it silently, so override this method — typically returning `System.out` or a stream of your
+own — in sinks that must capture subprocess output; see [Subprocess Output](#subprocess-output).
+File redirection (`print > "file"`) does _not_ use this stream: it creates its own file-backed sink
+internally.
 
 ### Special Filenames
 
@@ -117,8 +122,6 @@ The gawk [special filenames](compatibility.html#special-filenames) are routed to
 - `getline < "/dev/stdin"` (and `/dev/fd/0`) reads the stream passed to `input(...)` — not the JVM's standard input, unless that is what the host supplied. When the run is fed with a structured `InputSource` instead of a stream, `/dev/stdin` falls back to `System.in`.
 
 `close()` on these names never closes the host's streams.
-
-The default implementation returns a no-op stream that silently discards output. Override this method in sinks that need to capture subprocess output. Implementations typically return `System.out` or a custom stream.
 
 ### Using a Custom Sink
 
@@ -139,8 +142,8 @@ awk.script("{ print $1, $2 }")
 
 Jawk provides three built-in `AwkSink` implementations:
 
-- **`AwkSink.from(PrintStream)`** / **`AwkSink.from(PrintStream, Locale)`** creates a sink that renders output to a `PrintStream`. This is the default behavior.
-- **`AwkSink.from(Appendable)`** / **`AwkSink.from(Appendable, Locale)`** renders output to any `Appendable` such as `StringBuilder` or `StringWriter`.
+- **`OutputStreamAwkSink`** renders output to an `OutputStream` or a `PrintStream`. This is the default behavior, and what `execute(OutputStream)` and `execute(PrintStream)` use.
+- **`AppendableAwkSink`** renders output to any `Appendable`, such as a `StringBuilder` or a `StringWriter`.
 - **`JavaStringFormatAwkSink`** renders `printf`/`sprintf` with Java's standard
   `String.format(...)` instead of AWK's formatting rules, giving scripts access to Java-only
   conversions (`%,d` grouping, `%(d` negative parentheses, `%tY` date/time, etc.) and faster
@@ -154,7 +157,9 @@ Jawk provides three built-in `AwkSink` implementations:
   // prints: 1,234,567
   ```
 
-The overloads without a `Locale` parameter default to `Locale.US`.
+The first two are also reachable through the `AwkSink.from(...)` factories, which accept an
+`OutputStream`, a `PrintStream`, or an `Appendable`. Every constructor and factory takes an optional
+`Locale`, and defaults to `Locale.US` without one.
 
 ## Numeric Locale
 
@@ -195,25 +200,12 @@ public class MySink extends AwkSink {
 }
 ```
 
-## Choosing the Right Output Strategy
-
-| Goal | API | Example |
-| --- | --- | --- |
-| Capture as `String` | `execute()` | `awk.script(s).execute()` |
-| Print to a `PrintStream` | `execute(PrintStream)` | `awk.script(s).execute(System.out)` |
-| Print to an `OutputStream` | `execute(OutputStream)` | `awk.script(s).execute(fileOut)` |
-| Capture to `Appendable` | `execute(Appendable)` | `awk.script(s).execute(sb)` |
-| Structured collection | `execute(AwkSink)` | `awk.script(s).execute(mySink)` |
-
 ## Subprocess Output
 
-When AWK runs an external command via `system("...")` or a pipe (`print ... | "cmd"`),
-the command's **stdout** is pumped into the sink's `PrintStream` returned by
-`getPrintStream()`. The built-in `OutputStreamAwkSink` and `AppendableAwkSink` both
-override this method, so subprocess stdout is captured alongside normal output. For a
-custom `AwkSink` that does _not_ override `getPrintStream()`, subprocess stdout is
-silently discarded (the default no-op stream). To capture subprocess stdout, override
-`getPrintStream()` in your sink so it returns a real stream.
+When AWK runs an external command via `system("...")` or an output pipe (`print ... | "cmd"`),
+the command's **stdout** is pumped into the `PrintStream` returned by the sink's
+[`getPrintStream()`](#getprintstream). The built-in sinks override that method, so subprocess stdout
+is captured alongside normal output; a custom sink that does not override it discards that output.
 
 Subprocess **stderr** defaults to the sink's `PrintStream` as well. To redirect it to
 a separate stream, use `errorStream(PrintStream)` (this only affects **stderr**, not

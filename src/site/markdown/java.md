@@ -34,16 +34,17 @@ Awk awk = new Awk(settings);
 | --- | --- | --- |
 | `setFieldSeparator(String)` | `null` (default AWK FS) | The initial value of `FS`, the field separator |
 | `setLocale(Locale)` | `Locale.US` | Locale for numeric output formatting |
-| `setDefaultRS(String)` | Platform line separator | Default value for `RS`, the record separator  |
+| `setDefaultRS(String)` | `"\n"` | Default value for `RS`, the record separator  |
 | `setUseSortedArrayKeys(boolean)` | `false` | Whether to keep associative array keys in sorted order |
 | `setPosix(boolean)` | `false` | Enforce POSIX compile-time behavior, rejecting gawk syntax such as `a[i][j]`, `split(..., a[i])`, all `@` forms, and the `BEGINFILE` / `ENDFILE` special patterns |
 | `putVariable(String, Object)` | Empty map | Pre-set variables available before `BEGIN` |
 
-Output destination is specified per-call on the builder (`execute()`, `execute(PrintStream)`, `execute(OutputStream)`, `execute(Appendable)`, or `execute(AwkSink)`). See the [Custom Output](java-output.html) guide for details.
+The output destination is not a setting: it is chosen per call, when you execute the script. See
+[Custom Output](java-output.html). For more on passing variables to scripts, see
+[Variables and Arguments](java-variables.html).
 
-For more on passing variables to scripts, see [Variables and Arguments](java-variables.html).
-
-By default, Jawk accepts both classic multi-dimensional array syntax (`a[i, j]`) and gawk-style arrays of arrays (`a[i][j]`), gawk's `@include`, `@namespace`, indirect-call, and typed-regexp syntax, and the `BEGINFILE` / `ENDFILE` patterns. Enable POSIX mode when you need strict classic AWK parsing; it rejects arrays of arrays, subarray operands in array-only positions such as `split(..., a[i])`, `for (k in a[i])`, and `"x" in a[i]`, rejects all `@` forms, and stops treating `BEGINFILE` / `ENDFILE` as special patterns:
+By default, Jawk accepts classic AWK syntax and the [gawk extensions it implements](compatibility.html).
+Enable POSIX mode when you need strict classic parsing:
 
 ```java
 AwkSettings settings = new AwkSettings();
@@ -93,28 +94,15 @@ awk.script(program)
 
 ## Output Destination
 
-Output is specified per-call on the builder:
+Where the script's output goes is decided by the `execute(...)` overload you call:
 
 - `execute()` returns the printed output as a `String`
 - `execute(PrintStream)` sends output to a `PrintStream` such as `System.out`
 - `execute(OutputStream)` sends output to any `OutputStream`
 - `execute(Appendable)` captures text into a `StringBuilder` or `Appendable`
-- `execute(AwkSink)` uses a fully custom output strategy
+- `execute(AwkSink)` hands raw `print`/`printf` calls to your own [`AwkSink`](apidocs/io/jawk/jrt/AwkSink.html), so the host can collect structured values instead of rendered text
 
-## Custom Output with AwkSink
-
-Use [`AwkSink`](apidocs/io/jawk/jrt/AwkSink.html) when plain text is not the right abstraction. An `AwkSink` receives raw `print(...)` and `printf(...)` calls together with the current AWK formatting state, so your host application can collect structured AWK output instead of rendered text.
-
-```java
-Awk awk = new Awk();
-CollectingSink sink = new CollectingSink();
-
-awk.script("{ print $1, $2 }")
-        .input("alpha beta\ngamma delta\n")
-        .execute(sink);
-```
-
-See the [Custom Output](java-output.html) guide for the full `AwkSink` contract, built-in implementations, and detailed examples.
+See the [Custom Output](java-output.html) guide for the full `AwkSink` contract, the built-in implementations, and locale handling.
 
 ## Reusable Runtime: AVM
 
@@ -171,16 +159,9 @@ public class JawkDemo {
 
 ## See Also
 
-- [Custom Output](java-output.html)
 - [Variables and Arguments](java-variables.html)
 - [Structured Input](java-input.html)
+- [Custom Output](java-output.html)
 - [Compile, Eval, and Reuse](java-compile.html)
-- [Advanced Runtime](java-advanced.html)
+- [Advanced Runtime](java-advanced.html) — AVM reuse, sandboxing, JSR 223, and thread safety
 - [Using Extensions](extensions.html)
-
-## Next Steps
-
-- [Variables and arguments](java-variables.html)
-- [Structured input](java-input.html)
-- [Compile, eval, and reuse](java-compile.html)
-- [Advanced runtime, AVM, sandboxing, and JSR 223](java-advanced.html)

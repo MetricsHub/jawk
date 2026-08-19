@@ -6,19 +6,18 @@
 ![GitHub top language](https://img.shields.io/github/languages/top/jawkio/jawk)
 ![License](https://img.shields.io/github/license/jawkio/jawk)
 
-Jawk is a pure Java implementation of [AWK](https://en.wikipedia.org/wiki/AWK). You can run it as a CLI, embed it directly in Java applications, compile scripts to reusable tuples, evaluate AWK expressions, feed it structured input, load extensions explicitly, and enable a sandboxed runtime when you need tighter execution constraints.
+Jawk is a pure Java implementation of [AWK](https://en.wikipedia.org/wiki/AWK). You can run it as a CLI, embed it directly in Java applications, compile scripts once and reuse them, evaluate AWK expressions, feed it structured input, expose your own Java functions as extensions, and enable a sandboxed runtime when you need tighter execution constraints.
 
 ## Support for POSIX AWK and Gawk
 
 Jawk fully implements POSIX AWK, and adds support for the most commonly used gawk-specific features:
 
-- Builtins, available by default through the built-in GNU Awk compatibility extension: `asort()`, `asorti()`, `typeof()`, `isarray()`, `mkbool()`, `gensub()`, `patsplit()`, `strtonum()`, `systime()`, `mktime()`, `strftime()`, `bindtextdomain()`, `dcgettext()`, `dcngettext()`, and `PROCINFO["sorted_in"]`-controlled array traversal
-- Arrays of arrays (`a[i][j]`), including gawk-compatible runtime typing when arrays, scalars, and subarrays are passed to functions, and typed regexp literals (`@/re/`)
+- Builtins, available by default through the built-in GNU Awk compatibility extension: `asort()`, `asorti()`, `typeof()`, `isarray()`, `mkbool()`, `gensub()`, `patsplit()`, `strtonum()`, `systime()`, `mktime()`, `strftime()`, the gettext functions, and `PROCINFO["sorted_in"]`-controlled array traversal
+- Arrays of arrays (`a[i][j]`), with gawk's runtime typing rules, and typed regexp literals (`@/re/`)
 - Source inclusion with `@include`, namespaces with `@namespace` and `ns::name`, and indirect function calls such as `@functionName(args)`
-- `BEGINFILE` / `ENDFILE` special patterns, with the `ERRNO` and `ARGIND` special variables, so a script can hook into the command-line file processing loop and skip unreadable files without a fatal error
-- The `nextfile` statement
+- The `BEGINFILE` / `ENDFILE` special patterns and the `nextfile` statement, with the `ERRNO` and `ARGIND` special variables, so a script can hook into the command-line file processing loop and skip unreadable files without a fatal error
 - The `IGNORECASE`, `SYMTAB`, and `FUNCTAB` special variables
-- The `/dev/stdout`, `/dev/stderr`, and `/dev/stdin` special filenames (and their `/dev/fd/N` spellings) in redirections and `getline`, routed to the standard streams of the process instead of files of those names, and `/dev/null` mapped to the platform's null device on Windows too, as gawk's Windows port does
+- The `/dev/stdout`, `/dev/stderr`, and `/dev/stdin` special filenames in redirections and `getline`, plus `/dev/null` on Windows
 
 The gawk-specific `@` syntax and arrays-of-arrays syntax are rejected in `--posix` mode.
 
@@ -46,7 +45,7 @@ See the [installation page](https://jawk.io/install.html) for details, Maven/Gra
 echo "hello world" | jawk '{ print $2 ", " $1 "!" }'
 ```
 
-The CLI follows the POSIX argument conventions: `--` marks the end of options, and the `-` operand designates standard input as an input file (with `FILENAME` set to `-`). As in gawk, once the program text has been supplied (with `-f` or `-L`), an unknown option ends option processing and is passed on to the AWK script through `ARGV`, which makes `#!` interpreter scripts work. See the [CLI documentation](https://jawk.io/cli.html) for details.
+The CLI follows the POSIX argument conventions, and passes unknown options on to the script through `ARGV` once the program text has been supplied, as gawk does, which makes `#!` interpreter scripts work. See the [CLI documentation](https://jawk.io/cli.html) for details.
 
 ## Java Example
 
@@ -55,17 +54,17 @@ Awk awk = new Awk();
 String result = awk.script("{ print toupper($0) }").input("hello world").execute();
 ```
 
-When writing custom extensions, annotate associative array parameters with `@JawkAssocArray` and declare them as `Map` values rather than concrete map implementations.
-
-Java variables passed to embedded Jawk scripts may include `Map` and `List` values, including nested JSON-like object trees. Lists are materialized as AWK arrays with zero-based numeric indexes.
+The variables passed to an embedded script may be `Map` and `List` trees, so JSON-like structures can be traversed with plain AWK array syntax. See the [Java documentation](https://jawk.io/java.html) for details.
 
 ## Documentation
 
 - Overview: https://jawk.io/index.html
+- Installation: https://jawk.io/install.html
 - CLI: https://jawk.io/cli.html
 - Java: https://jawk.io/java.html
 - Extensions: https://jawk.io/extensions.html
 - Writing Extensions: https://jawk.io/extensions-writing.html
+- Compatibility: https://jawk.io/compatibility.html
 
 ## Contributing
 

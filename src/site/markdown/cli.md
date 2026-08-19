@@ -5,9 +5,9 @@ description: Quickstart guide for running Jawk from the command line.
 
 <!-- MACRO{toc|fromDepth=2|toDepth=3|id=toc} -->
 
-Jawk CLI behaves like AWK, but runs entirely on the JVM. You can pass an inline program, read a script from a file, feed input through standard input or filenames, assign variables, load explicit extensions, dump syntax or tuples, precompile tuples, and switch to a sandboxed runtime when needed.
+Jawk CLI behaves like AWK, but runs entirely on the JVM. You can pass an inline program, read a script from a file, feed input through standard input or filenames, assign variables, load extensions, precompile a script for later runs, and switch to a sandboxed runtime when needed.
 
-The examples below use the `jawk` command set up by the [one-command install](install.html). Running the standalone jar directly with `java -jar jawk-${project.version}-standalone.jar` accepts exactly the same arguments.
+The examples below use the `jawk` command set up by the [one-command install](install.html). Running the standalone jar directly with `java -jar jawk-${project.version}-standalone.jar` accepts exactly the same arguments. The `jawk` launcher locates a Java runtime (Java 8 or later) every time it runs, checking `JAWK_JAVA_HOME`, `JAVA_HOME`, and the `PATH` in that order, so installing or upgrading Java later needs no Jawk reinstall.
 
 > [!WARNING]
 > Shell quoting differs by platform. The examples below use separate command forms where quoting is meaningfully different. If a script works in one shell but not another, the quoting is usually the first thing to check.
@@ -95,7 +95,7 @@ As in gawk, once the program text has been supplied with `-f` or `-L`, an unknow
 
 ### BEGINFILE and ENDFILE Rules
 
-Jawk supports gawk's `BEGINFILE` and `ENDFILE` special patterns, which hook into the command-line file processing loop. `BEGINFILE` rules run just before the first record of each input file is read, with `FILENAME` set, `FNR` at 0, `$0` cleared, and `ARGIND` designating the `ARGV` entry being processed. `ENDFILE` rules run when the last record of a file has been consumed — even for empty files — and before the `END` rules for the last file.
+Jawk supports gawk's `BEGINFILE` and `ENDFILE` special patterns, which hook into the command-line file processing loop. `BEGINFILE` rules run just before the first record of each input file is read; `ENDFILE` rules run once its last record has been consumed.
 
 When a `BEGINFILE` rule is present, a file that cannot be opened is no longer an immediate fatal error: `ERRNO` carries the error description (for example `No such file or directory` or `Is a directory`), and the script can skip the file with `nextfile`. If the `BEGINFILE` rule does not skip it, the usual fatal error is raised:
 
@@ -107,11 +107,7 @@ good.txt:1:hello
 skipping missing.txt (No such file or directory)
 ```
 
-The `nextfile` statement is also available in ordinary rules — including from user-defined functions — and abandons the rest of the current input file after running the `ENDFILE` rules. `next` may likewise be used inside a user-defined function: it abandons the current record and unwinds the active function calls, and is a fatal error at runtime when the function was called from a `BEGIN`, `END`, `BEGINFILE`, or `ENDFILE` rule. Direct uses in special rules are rejected at compile time: `next` inside `BEGIN`, `END`, `BEGINFILE`, or `ENDFILE` rules, and `nextfile` inside `ENDFILE`, `BEGIN`, and `END` rules. Only redirected forms of `getline` (such as `getline line < "file"`) may be used inside `BEGINFILE`/`ENDFILE`. All of this matches gawk's restrictions.
-
-When `BEGINFILE`/`ENDFILE` rules are present, a non-redirected `getline` in an ordinary rule never crosses a file boundary: it reports end-of-input at the end of the current file, and the main loop then runs the `ENDFILE` and `BEGINFILE` rules before the next file's records are processed. (gawk instead lets such a `getline` pull in the next file's first record, firing the hooks mid-statement.) Without `BEGINFILE`/`ENDFILE` rules, `getline` keeps the classic AWK behavior of streaming across input files.
-
-As in gawk, `BEGINFILE` and `ENDFILE` are gawk extensions: with `--posix` they are not special and parse as ordinary identifiers.
+The `nextfile` statement is also available in ordinary rules — including inside user-defined functions — and abandons the rest of the current input file after running the `ENDFILE` rules. See [BEGINFILE and ENDFILE](compatibility.html#beginfile-and-endfile) for the complete rules: what `next`, `nextfile`, and `getline` may do in and around these patterns, and how `--posix` turns them back into ordinary identifiers.
 
 ## Pass Variables
 
@@ -141,7 +137,7 @@ $ jawk --posix 'BEGIN { a[1,2] = 42; print a[1,2] }'
 42
 ```
 
-Because `-L` loads an already compiled tuples file, Jawk rejects `--posix` together with `-L` instead of pretending that it can re-apply compile-time restrictions after the fact.
+Because `-L` loads an already compiled program, Jawk rejects `--posix` together with `-L` instead of pretending that it can re-apply compile-time restrictions after the fact.
 
 ## Load Extensions
 
@@ -167,7 +163,7 @@ $ jawk -l GawkExtension -l stdin -f script.awk
 
 ## Enable Sandbox Mode
 
-Use `-S` or `--sandbox` to switch to the sandboxed tuple compiler and runtime:
+Use `-S` or `--sandbox` to compile and run the script with sandbox restrictions:
 
 ```shell-session
 $ jawk -S -f script.awk input.txt
@@ -180,4 +176,4 @@ Sandbox mode disables `system()`, input and output redirection, command pipeline
 - [CLI Reference](cli-reference.html) for the full list of options and flags
 - [Java Quickstart](java.html) if you want to embed AWK in a JVM application
 - [Using Extensions](extensions.html)
-- [Compatibility and Differences](compatibility.html)
+- [Compatibility and Compliance](compatibility.html)

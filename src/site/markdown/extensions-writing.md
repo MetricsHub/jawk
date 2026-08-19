@@ -7,9 +7,6 @@ description: Write custom Jawk extensions with the modern annotation-based API.
 
 Modern Jawk extensions are small Java classes that expose AWK-callable functions through annotations. In most cases, you should extend `AbstractExtension`, annotate Java methods with `@JawkFunction`, and let Jawk build the function map automatically.
 
-> [!TIP]
-> Prefer annotations and `AbstractExtension` by default. Drop to custom dispatch only when you genuinely need dynamic keyword handling or a non-standard function map.
-
 ## Prefer AbstractExtension
 
 [`AbstractExtension`](apidocs/io/jawk/ext/AbstractExtension.html) already handles common extension plumbing:
@@ -158,7 +155,7 @@ public final class SampleExtension extends AbstractExtension {
 Explicit `ExtensionRegistry.register("sample", SampleExtension::new)` calls are only useful in Java hosts that later resolve extensions by short name through the registry. In particular, a `static { }` registration block inside the extension class cannot make a CLI invocation aware of the extension: the block only runs once the class is loaded, and the CLI only loads extension classes named on `-l`.
 
 > [!NOTE]
-> `--list-ext` prints the identifiers registered in the current JVM and accepts no other argument, so it always lists exactly the built-in extensions. An extension jar on the class path does not appear there; load it with `-l` and its fully qualified class name instead.
+> Your extension will not show up in `--list-ext`, which only lists what is already registered in the JVM. Load it with `-l` and its fully qualified class name.
 
 ## When You Still Need Custom Dispatch
 
@@ -198,5 +195,5 @@ hahaha
 
 ## See Also
 
-- [Loading extensions](extensions.html)
-- [Main Java API](java.html)
+- [Using Extensions](extensions.html)
+- [Java Quickstart](java.html)
