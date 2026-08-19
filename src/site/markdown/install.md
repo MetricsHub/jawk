@@ -22,6 +22,8 @@ The installer downloads the standalone jar of the latest Jawk release from GitHu
 - On Linux and macOS, the jar goes to `~/.local/share/jawk/` and the launcher to `~/.local/bin/jawk` — no `sudo` required. The installer warns with the exact line to add if `~/.local/bin` is not on your `PATH`. Set `JAWK_INSTALL_DIR` and `JAWK_DATA_DIR` to override the locations.
 - On Windows, both go under `%LOCALAPPDATA%\Jawk` (override with `JAWK_INSTALL_DIR`), and the installer adds the launcher directory to your user `PATH`.
 
+Verification is skipped, with a warning, in two cases: when `JAWK_VERSION` pins a release older than the published checksums, and — on Linux and macOS — when the machine has neither `sha256sum` nor `shasum`. A checksum that is present but does not match always aborts the installation.
+
 At run time, the launcher locates a Java Runtime Environment (Java 8 or later) by checking `JAWK_JAVA_HOME`, then `JAVA_HOME`, then `java` on the `PATH`, then platform-specific locations such as `/usr/libexec/java_home` on macOS and `/usr/lib/jvm` on Linux. If no suitable JRE is found, it prints a message pointing to [Adoptium](https://adoptium.net); installing or upgrading Java later requires no Jawk reinstall. The launcher also honors `JAWK_CLASSPATH`, which adds [extension](extensions.html) jars to the JVM class path.
 
 To pin a specific release instead of the latest, set `JAWK_VERSION`:
