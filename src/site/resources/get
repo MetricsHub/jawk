@@ -147,6 +147,7 @@ cat > "${LAUNCHER_PATH}" <<LAUNCHER
 # Jawk launcher — https://jawk.io
 # Locates a JRE (Java 8 or later) and runs the Jawk standalone jar.
 # Set JAWK_JAVA_HOME to force a specific Java installation.
+# Set JAWK_CLASSPATH to add extension jars to the JVM class path.
 
 JAWK_JAR=${JAR_PATH_SQ}
 
@@ -202,6 +203,11 @@ if [ -z "\${JAVA}" ]; then
 	exit 127
 fi
 
+# "java -jar" ignores every class path setting, so extension jars given
+# through JAWK_CLASSPATH require naming the main class explicitly.
+if [ -n "\${JAWK_CLASSPATH:-}" ]; then
+	exec "\${JAVA}" -cp "\${JAWK_JAR}:\${JAWK_CLASSPATH}" io.jawk.Cli "\$@"
+fi
 exec "\${JAVA}" -jar "\${JAWK_JAR}" "\$@"
 LAUNCHER
 chmod +x "${LAUNCHER_PATH}"

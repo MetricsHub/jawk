@@ -85,6 +85,42 @@ jobs:
           out="$(printf 'hello world\n' | "${HOME}/.local/bin/jawk" '{ print $2 }')"
           [ "${out}" = "world" ] || { echo "ERROR: expected 'world' but got '${out}'." >&2; exit 1; }
 
+      - name: Load a custom extension through JAWK_CLASSPATH
+        shell: bash
+        run: |
+          # Compile a minimal extension against the installed standalone jar,
+          # then load it by fully qualified class name through the launcher.
+          mkdir -p "${RUNNER_TEMP}/ext/src/com/example"
+          cat > "${RUNNER_TEMP}/ext/src/com/example/DemoExtension.java" <<'EOF'
+          package com.example;
+
+          import io.jawk.ext.AbstractExtension;
+          import io.jawk.ext.annotations.JawkFunction;
+
+          public final class DemoExtension extends AbstractExtension {
+
+              @Override
+              public String getExtensionName() {
+                  return "demo";
+              }
+
+              @JawkFunction("Repeat")
+              public String repeat(Number count, String value) {
+                  StringBuilder result = new StringBuilder();
+                  for (int i = 0; i < count.intValue(); i++) {
+                      result.append(value);
+                  }
+                  return result.toString();
+              }
+          }
+          EOF
+          javac -cp "${HOME}/.local/share/jawk/jawk-standalone.jar" -d "${RUNNER_TEMP}/ext/classes" \
+            "${RUNNER_TEMP}/ext/src/com/example/DemoExtension.java"
+          jar cf "${RUNNER_TEMP}/ext/demo-extension.jar" -C "${RUNNER_TEMP}/ext/classes" .
+          out="$(JAWK_CLASSPATH="${RUNNER_TEMP}/ext/demo-extension.jar" \
+            "${HOME}/.local/bin/jawk" -l com.example.DemoExtension 'BEGIN { print Repeat(3, "ha") }')"
+          [ "${out}" = "hahaha" ] || { echo "ERROR: expected 'hahaha' but got '${out}'." >&2; exit 1; }
+
       - name: Install a pinned version with JAWK_VERSION
         shell: bash
         run: |
@@ -155,6 +191,51 @@ jobs:
           $out = & $shim 'BEGIN { print 6 * 7 }'
           if ($LASTEXITCODE -ne 0) { throw "jawk.cmd exited with $LASTEXITCODE." }
           if ("$out" -ne '42') { throw "Expected '42' but got '$out'." }
+
+      - name: Load a custom extension through JAWK_CLASSPATH
+        run: |
+          # Compile a minimal extension against the installed standalone jar,
+          # then load it by fully qualified class name through the shim.
+          $extDir = Join-Path $env:RUNNER_TEMP 'ext'
+          New-Item -ItemType Directory -Force -Path (Join-Path $extDir 'src\com\example') | Out-Null
+          $source = @'
+          package com.example;
+
+          import io.jawk.ext.AbstractExtension;
+          import io.jawk.ext.annotations.JawkFunction;
+
+          public final class DemoExtension extends AbstractExtension {
+
+              @Override
+              public String getExtensionName() {
+                  return "demo";
+              }
+
+              @JawkFunction("Repeat")
+              public String repeat(Number count, String value) {
+                  StringBuilder result = new StringBuilder();
+                  for (int i = 0; i < count.intValue(); i++) {
+                      result.append(value);
+                  }
+                  return result.toString();
+              }
+          }
+          '@
+          Set-Content -Path (Join-Path $extDir 'src\com\example\DemoExtension.java') -Value $source
+          $jarPath = Join-Path $env:LOCALAPPDATA 'Jawk\jawk-standalone.jar'
+          & javac -cp $jarPath -d (Join-Path $extDir 'classes') (Join-Path $extDir 'src\com\example\DemoExtension.java')
+          if ($LASTEXITCODE -ne 0) { throw 'javac failed to compile the demo extension.' }
+          & jar cf (Join-Path $extDir 'demo-extension.jar') -C (Join-Path $extDir 'classes') .
+          if ($LASTEXITCODE -ne 0) { throw 'jar failed to package the demo extension.' }
+          $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          $env:JAWK_CLASSPATH = Join-Path $extDir 'demo-extension.jar'
+          try {
+              $out = & $shim -l com.example.DemoExtension 'BEGIN { print Repeat(3, "ha") }'
+          } finally {
+              Remove-Item Env:JAWK_CLASSPATH
+          }
+          if ($LASTEXITCODE -ne 0) { throw "jawk.cmd exited with $LASTEXITCODE." }
+          if ("$out" -ne 'hahaha') { throw "Expected 'hahaha' but got '$out'." }
 
       - name: Honor JAWK_JAVA_HOME when no other JRE is findable
         run: |

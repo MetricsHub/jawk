@@ -20,6 +20,13 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- The `jawk` launcher installed by the one-command installer now honors the `JAWK_CLASSPATH`
+  environment variable: when set, the launcher runs the CLI with the standalone jar and the
+  given entries on the JVM class path, so custom [extension](extensions.html) jars can be
+  loaded with `-l <fully.qualified.ClassName>`. Previously the launcher always used
+  `java -jar`, which ignores every class path setting, and custom-classpath extensions
+  required invoking `java -cp ... io.jawk.Cli` by hand
+  ([#586](https://github.com/jawkio/jawk/issues/586)).
 - Jawk can now be installed as a `jawk` executable with one command: `curl -fsSL
   https://jawk.io/get | sh` on Linux/macOS, `irm https://jawk.io/get.ps1 | iex` on Windows.
   The installed launcher locates a Java Runtime Environment (Java 8 or later) at run time and
