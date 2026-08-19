@@ -90,10 +90,10 @@ jobs:
         run: |
           # The launcher exports JAWK_PROGRAM_NAME so the CLI names the jawk
           # command in its help instead of "java -jar ...". Releases up to
-          # 7.1.00 predate --version and JAWK_PROGRAM_NAME: skip only those,
+          # 7.0.01 predate --version and JAWK_PROGRAM_NAME: skip only those,
           # so a --version regression in a later release fails this job.
           latest="${{ steps.release.outputs.version }}"
-          if [ "$(printf '%s\n' 7.1.00 "${latest}" | sort -V | tail -n 1)" = "7.1.00" ]; then
+          if [ "$(printf '%s\n' 7.0.01 "${latest}" | sort -V | tail -n 1)" = "7.0.01" ]; then
             echo "Release ${latest} predates --version; skipping the version and help assertions."
             exit 0
           fi
@@ -219,7 +219,7 @@ jobs:
       - name: Check the version and help output of the shim
         run: |
           # The shim sets JAWK_PROGRAM_NAME so the CLI names the jawk command
-          # in its help instead of "java -jar ...". Releases up to 7.1.00
+          # in its help instead of "java -jar ...". Releases up to 7.0.01
           # predate --version and JAWK_PROGRAM_NAME: skip only those, read
           # from the installed jar's pom.properties, so a --version
           # regression in a later release fails this job.
@@ -235,7 +235,7 @@ jobs:
           }
           $installed = (($props -split '\r?\n' | Where-Object { $_ -match '^version=' }) -replace '^version=', '').Trim()
           if (-not $installed) { throw 'Could not read the installed Jawk version from pom.properties.' }
-          if ([version]$installed -le [version]'7.1.00') {
+          if ([version]$installed -le [version]'7.0.01') {
             Write-Host "Release $installed predates --version; skipping the version and help assertions."
             exit 0
           }
