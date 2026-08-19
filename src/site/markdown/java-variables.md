@@ -9,10 +9,10 @@ Jawk exposes three distinct concepts that are easy to blur together if you come 
 
 - runtime `arguments` are CLI-style operands exposed through `ARGV` and `ARGC`
 - `AwkSettings` variables are engine-level defaults
-- `script(...)`, `program(...)`, and `AVM.execute(...)` accept per-call variable overrides
+- `script(...)` and `AVM.execute(...)` accept per-call variable overrides
 
 > [!IMPORTANT]
-> `AwkSettings` is behavioral configuration, not an input carrier. Put field separators, locale, record separators, and engine-level variables there. Pass input and output directly through `script(...)`, `program(...)`, `AVM.execute(...)`, or `eval(...)`.
+> `AwkSettings` is behavioral configuration, not an input carrier. Put field separators, locale, record separators, and engine-level variables there. Pass input and output directly through `script(...)`, `AVM.execute(...)`, or `eval(...)`.
 
 ## Runtime Arguments, ARGC, and ARGV
 

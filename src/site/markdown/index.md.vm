@@ -105,13 +105,14 @@ Compatibility summary is unavailable in this build. Run `mvn verify site` to gen
 Key Capabilities
 ----------------
 
-- CLI-compatible AWK execution with inline scripts, script files, operands, and input files
-- Java entry points for script execution, expression evaluation, tuple compilation, and repeated reuse
-- Structured input through `InputSource` for row-oriented or already-tokenized data
+- A drop-in AWK command line: inline scripts, script files, `name=value` operands, and input files
+- Java entry points to run a whole script, evaluate a single expression, or compile either one once and reuse it
+- Structured input through `InputSource`, to feed rows or already-tokenized fields straight from your own data structures
+- Custom output through `AwkSink`, to collect what a script prints as Java values instead of text
 - Gawk builtins enabled by default: `asort()`, `asorti()`, `typeof()`, `isarray()`, `mkbool()`, `gensub()`, `patsplit()`, `strtonum()`, `systime()`, `mktime()`, `strftime()`, the gettext functions, and `PROCINFO["sorted_in"]`
-- Explicit extension loading through the Java API or the CLI
-- Tuple serialization for CLI precompilation and later loading
-- Sandbox-specific tuples and runtime components through `SandboxedAwk`
+- Java extensions, loaded from the CLI or the Java API, to expose your own functions to a script
+- A sandboxed mode, in Java and on the CLI, that rejects `system()`, redirections, pipes, and `@include`
+- Precompilation: `-K` writes a compiled program to a file, `-L` runs it later without parsing the source again
 
 Differences with Traditional AWK
 --------------------------------
@@ -122,7 +123,6 @@ Jawk aims to be a practical AWK implementation for JVM environments, but it is n
 - `printf()` and `sprintf()` implement the POSIX AWK conversions with gawk's semantics, including `CONVFMT`-based `%s` conversion, dynamic `*` width and precision, and gawk's out-of-range integer handling; only a few edge cases (`%a` notation, `%c` locale independence, the sign of NaN) follow Java's platform rules.
 - Some floating-point edge cases may differ due to Java's handling of floating-point arithmetic and representation.
 - Where AWK ignores whitespace around numbers — the leading whitespace in string-to-number conversion, and the leading and trailing blanks that POSIX lets a numeric string carry — Jawk applies Java's whitespace definition (`Character.isWhitespace`), which also covers Unicode spaces such as U+2003; C-based implementations only skip the C locale's narrower `isspace` set.
-- Jawk resolves user-defined function calls during compilation. It does not defer all of that work to runtime.
 - The date and time functions (`mktime()`, `strftime()`) follow the Java platform's time zone data and calendar rules rather than the C library's, which differs from gawk in a few edge cases.
 
 The [Compatibility](compatibility.html) page details these edge cases, along with the places where Jawk deliberately follows gawk rather than historical AWK, and the live compatibility reports.
@@ -147,9 +147,6 @@ Next Steps
 ----------
 
 - [Install Jawk](install.html)
-- [Embed Jawk in Java](java.html)
 - [Learn the CLI](cli.html)
-- [Work with variables and arguments](java-variables.html)
-- [Work with structured input](java-input.html)
-- [Compile, evaluate, and reuse tuples](java-compile.html)
+- [Embed Jawk in Java](java.html)
 - [Load or write extensions](extensions.html)

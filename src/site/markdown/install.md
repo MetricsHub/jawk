@@ -3,7 +3,7 @@ description: Install the jawk executable with one command, add Jawk from Maven C
 
 # Installation
 
-Jawk can be installed as a `jawk` executable with one command, added as a normal Maven dependency, or used as a standalone jar for CLI execution.
+Jawk can be installed as a `jawk` executable with one command, added as a normal Maven dependency, or used as a standalone jar for CLI execution. Every option requires a Java runtime, version 8 or later.
 
 ## One-Command Install
 
@@ -17,7 +17,7 @@ Jawk can be installed as a `jawk` executable with one command, added as a normal
 >   irm https://jawk.io/get.ps1 | iex
 >   ```
 
-The installer downloads the standalone jar of the latest Jawk release from GitHub, verifies its SHA-256 checksum against the one published with the release — when pinning an older release that predates the published checksums, it warns and skips the verification instead — and installs a `jawk` launcher:
+The installer downloads the standalone jar of the latest Jawk release from GitHub, verifies the SHA-256 checksum published with that release, and installs a `jawk` launcher:
 
 - On Linux and macOS, the jar goes to `~/.local/share/jawk/` and the launcher to `~/.local/bin/jawk` — no `sudo` required. The installer warns with the exact line to add if `~/.local/bin` is not on your `PATH`. Set `JAWK_INSTALL_DIR` and `JAWK_DATA_DIR` to override the locations.
 - On Windows, both go under `%LOCALAPPDATA%\Jawk` (override with `JAWK_INSTALL_DIR`), and the installer adds the launcher directory to your user `PATH`.
@@ -70,12 +70,8 @@ Download [jawk-${project.version}-standalone.jar](https://github.com/jawkio/jawk
 $ java -jar jawk-${project.version}-standalone.jar -?
 ```
 
-## Java Prerequisite
+## Next Steps
 
-Jawk targets Java 8 and later.
-
-## Where to Go Next
-
-- [Command-line usage](cli.html)
-- [Java embedding](java.html)
-- [Extensions](extensions.html)
+- [Learn the CLI](cli.html)
+- [Embed Jawk in Java](java.html)
+- [Load or write extensions](extensions.html)

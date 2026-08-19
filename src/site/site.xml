@@ -56,7 +56,7 @@
 		</menu>
 
 		<menu name="Jawk Java API">
-			<item name="Jawk Quickstart" href="java.html" />
+			<item name="Java Quickstart" href="java.html" />
 			<item name="Structured Input" href="java-input.html" />
 			<item name="Variables and Arguments" href="java-variables.html" />
 			<item name="Custom Output" href="java-output.html" />
@@ -65,7 +65,7 @@
 		</menu>
 
 		<menu name="Jawk CLI">
-			<item name="CLI Basics" href="cli.html" />
+			<item name="CLI Quickstart" href="cli.html" />
 			<item name="CLI Reference" href="cli-reference.html" />
 		</menu>
 

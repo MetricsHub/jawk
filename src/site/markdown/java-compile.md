@@ -76,12 +76,8 @@ Awk awk = new Awk(settings);
 AwkProgram program = awk.compile("{ print a[1,2] }");
 ```
 
-## Choosing the Right Reuse Strategy
-
-- Use `eval(String...)` when the expression is cheap and called only occasionally.
-- Use `AwkExpression` plus `eval(...)` when one expression is reused across many records.
-- Use `AwkProgram` plus `script(program).execute(...)` when a whole AWK program is reused.
-- Use `AVM` when you want to keep one runtime alive across several calls. See the [Advanced Runtime](java-advanced.html) guide for AVM-level reuse patterns.
+To keep one runtime alive across several of these calls instead of one artifact, see the
+[Advanced Runtime](java-advanced.html) guide.
 
 ## See Also
 

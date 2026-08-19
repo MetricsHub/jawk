@@ -5,19 +5,12 @@ description: Load and use Jawk extensions from the CLI or the Java API.
 
 <!-- MACRO{toc|fromDepth=2|toDepth=3|id=toc} -->
 
-Jawk extensions let Java code expose additional AWK-callable functions to a script. By default, Jawk enables the built-in [GNU Awk compatibility extension](#gawk), so gawk functions such as `asort()` and `typeof()` work out of the box. Every other extension is opt-in: the host application or CLI invocation decides exactly which extension instances are available.
-
-> [!IMPORTANT]
-> Apart from the default gawk compatibility extension, extensions are opt-in. Sandbox mode blocks dynamic extension loading during script execution, but preloading an extension through the CLI or the Java host remains an explicit host decision.
-
-## How Extensions Are Enabled
-
-There are two supported loading paths:
+Jawk extensions let Java code expose additional AWK-callable functions to a script. By default, Jawk enables the built-in [GNU Awk compatibility extension](#gawk), so gawk functions such as `asort()` and `typeof()` work out of the box. Every other extension is opt-in, through one of two loading paths:
 
 - CLI: `-l <extension>` or `--load <extension>`
 - Java API: pass extension instances to an `Awk` constructor
 
-If you do neither, the default extension set applies: the gawk compatibility extension and nothing else. Specifying an explicit extension list — through `-l` on the CLI or an `Awk` constructor — replaces the default set, so add `GawkExtension` to the list when the script still needs the gawk functions.
+Either one replaces the default extension set, so add `GawkExtension` to the list when the script still needs the gawk functions. A script cannot load an extension by itself: what it may call is always the host's or the command line's decision.
 
 ## List Available Extensions
 
@@ -86,15 +79,13 @@ That keeps extension availability explicit and local to the embedding code.
 - `systime()` returns the current time in seconds since the epoch
 - `mktime(datespec [, utc-flag])` converts a `"YYYY MM DD HH MM SS [DST]"` specification into seconds since the epoch, normalizing out-of-range values, or returns -1 when the specification is invalid
 - `strftime([format [, timestamp [, utc-flag]]])` formats a timestamp with the C `strftime(3)` conversion specifiers (C-locale English names), including the GNU padding, case, and field-width flags (`%-d`, `%_d`, `%^a`, `%5d`); the format defaults to `PROCINFO["strftime"]` or gawk's `"%a %b %e %H:%M:%S %Z %Y"`
-
-`mktime()` and `strftime()` honor `ENVIRON["TZ"]` and follow the Java platform's time zone data and calendar rules; see the [differences with traditional AWK](index.html#Differences_with_Traditional_AWK) for the edge cases where this departs from gawk's C-library behavior.
 - `bindtextdomain(directory [, domain])`, `dcgettext(string [, domain [, category]])`, and `dcngettext(string1, string2, number [, domain [, category]])` implement gawk's internationalization interface; since Jawk ships no message catalogs, they behave exactly like gawk without a matching `.mo` file: text is returned untranslated and `dcngettext()` applies the English plural rule
+
+`mktime()` and `strftime()` honor `ENVIRON["TZ"]` and follow the Java platform's time zone data and calendar rules; see [date and time functions](compatibility.html#date-and-time-functions) for the edge cases where this departs from gawk's C-library behavior.
 
 `asort()`, `asorti()`, and the `for (index in array)` statement honor `PROCINFO["sorted_in"]` with gawk's predefined comparison modes: `@unsorted`, `@ind_str_asc`, `@ind_num_asc`, `@val_str_asc`, `@val_num_asc`, `@val_type_asc`, and their `_desc` counterparts. String comparisons ignore case when `IGNORECASE` is non-zero.
 
-Beyond the extension functions, the interpreter itself implements gawk's `BEGINFILE` / `ENDFILE` special patterns, the `nextfile` statement, and the `ERRNO` and `ARGIND` special variables (see the [CLI guide](cli.html#BEGINFILE_and_ENDFILE_Rules)). Like the other gawk-specific syntax, `BEGINFILE` and `ENDFILE` are not special in POSIX mode.
-
-Jawk also supports gawk's source-level `@` syntax:
+Beyond these functions, the interpreter itself implements gawk's `BEGINFILE` / `ENDFILE` special patterns, the `nextfile` statement, the `ERRNO` and `ARGIND` special variables, the `SYMTAB` and `FUNCTAB` arrays, and gawk's source-level `@` syntax:
 
 ```awk
 @include "library.awk"
@@ -108,11 +99,7 @@ BEGIN {
 }
 ```
 
-`@include` resolves relative paths from the including source, then searches `AWKPATH`, and includes each resolved file at most once. An included file cannot include a top-level program source. An included source begins in the `awk` namespace; the including source's namespace is restored afterward. `@namespace` qualifies variables and functions except identifiers made entirely of uppercase letters, while `awk::name` refers to the default namespace. Namespaced indirect calls require a fully qualified function name in the selector variable; an unqualified value refers to the default `awk` namespace. Indirect calls can dispatch user-defined, built-in, or loaded extension functions. Typed regexp literals use the related `@/re/` form. `@load` is recognized but intentionally reported as unsupported; load Java extensions with the CLI `-l` option or the Java API instead.
-
-All gawk `@` forms are rejected when POSIX mode is enabled.
-
-Scripts that reference `SYMTAB` or `FUNCTAB` get honest, Jawk-shaped content, populated by the runtime itself (outside POSIX mode): `SYMTAB` holds the names of the program's globals, Jawk's special variables, and `-v`/host-supplied variables; `FUNCTAB` holds the names of the standard built-in functions (`split`, `substr`, ...), the program's user-defined functions, and the loaded extensions' function keywords. Reads and writes through `SYMTAB` reflect declared globals and managed special variables live, but arbitrary elements cannot be added or deleted and writes must preserve each global's scalar or array type. `FUNCTAB` is read-only. As in gawk, assigning a scalar to `SYMTAB` or `FUNCTAB` is a runtime error.
+None of that depends on this extension, and none of it is available in POSIX mode. See [gawk source syntax](compatibility.html#gawk-source-syntax), [BEGINFILE and ENDFILE](compatibility.html#beginfile-and-endfile), and [SYMTAB and FUNCTAB](compatibility.html#symtab-and-functab) for the details.
 
 > [!NOTE]
 > Because these functions are registered by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` become reserved function names. A script that uses them as variable or function identifiers must be run with an explicit extension list that omits `GawkExtension`.
@@ -131,20 +118,16 @@ The built-in registry also includes the stdin extension, which is exposed throug
 - `StdinExtension`
 - `io.jawk.ext.StdinExtension`
 
-That extension provides advanced helper functions including `StdinHasInput()`, `StdinGetline()`, and `StdinBlock()`.
+It provides three functions for scripts that must consume standard input without blocking the whole
+run: `StdinHasInput()` reports whether a read can proceed, `StdinGetline()` reads the next line, and
+`StdinBlock()` returns a block object that waits for standard input to become readable.
 
 ## Sandbox Interaction
 
-Sandboxing and extensions are separate concerns:
-
-- sandboxing restricts dangerous AWK runtime features
-- extension loading is still an explicit host choice
-- scripts do not get to expand their own capabilities automatically
-
-If you need a sandboxed Java embedding, construct `SandboxedAwk` with the extension instances you want to allow. If you need a sandboxed CLI run, combine `-S` with the `-l` options you want to preload.
+Sandboxing restricts what a script may do at run time; it does not change how extensions are loaded. For a sandboxed Java embedding, construct `SandboxedAwk` with the extension instances you want to allow. For a sandboxed CLI run, combine `-S` with the `-l` options you want to preload.
 
 ## See Also
 
 - [Writing Extensions](extensions-writing.html)
 - [Java Quickstart](java.html)
-- [CLI Basics](cli.html)
+- [CLI Quickstart](cli.html)

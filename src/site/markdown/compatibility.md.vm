@@ -135,8 +135,6 @@ GNU Awk (gawk)
 
 [GNU Awk](https://www.gnu.org/software/gawk/) compatibility gathered from explicit Java integration suites that mirror the main gawk test families: core behavior, extensions, locale-sensitive behavior, and optional features.
 
-Array and scalar types follow gawk's runtime rules across function parameters and nested array references. An untyped argument remains linked to its caller until its first scalar or array use fixes the type; conflicting assignment, membership, iteration, deletion, or subarray use then fails at runtime.
-
 <div class="row compat-row">
   <div class="col-sm-9">
     <div class="progress">
@@ -190,23 +188,28 @@ The date and time functions (`mktime()`, `strftime()`) follow the Java platform'
 
 ${esc.h}${esc.h}${esc.h} Integer arithmetic
 
-Arithmetic on integral operands (`+`, `-`, `*`, an evenly-dividing `/`, `%`, unary `-` and `+`,
-`++`/`--`, and the corresponding compound assignments, on variables, array elements, and fields
-alike) is computed in exact 64-bit integers when both operands and the result are 64-bit
-integers, and comparisons between two such values are exact as well. A compound assignment or
-`++`/`--` on an uninitialized variable, a missing array element, or a missing field starts from
-integer zero, so counters built that way stay exact. A field assigned or updated with a numeric
-value retains the number itself — `print $1` shows the full value, repeated updates stay exact,
-and the numeric value is converted with `CONVFMT` only when `$0` is reconstituted, as in gawk. Within ±2^53 this is indistinguishable from gawk; beyond that, Jawk keeps every
-digit where gawk — which computes in C doubles unless built with MPFR support and run with
-`-M` — rounds: `print 9007199254740992 + 1` prints `9007199254740993` in Jawk and
-`9007199254740992` in default gawk. A result that overflows 64 bits, an exponentiation (`^`),
-and any operation with a fractional or string operand fall back to IEEE double arithmetic,
-matching gawk exactly. One consequence of computing in the integer domain is that there is no
-negative zero: when `x` is integer zero, `-x` yields plain `0` where double arithmetic would
-keep `-0.0`, so an expression that can observe the sign, such as `1/-x`, prints `inf`
-(previously `-inf`; gawk itself treats any division by zero as a fatal error, which Jawk
-deliberately does not).
+Arithmetic on integral operands is computed in exact 64-bit integers when both the operands and the
+result fit in 64 bits: `+`, `-`, `*`, an evenly-dividing `/`, `%`, unary `-` and `+`, `++`/`--`, and
+the corresponding compound assignments, on variables, array elements, and fields alike. Comparisons
+between two such values are exact as well.
+
+Within ±2^53 this is indistinguishable from gawk. Beyond that, Jawk keeps every digit where gawk —
+which computes in C doubles unless built with MPFR support and run with `-M` — rounds:
+`print 9007199254740992 + 1` prints `9007199254740993` in Jawk and `9007199254740992` in default
+gawk. A result that overflows 64 bits, an exponentiation (`^`), and any operation with a fractional
+or string operand fall back to IEEE double arithmetic, matching gawk exactly.
+
+Two consequences are worth knowing:
+
+- A compound assignment or `++`/`--` on an uninitialized variable, a missing array element, or a
+  missing field starts from integer zero, so counters built that way stay exact. A field assigned or
+  updated with a numeric value retains the number itself: `print $1` shows the full value, repeated
+  updates stay exact, and the value is converted with `CONVFMT` only when `$0` is reconstituted, as
+  in gawk.
+- The integer domain has no negative zero. When `x` is integer zero, `-x` yields plain `0` where
+  double arithmetic would keep `-0.0`, so an expression that can observe the sign, such as `1/-x`,
+  prints `inf`. (gawk treats any division by zero as a fatal error, which Jawk deliberately does
+  not.)
 
 ${esc.h}${esc.h}${esc.h} printf and sprintf formatting
 
@@ -309,6 +312,63 @@ ${esc.h}${esc.h}${esc.h} Range patterns
 
 Range patterns (`begpat, endpat`) evaluate their two conditions lazily, as POSIX requires: the start condition is evaluated only while outside the range, and the end condition only once the range has started — including on the very record that starts it, so a range can begin and end on the same record. Conditions with side effects, such as `a++ == 2, a++ == 5`, therefore behave exactly as in gawk and One True Awk: each condition's side effects run only on the records where that condition is actually tested.
 
+${esc.h}${esc.h}${esc.h} BEGINFILE and ENDFILE
+
+`BEGINFILE` rules run just before the first record of each input file is read, with `FILENAME` set,
+`FNR` at 0, `$0` cleared, and `ARGIND` designating the `ARGV` entry being processed. `ENDFILE` rules
+run when the last record of a file has been consumed — even for empty files — and before the `END`
+rules for the last file. With a `BEGINFILE` rule present, a file that cannot be opened is not an
+immediate fatal error: `ERRNO` carries the description and the rule can skip the file with
+`nextfile`, as shown in the [CLI guide](cli.html#beginfile-and-endfile-rules).
+
+`nextfile` may also be used in ordinary rules, including inside user-defined functions, and abandons
+the rest of the current input file after running the `ENDFILE` rules. `next` may likewise be used
+inside a user-defined function: it abandons the current record and unwinds the active function calls,
+and is a fatal error at runtime when the function was called from a `BEGIN`, `END`, `BEGINFILE`, or
+`ENDFILE` rule. Direct uses in special rules are rejected at compile time: `next` inside `BEGIN`,
+`END`, `BEGINFILE`, or `ENDFILE` rules, and `nextfile` inside `ENDFILE`, `BEGIN`, and `END` rules.
+Only redirected forms of `getline` (such as `getline line < "file"`) may be used inside
+`BEGINFILE`/`ENDFILE`. All of this matches gawk's restrictions.
+
+When `BEGINFILE`/`ENDFILE` rules are present, a non-redirected `getline` in an ordinary rule never
+crosses a file boundary: it reports end-of-input at the end of the current file, and the main loop
+then runs the `ENDFILE` and `BEGINFILE` rules before the next file's records are processed. (gawk
+instead lets such a `getline` pull in the next file's first record, firing the hooks mid-statement.)
+Without `BEGINFILE`/`ENDFILE` rules, `getline` keeps the classic AWK behavior of streaming across
+input files.
+
+As in gawk, `BEGINFILE` and `ENDFILE` are gawk extensions: with `--posix` they are not special and
+parse as ordinary identifiers.
+
+${esc.h}${esc.h}${esc.h} gawk source syntax
+
+`@include` resolves relative paths from the including source, then searches `AWKPATH`, and includes
+each resolved file at most once. An included file cannot include a top-level program source. An
+included source begins in the `awk` namespace; the including source's namespace is restored
+afterward.
+
+`@namespace` qualifies variables and functions except identifiers made entirely of uppercase
+letters, while `awk::name` refers to the default namespace. An indirect call (`@selector(args)`) can
+dispatch a user-defined, built-in, or loaded extension function; in a namespaced program the
+selector variable must hold a fully qualified name, since an unqualified one refers to the default
+`awk` namespace.
+
+`@load` is recognized but intentionally reported as unsupported: load Java
+[extensions](extensions.html) with the CLI `-l` option or the Java API instead.
+
+All gawk `@` forms — typed regexp literals (`@/re/`) included — are rejected in POSIX mode.
+
+${esc.h}${esc.h}${esc.h} SYMTAB and FUNCTAB
+
+Scripts that reference `SYMTAB` or `FUNCTAB` get honest, Jawk-shaped content, populated by the
+runtime itself (outside POSIX mode): `SYMTAB` holds the names of the program's globals, Jawk's
+special variables, and `-v`/host-supplied variables; `FUNCTAB` holds the names of the standard
+built-in functions (`split`, `substr`, ...), the program's user-defined functions, and the loaded
+extensions' function keywords. Reads and writes through `SYMTAB` reflect declared globals and
+managed special variables live, but arbitrary elements cannot be added or deleted and writes must
+preserve each global's scalar or array type. `FUNCTAB` is read-only. As in gawk, assigning a scalar
+to `SYMTAB` or `FUNCTAB` is a runtime error.
+
 ${esc.h}${esc.h}${esc.h} Where Jawk follows gawk
 
 Jawk follows gawk in several places where gawk departs from historical AWK:
@@ -318,6 +378,7 @@ Jawk follows gawk in several places where gawk departs from historical AWK:
 - `IGNORECASE` is a built-in special variable managed by the runtime, like `FS` or `RS`: a truthy value makes regexp matching, field and `split()` separators, string comparisons, `index()`, and gawk array sorting case-insensitive.
 - Because the [gawk compatibility extension](extensions.html#gawk) is enabled by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` are function names and can no longer be used as variables. Load an explicit extension list without `GawkExtension` to reclaim those identifiers.
 - Calling a user-defined function with more arguments than it declares is accepted: the extra expressions are evaluated and discarded, and a gawk-style warning is printed to stderr.
+- Array and scalar types follow gawk's runtime rules across function parameters and nested array references. An untyped argument remains linked to its caller until its first scalar or array use fixes the type; conflicting assignment, membership, iteration, deletion, or subarray use then fails at runtime.
 - Assigning a scalar value to an array element (`a[1] = z`) types that element as a scalar; later using it as a subarray (`a[1][2] = 3`) is a runtime error, exactly as in gawk.
 - Integral values too large for a 64-bit integer print with all their digits, as in gawk: `print 1e20` outputs `100000000000000000000` and `print 2^100` outputs `1267650600228229401496703205376`, rather than falling back to `OFMT` exponential notation. An `e`/`E` in a numeric constant that is not followed by a valid exponent is not part of the number, as in gawk: `1e` is the number `1` followed by the variable `e`.
 - `print` and `printf` resolve the leading-parenthesis ambiguity as gawk does: `print (a, b)` prints the parenthesized group as the whole argument list (which is how `print (a, b) > "file"` disambiguates a redirection from a comparison), while a single parenthesized expression followed by a comma continues the output list, as in `print (i==0), (i=="")`, and a group followed by `in` is a membership key, as in `print (1,2) in a`. A comma group followed by more arguments, such as `print (1,2), 3`, is a syntax error. More generally, outside of a `print`/`printf` argument list, a parenthesized expression list such as `(i, j)` is a grouping, not an expression, and is only valid immediately before `in`, as in `((i, j) in array)`.
@@ -325,6 +386,6 @@ Jawk follows gawk in several places where gawk departs from historical AWK:
 See Also
 --------
 
-- [Behavior changes by version](behavior-changes.html)
-- [CLI options and tuple workflows](cli-reference.html)
-- [Java compilation and reuse APIs](java-compile.html)
+- [Behavior Changes by Version](behavior-changes.html)
+- [CLI Reference](cli-reference.html)
+- [Compile, Eval, and Reuse](java-compile.html)
