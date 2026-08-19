@@ -81,7 +81,7 @@ jawk --version
 
 ## Execution Notes
 
-- `--dump-syntax`, `--dump-intermediate`, `-K`, `-h`, `-?`, `-V`, `--version`, and `--list-ext` do not execute the script, and ignore `--persist` and `JAWK_PERSISTENT_MEMORY`. `--profile` does execute it, and keeps the normal AWK output on stdout.
+- `--dump-syntax`, `--dump-intermediate`, `-K`, `-h`, `-?`, `-V`, `--version`, and `--list-ext` do not execute the script, and ignore an ambient `JAWK_PERSISTENT_MEMORY`. `--dump-syntax`, `--dump-intermediate`, and `-K` also ignore `--persist`, while the standalone modes (`-h`, `-?`, `-V`, `--version`, `--list-ext`) reject it like any other extra argument. `--profile` does execute the script, and keeps the normal AWK output on stdout.
 - `-f` compiles source now, `-L` loads a program compiled earlier. `--posix` is rejected together with `-L`: loading a precompiled program bypasses source compilation, so there is no compile-time behavior left to restrict.
 - `-S` applies at compile time as well as at run time — a sandboxed run rejects the forbidden constructs while compiling the script.
 

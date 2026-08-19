@@ -475,14 +475,9 @@ public class CliOptionTest {
 
 	@Test
 	public void versionOptionPrintsVersionAndJavaRuntime() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI --version prints the Jawk and Java versions")
-				.argument("--version")
-				.expectExit(0)
-				.run();
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "--version");
 
-		result.assertExpected();
-		String[] lines = result.lines();
+		String[] lines = output.split("\\R");
 		assertEquals(2, lines.length);
 		assertTrue(lines[0].matches("jawk \\S+"));
 		assertTrue(lines[1].startsWith("Java " + System.getProperty("java.version")));
@@ -491,16 +486,9 @@ public class CliOptionTest {
 
 	@Test
 	public void shortVersionOptionPrintsTheSameReport() throws Exception {
-		AwkTestSupport.TestResult longForm = AwkTestSupport
-				.cliTest("CLI --version output")
-				.argument("--version")
-				.run();
-		AwkTestSupport.TestResult shortForm = AwkTestSupport
-				.cliTest("CLI -V output")
-				.argument("-V")
-				.run();
-
-		assertEquals(longForm.output(), shortForm.output());
+		assertEquals(
+				runReportingMode(Collections.<String, String>emptyMap(), "--version"),
+				runReportingMode(Collections.<String, String>emptyMap(), "-V"));
 	}
 
 	@Test
@@ -532,57 +520,66 @@ public class CliOptionTest {
 
 	@Test
 	public void helpOutputUsesLauncherProgramName() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI help names the command from JAWK_PROGRAM_NAME")
-				.env("JAWK_PROGRAM_NAME", "jawk")
-				.argument("-h")
-				.run();
+		String output = runReportingMode(Collections.singletonMap("JAWK_PROGRAM_NAME", "jawk"), "-h");
 
-		assertTrue(result.output().contains("jawk [-F fs_val]"));
-		assertTrue(result.output().contains("jawk --list-ext"));
-		assertFalse(result.output().contains("java -jar"));
+		assertTrue(output.contains("jawk [-F fs_val]"));
+		assertTrue(output.contains("jawk --list-ext"));
+		assertFalse(output.contains("java -jar"));
 	}
 
 	@Test
 	public void helpOutputFallsBackToJavaJarInvocation() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI help falls back to the java -jar invocation")
-				.argument("-h")
-				.run();
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "-h");
 
-		assertTrue(result.output().contains("java -jar"));
+		assertTrue(output.contains("java -jar"));
 	}
 
 	@Test
 	public void blankProgramNameFallsBackToJavaJarInvocation() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI help ignores a blank JAWK_PROGRAM_NAME")
-				.env("JAWK_PROGRAM_NAME", "   ")
-				.argument("-h")
-				.run();
+		String output = runReportingMode(Collections.singletonMap("JAWK_PROGRAM_NAME", "   "), "-h");
 
-		assertTrue(result.output().contains("java -jar"));
+		assertTrue(output.contains("java -jar"));
 	}
 
 	@Test
 	public void helpOutputAdvertisesVersionOption() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI help advertises the version option")
-				.argument("-h")
-				.run();
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "-h");
 
-		assertTrue(result.output().contains("-V or --version"));
+		assertTrue(output.contains("-V or --version"));
 	}
 
 	@Test
 	public void helpOutputDoesNotAdvertiseUnsupportedOutputOption() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI help omits unsupported -o option")
-				.argument("-h")
-				.run();
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "-h");
 
-		assertFalse(result.output().contains("[-o output-filename]"));
-		assertFalse(result.output().contains(" -o = "));
+		assertFalse(output.contains("[-o output-filename]"));
+		assertFalse(output.contains(" -o = "));
+	}
+
+	/**
+	 * Runs the CLI in a reporting mode that does not execute an AWK script,
+	 * such as {@code -h} or {@code --version}, and captures its standard
+	 * output.
+	 *
+	 * @param environment environment variables visible to the CLI
+	 * @param args command-line arguments
+	 * @return the text printed on standard output
+	 * @throws Exception if parsing or running the CLI fails
+	 */
+	private static String runReportingMode(Map<String, String> environment, String... args) throws Exception {
+		ByteArrayOutputStream outputBytes = new ByteArrayOutputStream();
+		try (
+				PrintStream outputStream = new PrintStream(outputBytes, true, StandardCharsets.UTF_8.name());
+				PrintStream errorStream = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8.name())) {
+			Cli cli = new Cli(
+					new ByteArrayInputStream(new byte[0]),
+					outputStream,
+					errorStream,
+					environment);
+			cli.parse(args);
+			cli.run();
+		}
+		return new String(outputBytes.toByteArray(), StandardCharsets.UTF_8);
 	}
 
 	@Test
