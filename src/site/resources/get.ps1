@@ -119,6 +119,7 @@ $shim = @'
 rem Jawk launcher - https://jawk.io
 rem Locates a JRE (Java 8 or later) and runs the Jawk standalone jar.
 rem Set JAWK_JAVA_HOME to force a specific Java installation.
+rem Set JAWK_CLASSPATH to add extension jars to the JVM class path.
 
 setlocal
 set "JAWK_JAR=%~dp0..\jawk-standalone.jar"
@@ -140,7 +141,16 @@ if not defined JAWK_JAVA (
     exit /b 127
 )
 
+rem "java -jar" ignores every class path setting, so extension jars given
+rem through JAWK_CLASSPATH require naming the main class explicitly. The
+rem branch uses goto, not a parenthesized block: a JAWK_CLASSPATH value
+rem containing ) - "C:\Program Files (x86)\..." - would end a block early.
+if defined JAWK_CLASSPATH goto run_with_classpath
 "%JAWK_JAVA%" -jar "%JAWK_JAR%" %*
+exit /b %ERRORLEVEL%
+
+:run_with_classpath
+"%JAWK_JAVA%" -cp "%JAWK_JAR%;%JAWK_CLASSPATH%" io.jawk.Cli %*
 exit /b %ERRORLEVEL%
 
 rem A candidate qualifies if it runs and does not report a 1.0-1.7 version

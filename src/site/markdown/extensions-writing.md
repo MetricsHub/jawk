@@ -120,21 +120,19 @@ private Collection<Object> orderKeys(Map<Object, Object> array) {
 }
 ```
 
-## Registering Extensions
+## Making the Extension Available
 
-There are two distinct registration paths:
+There are two distinct paths for making an extension available:
 
-- Java embedding: pass the extension instance directly to `new Awk(...)`
-- CLI usage and `--list-ext`: register an instance with `ExtensionRegistry`
+- Java embedding: pass the extension instance directly to `new Awk(...)`; the registry is not involved.
+- CLI: name the extension with `-l`/`--load`. A custom extension is resolved by its **fully qualified class name**, provided the class is on the JVM class path and has a public no-argument constructor: `ExtensionRegistry` loads the class, instantiates it, and registers it — under its class name, its simple name, and its `getExtensionName()` — for the rest of the JVM.
 
-If you want the extension to show up through the registry, register it explicitly:
+Here is a complete sample extension:
 
 ```java
-public final class SampleExtension extends AbstractExtension {
+package com.company.my;
 
-    static {
-        ExtensionRegistry.register("sample", new SampleExtension());
-    }
+public final class SampleExtension extends AbstractExtension {
 
     @Override
     public String getExtensionName() {
@@ -157,6 +155,11 @@ public final class SampleExtension extends AbstractExtension {
 }
 ```
 
+Explicit `ExtensionRegistry.register("sample", SampleExtension::new)` calls are only useful in Java hosts that later resolve extensions by short name through the registry. In particular, a `static { }` registration block inside the extension class cannot make a CLI invocation aware of the extension: the block only runs once the class is loaded, and the CLI only loads extension classes named on `-l`.
+
+> [!NOTE]
+> `--list-ext` prints the identifiers registered in the current JVM and accepts no other argument, so it always lists exactly the built-in extensions. An extension jar on the class path does not appear there; load it with `-l` and its fully qualified class name instead.
+
 ## When You Still Need Custom Dispatch
 
 The annotation path is not mandatory. You may still implement `JawkExtension` directly, or override the default function-map behavior, when:
@@ -177,20 +180,19 @@ Object value = awk.eval("Repeat(3, \"ha\")");
 // value = "hahaha"
 ```
 
-Or expose it to the CLI after placing the class on the JVM classpath and registering it:
+Or run it from the CLI. Note that `java -jar` ignores `-cp`, `-classpath`, and the `CLASSPATH` environment variable entirely, so the extension jar and the Jawk standalone jar must both go on the class path, with the main class `io.jawk.Cli` named explicitly:
 
 ```shell-session
-$ java -cp my-extension.jar -jar jawk-${project.version}-standalone.jar --list-ext
-GawkExtension - io.jawk.ext.GawkExtension
-GNU Awk Compatibility - io.jawk.ext.GawkExtension
-io.jawk.ext.GawkExtension - io.jawk.ext.GawkExtension
-io.jawk.ext.StdinExtension - io.jawk.ext.StdinExtension
-sample - com.company.my.SampleExtension
-SampleExtension - com.company.my.SampleExtension
-stdin - io.jawk.ext.StdinExtension
-Stdin Support - io.jawk.ext.StdinExtension
+$ java -cp "my-extension.jar:jawk-${project.version}-standalone.jar" io.jawk.Cli -l com.company.my.SampleExtension 'BEGIN { print Repeat(3, "ha") }'
+hahaha
+```
 
-$ java -cp my-extension.jar -jar jawk-${project.version}-standalone.jar -l sample 'BEGIN { print Repeat(3, "ha") }'
+On Windows, the class path separator is `;` instead of `:`.
+
+With the `jawk` launcher installed by the [one-command installer](install.html), set `JAWK_CLASSPATH` instead — the launcher takes care of the Jawk jar, the main class, and the platform-specific separator:
+
+```shell-session
+$ JAWK_CLASSPATH=my-extension.jar jawk -l com.company.my.SampleExtension 'BEGIN { print Repeat(3, "ha") }'
 hahaha
 ```
 

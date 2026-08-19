@@ -36,6 +36,8 @@ Awk.listAvailableExtensions().forEach((name, extension) ->
 
 The registry may expose multiple identifiers for the same implementation, for example a registered name, a simple class name, and a fully qualified class name.
 
+Note that `--list-ext` must be used by itself and only shows what is already registered in the JVM, so a fresh CLI run lists exactly the built-in extensions: a custom extension jar on the classpath does not appear there. Load it with `-l` and its fully qualified class name, as described below.
+
 ## Load Extensions from the CLI
 
 Load an extension with any supported identifier:
@@ -48,7 +50,13 @@ $ jawk -l stdin -f script.awk
 $ jawk -l io.jawk.ext.StdinExtension -f script.awk
 ```
 
-If the extension class is not already registered, the CLI can still resolve it by fully qualified class name as long as the class is available on the JVM classpath.
+If the extension class is not already registered, the CLI can still resolve it by fully qualified class name as long as the class is available on the JVM classpath. With the `jawk` launcher installed by the [one-command installer](install.html), add extension jars to the classpath by setting `JAWK_CLASSPATH`:
+
+```shell-session
+$ JAWK_CLASSPATH=my-extension.jar jawk -l com.company.my.SampleExtension -f script.awk
+```
+
+When running the standalone jar with `java` directly, remember that `java -jar` ignores `-cp`, `-classpath`, and the `CLASSPATH` environment variable: put both jars on the class path and name the main class explicitly, as in `java -cp "my-extension.jar:jawk-${project.version}-standalone.jar" io.jawk.Cli ...` (with `;` instead of `:` on Windows). See [Writing Extensions](extensions-writing.html) for a complete example.
 
 ## Load Extensions from Java
 

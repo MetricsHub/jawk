@@ -60,7 +60,7 @@ jawk --list-ext
 >
 > - Extensions and sandbox
 >
->   - `-l <extension>` or `--load <extension>` loads an extension by registered identifier, simple class name, or fully qualified class name. Passing `-l` replaces the default extension set (the gawk compatibility extension), so add `-l GawkExtension` when the script still needs the gawk builtins.
+>   - `-l <extension>` or `--load <extension>` loads an extension by registered identifier, simple class name, or fully qualified class name; a class that is not registered yet resolves by its fully qualified class name only, and must be on the JVM classpath (set `JAWK_CLASSPATH` when using the `jawk` launcher). Passing `-l` replaces the default extension set (the gawk compatibility extension), so add `-l GawkExtension` when the script still needs the gawk builtins.
 >   - `--list-ext` prints the identifiers currently registered in `ExtensionRegistry` and exits. It must be used by itself.
 >   - `-S` or `--sandbox` compiles and runs the script with sandbox restrictions enabled.
 >
