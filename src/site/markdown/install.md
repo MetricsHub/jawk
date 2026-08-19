@@ -17,7 +17,7 @@ Jawk can be installed as a `jawk` executable with one command, added as a normal
 >   irm https://jawk.io/get.ps1 | iex
 >   ```
 
-The installer downloads the standalone jar of the latest Jawk release, verifies its published SHA-256 checksum when it can, and installs a `jawk` launcher — in `~/.local/bin` on Linux and macOS, under `%LOCALAPPDATA%\Jawk` on Windows, with no `sudo` needed. It tells you if that directory is not on your `PATH`, and `JAWK_INSTALL_DIR` overrides it.
+The installer downloads the standalone jar of the latest Jawk release, verifies its published SHA-256 checksum when it can, and installs a `jawk` launcher — in `~/.local/bin` on Linux and macOS, under `%LOCALAPPDATA%\Jawk` on Windows, with no `sudo` needed. It warns you if that directory is not on your `PATH`, and `JAWK_INSTALL_DIR` changes where the launcher goes.
 
 To pin a specific release instead of the latest, set `JAWK_VERSION`:
 

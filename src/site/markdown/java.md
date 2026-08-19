@@ -43,8 +43,8 @@ The output destination is not a setting: it is chosen per call, when you execute
 [Custom Output](java-output.html). For more on passing variables to scripts, see
 [Variables and Arguments](java-variables.html).
 
-By default, Jawk accepts gawk syntax as well as classic AWK syntax. Enable POSIX mode when you need
-strict classic parsing:
+By default, Jawk accepts classic AWK syntax and the [gawk extensions it implements](compatibility.html).
+Enable POSIX mode when you need strict classic parsing:
 
 ```java
 AwkSettings settings = new AwkSettings();

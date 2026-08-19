@@ -118,13 +118,14 @@ The built-in registry also includes the stdin extension, which is exposed throug
 - `StdinExtension`
 - `io.jawk.ext.StdinExtension`
 
-It provides three functions for scripts that must consume standard input without blocking the whole
-run: `StdinHasInput()` reports whether a read can proceed, `StdinGetline()` reads the next line, and
-`StdinBlock()` returns a block object that waits for standard input to become readable.
+It provides three functions for scripts that consume standard input themselves: `StdinHasInput()`
+reports whether a line can be read without waiting, `StdinGetline()` reads the next line and blocks
+until one arrives or input ends — guard it with `StdinHasInput()` when the script must not wait —
+and `StdinBlock()` returns a block object that waits for standard input to become readable.
 
 ## Sandbox Interaction
 
-Sandboxing restricts what a script may do at run time; it does not change how extensions are loaded. For a sandboxed Java embedding, construct `SandboxedAwk` with the extension instances you want to allow. For a sandboxed CLI run, combine `-S` with the `-l` options you want to preload.
+Sandboxing restricts what a script may do — at compile time as well as at run time, since the forbidden constructs are rejected while the program is compiled — but it does not change how extensions are loaded. For a sandboxed Java embedding, construct `SandboxedAwk` with the extension instances you want to allow. For a sandboxed CLI run, combine `-S` with the `-l` options you want to preload.
 
 ## See Also
 
