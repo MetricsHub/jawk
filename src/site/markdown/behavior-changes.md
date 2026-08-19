@@ -297,8 +297,11 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
   API was overhauled (`AwkSink` for customized output, `InputSource` for structured input, and a
   purely behavioral `AwkSettings`).
 - The `-r` CLI option, which disabled the trapping of Java's `IllegalFormatException` in `printf`
-  and `sprintf`, was removed along with the output refactoring. It is now rejected as an unknown
-  option. (This entry was added in a later release: the removal was not recorded at the time.)
+  and `sprintf`, was removed along with the output refactoring. It is no longer recognized as an
+  option: before the program text it is rejected as an unknown option, and after it — like any
+  unknown option once `-f` or `-L` has supplied the program — it ends option processing and reaches
+  the script through `ARGV`, where it is taken for an input file name. (This entry was added in a
+  later release: the removal was not recorded at the time.)
 - Fixed `print` argument list parsing (argument continuation detection).
 
 ## [v5.0.00](https://github.com/jawkio/jawk/releases/tag/v5.0.00) (2025-11-04)

@@ -99,7 +99,7 @@ BEGIN {
 }
 ```
 
-None of that depends on this extension, and none of it is available in POSIX mode. See [gawk source syntax](compatibility.html#gawk-source-syntax), [BEGINFILE and ENDFILE](compatibility.html#beginfile-and-endfile), and [SYMTAB and FUNCTAB](compatibility.html#symtab-and-functab) for the details.
+None of that depends on this extension. POSIX mode keeps the `nextfile` statement, as `gawk --posix` does, but turns `BEGINFILE` and `ENDFILE` into ordinary identifiers, along with `ERRNO` and `ARGIND`, leaves `SYMTAB` and `FUNCTAB` unpopulated, and rejects every `@` form. See [gawk source syntax](compatibility.html#gawk-source-syntax), [BEGINFILE and ENDFILE](compatibility.html#beginfile-and-endfile), and [SYMTAB and FUNCTAB](compatibility.html#symtab-and-functab) for the details.
 
 > [!NOTE]
 > Because these functions are registered by default, `gensub`, `typeof`, `isarray`, `asort`, `asorti`, `mkbool`, `patsplit`, `strtonum`, `systime`, `mktime`, `strftime`, `bindtextdomain`, `dcgettext`, and `dcngettext` become reserved function names. A script that uses them as variable or function identifiers must be run with an explicit extension list that omits `GawkExtension`.
