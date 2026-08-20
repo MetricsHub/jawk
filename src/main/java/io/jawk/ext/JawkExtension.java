@@ -40,22 +40,7 @@ import io.jawk.util.AwkSettings;
  * GUIs, databases, etc. natively into Jawk.
  * <p>
  * Extension functions can be used anywhere an AWK function,
- * builtin or user-defined, can be used. One immediate consideration
- * is the default Jawk input mechanism, where if action rules exist
- * (other than BEGIN/END), Jawk requires input from stdin before
- * processing these rules. It may be desirable to trigger action
- * rules on an extension rather than stdin user input. To prohibit
- * Jawk default behavior, a new command-line argument, "-ni" for
- * "no input", disables Jawk default behavior of consuming input
- * from stdin for action rules.
- * <blockquote>
- * <strong>Note:</strong> By disabling Jawk's default behavior of
- * consuming input from stdin, it can cause your script to loop
- * through all of the action rule conditions repeatedly, consuming
- * CPU without bounds. To guard against this, the extension should
- * provide some sort of poll or block call to avoid
- * out-of-control CPU resource consumption.
- * </blockquote>
+ * builtin or user-defined, can be used.
  * <p>
  * Extensions introduce keywords into the Jawk parser.
  * Keywords are of type _EXTENSION_ tokens. As a result,

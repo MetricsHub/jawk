@@ -65,9 +65,6 @@ public final class ExtensionRegistry {
 		registerBuiltin(
 				GawkExtension::new,
 				"GNU Awk Compatibility");
-		registerBuiltin(
-				StdinExtension::new,
-				"Stdin Support");
 	}
 
 	private ExtensionRegistry() {}

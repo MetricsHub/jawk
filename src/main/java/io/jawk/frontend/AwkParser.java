@@ -6013,21 +6013,7 @@ public class AwkParser {
 						literalRegexpIndexes,
 						0);
 			}
-			// isInitial == true ::
-			// retval of this extension is not a function parameter
-			// of another extension
-			// true iff Extension | FunctionCallParam | FunctionCallParam | etc.
-			boolean isInitial;
-			if (getParent() instanceof FunctionCallParamListAst) {
-				AST ptr = getParent();
-				while (ptr instanceof FunctionCallParamListAst) {
-					ptr = ptr.getParent();
-				}
-				isInitial = !(ptr instanceof ExtensionAst);
-			} else {
-				isInitial = true;
-			}
-			tuples.extension(function, paramCount, isInitial);
+			tuples.extension(function, paramCount);
 			popSourceLineNumber(tuples);
 			// an extension always returns a value, even if it is blank/null
 			return 1;

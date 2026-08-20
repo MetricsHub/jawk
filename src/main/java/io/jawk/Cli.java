@@ -47,7 +47,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import io.jawk.ext.ExtensionRegistry;
 import io.jawk.ext.JawkExtension;
-import io.jawk.ext.StdinExtension;
 import io.jawk.frontend.AstNode;
 import io.jawk.jrt.AwkRuntimeException;
 import io.jawk.jrt.OutputStreamAwkSink;
@@ -480,12 +479,6 @@ public final class Cli {
 			JawkExtension extension = ExtensionRegistry.resolve(spec);
 			if (extension == null) {
 				throw new IllegalArgumentException("Unknown extension '" + spec + "'");
-			}
-			// Replace the resolved StdinExtension with a fresh instance wired
-			// to this CLI's input stream so that StdinGetline() reads from
-			// the correct source
-			if (extension instanceof StdinExtension) {
-				extension = new StdinExtension(inputStream);
 			}
 			extensions.add(extension);
 		}

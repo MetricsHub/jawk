@@ -2087,10 +2087,9 @@ public class AwkTuples implements Serializable {
 	 *
 	 * @param function metadata describing the extension method to invoke
 	 * @param paramCount number of arguments supplied for the call
-	 * @param isInitial {@code true} when this tuple opens an extension call sequence
 	 */
-	public void extension(ExtensionFunction function, int paramCount, boolean isInitial) {
-		queue.add(new Tuple.ExtensionTuple(function, paramCount, isInitial));
+	public void extension(ExtensionFunction function, int paramCount) {
+		queue.add(new Tuple.ExtensionTuple(function, paramCount));
 	}
 
 	/**

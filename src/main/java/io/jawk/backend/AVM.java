@@ -82,8 +82,6 @@ import io.jawk.intermediate.UntypedObject;
 import io.jawk.jrt.AssocArray;
 import io.jawk.jrt.AwkRuntimeException;
 import io.jawk.jrt.AwkSink;
-import io.jawk.jrt.BlockManager;
-import io.jawk.jrt.BlockObject;
 import io.jawk.jrt.ConditionPair;
 import io.jawk.jrt.InputSource;
 import io.jawk.jrt.JRT;
@@ -2326,21 +2324,17 @@ public class AVM implements VariableManager, Closeable {
 				case EXTENSION: {
 					// arg[0] = extension function metadata
 					// arg[1] = # of args on the stack
-					// arg[2] = true if parent is NOT an extension function call
-					// (i.e., initial extension in calling expression)
 					// stack[0] = first actual parameter
 					// stack[1] = second actual parameter
 					// etc.
 					ExtensionTuple extensionTuple = (ExtensionTuple) tuple;
 					ExtensionFunction function = extensionTuple.getFunction();
 					long numArgs = extensionTuple.getArgCount();
-					boolean isInitial = extensionTuple.isInitial();
 					push(
 							invokeExtension(
 									function,
 									popArguments(numArgs),
-									position.lineNumber(),
-									isInitial));
+									position.lineNumber()));
 
 					position.next();
 					break;
@@ -2828,8 +2822,7 @@ public class AVM implements VariableManager, Closeable {
 						invokeExtension(
 								extensionFunction,
 								actualArguments,
-								position.lineNumber(),
-								true));
+								position.lineNumber()));
 			} finally {
 				if (profiling) {
 					recordFunctionExit(System.nanoTime());
@@ -3124,8 +3117,7 @@ public class AVM implements VariableManager, Closeable {
 	private Object invokeExtension(
 			ExtensionFunction function,
 			Object[] args,
-			int lineNumber,
-			boolean blockResult) {
+			int lineNumber) {
 		// Let extensions report diagnostics at the call location.
 		currentLineNumber = lineNumber;
 		String extensionClassName = function.getExtensionClassName();
@@ -3149,16 +3141,12 @@ public class AVM implements VariableManager, Closeable {
 		} finally {
 			detachReplacedArrayArgumentReferences(attachedValues);
 		}
-		if (blockResult && result instanceof BlockObject) {
-			result = new BlockManager().block((BlockObject) result);
-		}
 		if (result == null) {
 			return "";
 		}
 		if (result instanceof Number
 				|| result instanceof String
-				|| result instanceof Map
-				|| result instanceof BlockObject) {
+				|| result instanceof Map) {
 			return result;
 		}
 		return jrt.toAwkString(result);
