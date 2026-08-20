@@ -115,6 +115,18 @@ public class AwkSettings {
 	private final AtomicLong modificationCount = new AtomicLong();
 
 	/**
+	 * Creates a settings instance holding Jawk's default configuration, each
+	 * field starting at the default documented on its getter.
+	 * <p>
+	 * Use the setters to depart from it, or the shared {@link #DEFAULT_SETTINGS}
+	 * instance when the defaults are enough.
+	 * </p>
+	 */
+	public AwkSettings() {
+		// Every field is initialized with its documented default.
+	}
+
+	/**
 	 * <p>
 	 * toDescriptionString.
 	 * </p>
@@ -343,6 +355,15 @@ public class AwkSettings {
 		markModified();
 	}
 
+	/**
+	 * Records that this settings instance has been mutated, so that callers
+	 * caching derived runtime state can detect it through
+	 * {@link #getModificationCount()}.
+	 * <p>
+	 * Every mutator of this class calls it; subclasses adding their own
+	 * configuration must do the same.
+	 * </p>
+	 */
 	protected final void markModified() {
 		modificationCount.incrementAndGet();
 	}

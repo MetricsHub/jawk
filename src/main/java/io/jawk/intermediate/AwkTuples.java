@@ -62,6 +62,13 @@ public class AwkTuples implements Serializable {
 	private String sourceDescription;
 
 	/**
+	 * Creates an empty tuple list, ready for the front end to append to.
+	 */
+	public AwkTuples() {
+		// The tuples themselves are appended by the parser.
+	}
+
+	/**
 	 * Records the description of the primary script source (typically its file
 	 * name) so runtime diagnostics can point at it.
 	 *

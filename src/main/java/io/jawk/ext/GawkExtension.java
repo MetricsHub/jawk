@@ -104,6 +104,18 @@ public class GawkExtension extends AbstractExtension implements JawkExtension {
 	/** Per-domain directory bindings established by {@code bindtextdomain()}; created on first use. */
 	private Map<String, String> textdomainBindings;
 
+	/**
+	 * Creates the gawk compatibility extension.
+	 * <p>
+	 * The instance is bound to its interpreter by
+	 * {@link #initializeGawkVariables(AVM, JRT)}, which the runtime calls before
+	 * the script starts.
+	 * </p>
+	 */
+	public GawkExtension() {
+		// The interpreter is supplied by initializeGawkVariables(), not by construction.
+	}
+
 	private static final class SortEntry {
 		private final Object index;
 		private final Object value;
