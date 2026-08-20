@@ -170,13 +170,14 @@ public class Awk {
 	 * settings.
 	 * <p>
 	 * The public constructors that take no settings delegate here. The extension
-	 * set is an internal representation, so subclasses select their extensions
-	 * through the public constructors instead.
+	 * set is a private type, so this constructor is private too: a subclass could
+	 * not name the parameter type anyway, and selects its extensions through the
+	 * public constructors instead.
 	 * </p>
 	 *
 	 * @param setup extension functions and instances to bind to this engine
 	 */
-	protected Awk(ExtensionSetup setup) {
+	private Awk(ExtensionSetup setup) {
 		this(setup, new AwkSettings());
 	}
 
@@ -188,7 +189,7 @@ public class Awk {
 	 * @param settings behavioral configuration for this engine
 	 * @throws NullPointerException if {@code settings} is {@code null}
 	 */
-	protected Awk(ExtensionSetup setup, AwkSettings settings) {
+	private Awk(ExtensionSetup setup, AwkSettings settings) {
 		this.extensionFunctions = setup.functions;
 		this.extensionInstances = setup.instances;
 		this.settings = Objects.requireNonNull(settings, "settings");
