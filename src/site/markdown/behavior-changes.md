@@ -37,6 +37,11 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 - New `JawkVersion` class in `io.jawk.util`: `JawkVersion.getVersion()` returns the version of
   the running Jawk, the single source the `-V` report and the JSR 223 engine version both read
   ([#598](https://github.com/jawkio/jawk/issues/598)).
+- Every Jawk version report now reads Jawk's own Maven descriptor before the enclosing jar's
+  `Implementation-Version`. A Jawk shaded into an application uber-jar shares that jar's
+  manifest, so `-V` previously printed the host application's version instead of Jawk's; it now
+  prints Jawk's. Reports from Jawk's own jars are unchanged, as both sources agree there
+  ([#598](https://github.com/jawkio/jawk/issues/598)).
 
 ## [v7.1.00](https://github.com/jawkio/jawk/releases/tag/v7.1.00) (2026-08-20)
 

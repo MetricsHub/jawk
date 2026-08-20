@@ -50,6 +50,25 @@ public class JawkVersionTest {
 	}
 
 	@Test
+	public void theJawkOwnedDescriptorWinsOverTheEnclosingManifest() {
+		// A Jawk shaded into an application uber-jar sees that application's
+		// Implementation-Version through its own package, so the Maven
+		// descriptor - which names the artifact it belongs to - decides
+		assertEquals("7.2.00", JawkVersion.chooseVersion("7.2.00", "4.1.0-app"));
+	}
+
+	@Test
+	public void theManifestIsUsedWhenTheDescriptorIsAbsent() {
+		// Repackagers that strip META-INF/maven still leave a usable manifest
+		assertEquals("7.2.00", JawkVersion.chooseVersion(null, "7.2.00"));
+	}
+
+	@Test
+	public void unknownIsReportedWhenNeitherSourceHasAVersion() {
+		assertEquals("unknown", JawkVersion.chooseVersion(null, null));
+	}
+
+	@Test
 	public void versionIsNotTheStaleHardCodedStringItReplaced() {
 		// The JSR 223 factory used to answer with this literal, frozen at the
 		// 3.x line and eleven releases behind (issues #598 and #599)

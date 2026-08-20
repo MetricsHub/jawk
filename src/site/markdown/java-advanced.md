@@ -141,8 +141,10 @@ factory.getLanguageVersion(); // "POSIX"
 ```
 
 `getEngineVersion()`, and `getParameter(ScriptEngine.ENGINE_VERSION)` with it, resolves the
-version from the jar metadata, the same way the `-V` CLI option does. A Jawk loaded from a plain
-class directory (an IDE run, a test classpath) carries no version at all and reports `unknown`.
+version from the jar metadata, the same way the `-V` CLI option does: Jawk's Maven descriptor
+first, since it names the artifact it belongs to, then the enclosing manifest's
+`Implementation-Version`. A Jawk loaded from a plain class directory (an IDE run, a test
+classpath) has neither and reports `unknown`.
 
 Embedders that do not go through JSR 223 read the same value from
 [`JawkVersion.getVersion()`](apidocs/io/jawk/util/JawkVersion.html).

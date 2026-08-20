@@ -67,28 +67,48 @@ public final class JawkVersion {
 
 	/**
 	 * Resolves the Jawk version from the jar metadata.
-	 * <p>
-	 * The manifest's {@code Implementation-Version} entry is the primary
-	 * source; the Maven {@code pom.properties} resource is the fallback for
-	 * jars built without that entry. Both are absent when Jawk runs from a
-	 * plain class directory (IDE runs, unit tests), where the version is
-	 * reported as {@code unknown}.
 	 *
 	 * @return the version string, or {@code unknown} when no metadata is
 	 *         available
 	 */
 	private static String resolveVersion() {
 		Package myPackage = JawkVersion.class.getPackage();
-		String version = myPackage != null ? myPackage.getImplementationVersion() : null;
-		if (version == null) {
-			version = readVersionFromPomProperties();
+		return chooseVersion(
+				readVersionFromPomProperties(),
+				myPackage != null ? myPackage.getImplementationVersion() : null);
+	}
+
+	/**
+	 * Picks the version to report, preferring the one that is known to describe
+	 * Jawk itself.
+	 * <p>
+	 * The Maven {@code pom.properties} resource comes first because it names its
+	 * artifact: it can only be Jawk's. The manifest's
+	 * {@code Implementation-Version} does not, and
+	 * {@link Package#getImplementationVersion()} serves the main attributes of
+	 * whichever jar encloses the classes, so a Jawk shaded into an application
+	 * uber-jar would otherwise report the application's version. It stays as the
+	 * fallback for jars repackaged without the Maven descriptor. Neither is
+	 * present when Jawk runs from a plain class directory (IDE runs, unit
+	 * tests).
+	 *
+	 * @param pomPropertiesVersion version read from the Maven descriptor, or
+	 *        {@code null} when it is absent
+	 * @param manifestVersion version the enclosing manifest declares, or
+	 *        {@code null} when it declares none
+	 * @return the version to report, or {@code unknown} when neither source has
+	 *         one
+	 */
+	static String chooseVersion(String pomPropertiesVersion, String manifestVersion) {
+		if (pomPropertiesVersion != null) {
+			return pomPropertiesVersion;
 		}
-		return version != null ? version : UNKNOWN_VERSION;
+		return manifestVersion != null ? manifestVersion : UNKNOWN_VERSION;
 	}
 
 	/**
 	 * Reads the Jawk version from the Maven {@code pom.properties} resource
-	 * packaged in the jar.
+	 * packaged in the jar, the descriptor of the {@code io.jawk:jawk} artifact.
 	 *
 	 * @return the version string, or {@code null} when the resource is absent
 	 *         or unreadable
