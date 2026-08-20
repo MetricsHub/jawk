@@ -29,6 +29,17 @@ import javax.script.ScriptEngineFactory;
 /** ScriptEngineFactory for Jawk. */
 public class JawkScriptEngineFactory implements ScriptEngineFactory {
 
+	/**
+	 * Creates the factory.
+	 * <p>
+	 * This is the constructor the JSR-223 {@link javax.script.ScriptEngineManager}
+	 * uses when it discovers Jawk through the service loader.
+	 * </p>
+	 */
+	public JawkScriptEngineFactory() {
+		// Stateless: every engine is created by getScriptEngine().
+	}
+
 	@Override
 	public String getEngineName() {
 		return "Jawk";

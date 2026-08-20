@@ -165,20 +165,55 @@ public class Awk {
 		this(createExtensionSetup(Arrays.asList(extensions)));
 	}
 
+	/**
+	 * Creates an engine from an already resolved extension set, with default
+	 * settings.
+	 * <p>
+	 * The public constructors that take no settings delegate here. The extension
+	 * set is an internal representation, so subclasses select their extensions
+	 * through the public constructors instead.
+	 * </p>
+	 *
+	 * @param setup extension functions and instances to bind to this engine
+	 */
 	protected Awk(ExtensionSetup setup) {
 		this(setup, new AwkSettings());
 	}
 
+	/**
+	 * Creates an engine from an already resolved extension set and the given
+	 * settings. Every other constructor ends up here.
+	 *
+	 * @param setup extension functions and instances to bind to this engine
+	 * @param settings behavioral configuration for this engine
+	 * @throws NullPointerException if {@code settings} is {@code null}
+	 */
 	protected Awk(ExtensionSetup setup, AwkSettings settings) {
 		this.extensionFunctions = setup.functions;
 		this.extensionInstances = setup.instances;
 		this.settings = Objects.requireNonNull(settings, "settings");
 	}
 
+	/**
+	 * Returns the extension functions bound to this engine, keyed by the Awk
+	 * function name that calls them.
+	 *
+	 * @return an unmodifiable map of Awk function name to implementation
+	 */
 	protected Map<String, ExtensionFunction> getExtensionFunctions() {
 		return extensionFunctions;
 	}
 
+	/**
+	 * Returns the extension instances bound to this engine, keyed by their
+	 * {@link JawkExtension#getExtensionName() extension name}.
+	 * <p>
+	 * Subclasses pass this map on when they build their own interpreter, as
+	 * {@link SandboxedAwk} does.
+	 * </p>
+	 *
+	 * @return an unmodifiable map of extension name to extension instance
+	 */
 	protected Map<String, JawkExtension> getExtensionInstances() {
 		return extensionInstances;
 	}

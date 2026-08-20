@@ -279,7 +279,12 @@
 					<notimestamp>true</notimestamp>
 					<failOnError>false</failOnError>
 					<sourcepath>${project.basedir}/src/main/java</sourcepath>
-					<doclint>all,-missing</doclint>
+					<!-- Full doclint, missing comments included, so that "mvn verify" reports
+					     what the Javadoc report of the site would report (see issue #596).
+					     Note that the <reporting> declaration below does not inherit this
+					     configuration: Maven keeps build and reporting configuration separate,
+					     and the report runs with the plugin defaults (show=protected). -->
+					<doclint>all</doclint>
 				</configuration>
 				<executions>
 					<execution>

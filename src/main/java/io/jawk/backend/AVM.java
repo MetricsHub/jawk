@@ -249,6 +249,18 @@ public class AVM implements VariableManager, Closeable {
 		initExtensions();
 	}
 
+	/**
+	 * Creates the runtime this interpreter drives.
+	 * <p>
+	 * Called once from the constructor, so that a subclass can install its own
+	 * runtime — {@link SandboxedAVM} returns a
+	 * {@link io.jawk.jrt.SandboxedJRT} this way. It runs before the subclass
+	 * constructor body, so an override must not depend on the subclass's own
+	 * fields.
+	 * </p>
+	 *
+	 * @return the runtime bound to this interpreter, never {@code null}
+	 */
 	protected JRT createJrt() {
 		return new JRT(this, this.settings.getLocale(), AwkSink.NOP_SINK, null);
 	}

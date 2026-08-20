@@ -34,6 +34,13 @@ import io.jawk.intermediate.AwkTuples;
 public abstract class AstNode {
 
 	/**
+	 * Creates an abstract syntax tree node.
+	 */
+	protected AstNode() {
+		// Subclasses carry the state of the node they represent.
+	}
+
+	/**
 	 * Dump a meaningful text representation of this abstract syntax tree node to
 	 * the output (print) stream. Either it is called directly by the application
 	 * program, or it is called by the parent node of this tree node.

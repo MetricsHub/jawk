@@ -38,6 +38,13 @@ public class HashAssocArray extends HashMap<Object, Object> implements AssocArra
 	private static final long serialVersionUID = 1L;
 
 	/**
+	 * Creates an empty associative array.
+	 */
+	public HashAssocArray() {
+		// An AWK array starts out empty; keys are created on first access.
+	}
+
+	/**
 	 * Returns the value to which the specified key is mapped, normalizing the key
 	 * first. If the key does not exist, a blank ({@link io.jawk.intermediate.UninitializedObject})
 	 * is inserted and returned, as required by AWK semantics.

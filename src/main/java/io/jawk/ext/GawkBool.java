@@ -28,6 +28,8 @@ package io.jawk.ext;
 public final class GawkBool extends Number {
 
 	private static final long serialVersionUID = 1L;
+
+	/** Boolean this number carries; {@code 1} when true, {@code 0} when false. */
 	private final boolean value;
 
 	/**

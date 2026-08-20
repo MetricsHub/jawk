@@ -20,10 +20,17 @@ package io.jawk.intermediate;
  * License along with this program.  If not, see
  * <http://www.gnu.org/licenses/lgpl-3.0.html>.
  * ╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱
- *
+ */
+
+/**
+ * Instruction set of the AVM: the opcode of every tuple that {@link AwkTuples}
+ * produces and {@link io.jawk.backend.AVM} executes.
  * <p>
  * Each enum constant describes one tuple opcode understood by the AVM.
  * </p>
+ *
+ * @see AwkTuples
+ * @see Tuple
  */
 public enum Opcode {
 	/**

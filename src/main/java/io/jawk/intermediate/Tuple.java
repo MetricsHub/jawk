@@ -45,8 +45,14 @@ import io.jawk.ext.ExtensionFunction;
 public abstract class Tuple implements Serializable {
 
 	private static final long serialVersionUID = 8105941219003992817L;
+
+	/** Opcode the AVM executes for this tuple. */
 	private final Opcode opcode;
+
+	/** Source line this tuple was generated from, {@code -1} when unknown. */
 	private int lineNumber = -1;
+
+	/** Next tuple in execution order, {@code null} at the end of the stream. */
 	private Tuple next = null;
 
 	Tuple(Opcode opcode) {
@@ -182,6 +188,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class PushLongTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Literal long value pushed onto the operand stack. */
 		private final long value;
 
 		PushLongTuple(long value) {
@@ -209,6 +217,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class PushDoubleTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Literal double value pushed onto the operand stack. */
 		private final double value;
 
 		PushDoubleTuple(double value) {
@@ -236,6 +246,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class PushStringTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Literal string value pushed onto the operand stack. */
 		private final String value;
 
 		PushStringTuple(String value) {
@@ -263,6 +275,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static class CountTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Count operand of the opcode. */
 		private final long count;
 
 		CountTuple(Opcode opcode, long count) {
@@ -290,6 +304,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class CountAndAppendTuple extends CountTuple {
 		private static final long serialVersionUID = 1L;
+
+		/** {@code true} when the redirection appends instead of truncating. */
 		private final boolean append;
 
 		CountAndAppendTuple(Opcode opcode, long count, boolean append) {
@@ -317,6 +333,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static class LongTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Long operand, interpreted by the opcode rather than by this tuple. */
 		private final long value;
 
 		LongTuple(Opcode opcode, long value) {
@@ -364,6 +382,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static class AddressTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Jump target, repointed by the optimizer when tuples move. */
 		private Address address;
 
 		AddressTuple(Opcode opcode, Address address) {
@@ -391,7 +411,11 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static class VariableTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Offset of the variable within its frame. */
 		private final long variableOffset;
+
+		/** {@code true} when the offset addresses the global frame. */
 		private final boolean global;
 
 		VariableTuple(Opcode opcode, long variableOffset, boolean global) {
@@ -473,8 +497,14 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class DereferenceTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Offset of the variable within its frame. */
 		private final long variableOffset;
+
+		/** {@code true} when the variable must be initialized as an array. */
 		private final boolean array;
+
+		/** {@code true} when the offset addresses the global frame. */
 		private final boolean global;
 
 		DereferenceTuple(long variableOffset, boolean array, boolean global) {
@@ -522,6 +552,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class BooleanTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Boolean operand of the opcode. */
 		private final boolean value;
 
 		BooleanTuple(Opcode opcode, boolean value) {
@@ -549,6 +581,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class SubstitutionVariableTuple extends VariableTuple {
 		private static final long serialVersionUID = 1L;
+
+		/** {@code true} for {@code gsub}, {@code false} for {@code sub}. */
 		private final boolean globalSubstitution;
 
 		SubstitutionVariableTuple(Opcode opcode, long variableOffset, boolean global, boolean globalSubstitution) {
@@ -576,7 +610,11 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class RegexTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Original regular expression text, as written in the script. */
 		private final String regex;
+
+		/** Regular expression precompiled at parse time. */
 		private final Pattern pattern;
 
 		RegexTuple(String regex, Pattern pattern) {
@@ -614,6 +652,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class ClassTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Runtime type the checked value must be an instance of. */
 		private final Class<?> type;
 
 		ClassTuple(Class<?> type) {
@@ -641,7 +681,11 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class FunctionTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Name of the function being defined. */
 		private final String functionName;
+
+		/** Number of formal parameters the function declares. */
 		private final long numFormalParams;
 
 		FunctionTuple(String functionName, long numFormalParams) {
@@ -680,8 +724,14 @@ public abstract class Tuple implements Serializable {
 	public static final class CallFunctionTuple extends AddressTuple {
 		private static final long serialVersionUID = 1L;
 		private transient Supplier<Address> addressSupplier;
+
+		/** Name of the called function. */
 		private final String functionName;
+
+		/** Number of formal parameters the called function declares. */
 		private final long numFormalParams;
+
+		/** Number of arguments this call site evaluates. */
 		private final long numActualParams;
 
 		CallFunctionTuple(
@@ -759,8 +809,14 @@ public abstract class Tuple implements Serializable {
 	public static final class IndirectFunctionTarget implements Serializable {
 		private static final long serialVersionUID = 1L;
 		private transient Supplier<Address> addressSupplier;
+
+		/** Function entry point, resolved from the supplier on first access. */
 		private Address address;
+
+		/** Number of formal parameters the target function declares. */
 		private final long numFormalParams;
+
+		/** Zero-based indexes of the formal parameters that are arrays. */
 		private final Set<Integer> arrayParameterIndexes;
 
 		/**
@@ -822,10 +878,20 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class IndirectCallTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** User-defined functions the call site may resolve to, by name. */
 		private final Map<String, IndirectFunctionTarget> userFunctions;
+
+		/** Extension functions the call site may resolve to, by name. */
 		private final Map<String, ExtensionFunction> extensionFunctions;
+
+		/** Number of arguments this call site evaluates. */
 		private final long numActualParams;
+
+		/** Script source name this call site comes from, for runtime diagnostics. */
 		private final String sourceName;
+
+		/** Script source line this call site comes from, for runtime diagnostics. */
 		private final int sourceLine;
 
 		IndirectCallTuple(
@@ -917,7 +983,11 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class ExtensionTuple extends Tuple {
 		private static final long serialVersionUID = 2L;
+
+		/** Extension function this tuple invokes. */
 		private final ExtensionFunction function;
+
+		/** Number of arguments passed to the extension function. */
 		private final long argCount;
 
 		ExtensionTuple(ExtensionFunction function, long argCount) {
@@ -962,6 +1032,8 @@ public abstract class Tuple implements Serializable {
 	 */
 	public static final class WarningTuple extends Tuple {
 		private static final long serialVersionUID = 1L;
+
+		/** Diagnostic text printed to the warning stream. */
 		private final String message;
 
 		WarningTuple(String message) {

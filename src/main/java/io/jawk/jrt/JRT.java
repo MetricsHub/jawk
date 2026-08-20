@@ -2425,6 +2425,9 @@ public class JRT {
 	}
 
 	/**
+	 * Reports whether a record is currently loaded, and therefore whether the
+	 * input fields hold anything.
+	 *
 	 * @return true if at least one input field has been initialized.
 	 */
 	public boolean hasInputFields() {
@@ -2516,6 +2519,16 @@ public class JRT {
 		return value;
 	}
 
+	/**
+	 * Rebuilds {@code $0} from the current field values, joining them with
+	 * {@code OFS}, and caches the result as the current input line.
+	 * <p>
+	 * Does nothing when no record is loaded. Provided for subclasses that mutate
+	 * the fields directly rather than through
+	 * {@link #jrtSetInputField(Object, long)}, so that {@code $0} stays
+	 * consistent with them.
+	 * </p>
+	 */
 	protected void rebuildDollarZeroFromFields() {
 		if (recordState != null) {
 			recordState.markRecordTextDirty();

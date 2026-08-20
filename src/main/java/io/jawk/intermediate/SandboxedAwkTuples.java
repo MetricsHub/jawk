@@ -32,6 +32,13 @@ public class SandboxedAwkTuples extends AwkTuples {
 
 	private static final long serialVersionUID = 1L;
 
+	/**
+	 * Creates an empty sandboxed tuple list.
+	 */
+	public SandboxedAwkTuples() {
+		// Same initial state as AwkTuples: only the denied operations differ.
+	}
+
 	private static void deny(String message) {
 		throw new AwkSandboxException(message);
 	}

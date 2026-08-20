@@ -35,6 +35,8 @@ import java.lang.annotation.Target;
 public @interface JawkFunction {
 
 	/**
+	 * Name under which the annotated method is callable from an Awk script.
+	 *
 	 * @return the Awk function name that should be mapped to the annotated method.
 	 */
 	String value();

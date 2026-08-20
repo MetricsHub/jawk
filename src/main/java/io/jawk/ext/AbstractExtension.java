@@ -55,6 +55,20 @@ public abstract class AbstractExtension implements JawkExtension {
 	private Map<String, ExtensionFunction> annotatedFunctions;
 	private List<Method> beforeStartMethods;
 
+	/**
+	 * Creates an extension that is not bound to a runtime yet.
+	 * <p>
+	 * {@link ExtensionRegistry} instantiates a subclass through its no-arg
+	 * constructor, then the runtime calls
+	 * {@link #init(VariableManager, JRT, AwkSettings)} to supply the variable
+	 * manager, the runtime, and the settings, before any of the extension's Awk
+	 * functions can be called.
+	 * </p>
+	 */
+	protected AbstractExtension() {
+		// The runtime handles are supplied by init(), not by construction.
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	public String getExtensionName() {
