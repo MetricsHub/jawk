@@ -275,15 +275,18 @@
 				<configuration>
 					<detectJavaApiLink>false</detectJavaApiLink>
 					<release>${maven.compiler.release}</release>
-					<show>public</show>
+					<show>protected</show>
 					<notimestamp>true</notimestamp>
 					<failOnError>false</failOnError>
 					<sourcepath>${project.basedir}/src/main/java</sourcepath>
-					<!-- Full doclint, missing comments included, so that "mvn verify" reports
-					     what the Javadoc report of the site would report (see issue #596).
-					     Note that the <reporting> declaration below does not inherit this
-					     configuration: Maven keeps build and reporting configuration separate,
-					     and the report runs with the plugin defaults (show=protected). -->
+					<!-- Full doclint, missing comments included, and the same visibility as
+					     the site's Javadoc report, so that "mvn verify" reports what the
+					     report would report (see issue #596). The <reporting> declaration
+					     below does not inherit this configuration (Maven keeps build and
+					     reporting configuration separate) and runs with the plugin defaults,
+					     of which show=protected is one: hence protected above, or an
+					     undocumented protected member would stay silent until the site is
+					     built. -->
 					<doclint>all</doclint>
 				</configuration>
 				<executions>

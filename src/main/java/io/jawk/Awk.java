@@ -205,14 +205,15 @@ public class Awk {
 	}
 
 	/**
-	 * Returns the extension instances bound to this engine, keyed by their
-	 * {@link JawkExtension#getExtensionName() extension name}.
+	 * Returns the extension instances bound to this engine, keyed by the fully
+	 * qualified name of their class, which is how the interpreter looks them up
+	 * when a tuple invokes an extension function.
 	 * <p>
 	 * Subclasses pass this map on when they build their own interpreter, as
 	 * {@link SandboxedAwk} does.
 	 * </p>
 	 *
-	 * @return an unmodifiable map of extension name to extension instance
+	 * @return an unmodifiable map of extension class name to extension instance
 	 */
 	protected Map<String, JawkExtension> getExtensionInstances() {
 		return extensionInstances;
