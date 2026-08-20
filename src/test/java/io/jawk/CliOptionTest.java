@@ -474,14 +474,112 @@ public class CliOptionTest {
 	}
 
 	@Test
-	public void helpOutputDoesNotAdvertiseUnsupportedOutputOption() throws Exception {
-		AwkTestSupport.TestResult result = AwkTestSupport
-				.cliTest("CLI help omits unsupported -o option")
-				.argument("-h")
-				.run();
+	public void versionOptionPrintsVersionAndJavaRuntime() throws Exception {
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "--version");
 
-		assertFalse(result.output().contains("[-o output-filename]"));
-		assertFalse(result.output().contains(" -o = "));
+		String[] lines = output.split("\\R");
+		assertEquals(2, lines.length);
+		assertTrue(lines[0].matches("jawk \\S+"));
+		assertTrue(lines[1].startsWith("Java " + System.getProperty("java.version")));
+		assertTrue(lines[1].contains(System.getProperty("java.vm.name")));
+	}
+
+	@Test
+	public void shortVersionOptionPrintsTheSameReport() throws Exception {
+		assertEquals(
+				runReportingMode(Collections.<String, String>emptyMap(), "--version"),
+				runReportingMode(Collections.<String, String>emptyMap(), "-V"));
+	}
+
+	@Test
+	public void versionOptionRejectsOtherArguments() {
+		IllegalArgumentException after = assertThrows(
+				IllegalArgumentException.class,
+				() -> new Cli().parse(new String[]
+				{ "--version", "-t" }));
+		assertTrue(after.getMessage().contains("When printing the version"));
+
+		IllegalArgumentException before = assertThrows(
+				IllegalArgumentException.class,
+				() -> new Cli().parse(new String[]
+				{ "-t", "-V" }));
+		assertTrue(before.getMessage().contains("When printing the version"));
+	}
+
+	@Test
+	public void versionOptionAfterProgramTextStaysInArgv() throws Exception {
+		// Like any option after the program text, --version belongs to the
+		// script through ARGV (gawk behavior), not to the CLI
+		AwkTestSupport
+				.cliTest("CLI --version after the program text stays in ARGV")
+				.script("BEGIN { print ARGV[1] }")
+				.operand("--version")
+				.expectLines("--version")
+				.runAndAssert();
+	}
+
+	@Test
+	public void helpOutputUsesLauncherProgramName() throws Exception {
+		String output = runReportingMode(Collections.singletonMap("JAWK_PROGRAM_NAME", "jawk"), "-h");
+
+		assertTrue(output.contains("jawk [-F fs_val]"));
+		assertTrue(output.contains("jawk --list-ext"));
+		assertFalse(output.contains("java -jar"));
+	}
+
+	@Test
+	public void helpOutputFallsBackToJavaJarInvocation() throws Exception {
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "-h");
+
+		assertTrue(output.contains("java -jar"));
+	}
+
+	@Test
+	public void blankProgramNameFallsBackToJavaJarInvocation() throws Exception {
+		String output = runReportingMode(Collections.singletonMap("JAWK_PROGRAM_NAME", "   "), "-h");
+
+		assertTrue(output.contains("java -jar"));
+	}
+
+	@Test
+	public void helpOutputAdvertisesVersionOption() throws Exception {
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "-h");
+
+		assertTrue(output.contains("-V or --version"));
+	}
+
+	@Test
+	public void helpOutputDoesNotAdvertiseUnsupportedOutputOption() throws Exception {
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "-h");
+
+		assertFalse(output.contains("[-o output-filename]"));
+		assertFalse(output.contains(" -o = "));
+	}
+
+	/**
+	 * Runs the CLI in a reporting mode that does not execute an AWK script,
+	 * such as {@code -h} or {@code --version}, and captures its standard
+	 * output.
+	 *
+	 * @param environment environment variables visible to the CLI
+	 * @param args command-line arguments
+	 * @return the text printed on standard output
+	 * @throws Exception if parsing or running the CLI fails
+	 */
+	private static String runReportingMode(Map<String, String> environment, String... args) throws Exception {
+		ByteArrayOutputStream outputBytes = new ByteArrayOutputStream();
+		try (
+				PrintStream outputStream = new PrintStream(outputBytes, true, StandardCharsets.UTF_8.name());
+				PrintStream errorStream = new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8.name())) {
+			Cli cli = new Cli(
+					new ByteArrayInputStream(new byte[0]),
+					outputStream,
+					errorStream,
+					environment);
+			cli.parse(args);
+			cli.run();
+		}
+		return new String(outputBytes.toByteArray(), StandardCharsets.UTF_8);
 	}
 
 	@Test

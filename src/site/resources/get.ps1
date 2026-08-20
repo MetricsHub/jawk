@@ -124,6 +124,10 @@ rem Set JAWK_CLASSPATH to add extension jars to the JVM class path.
 setlocal
 set "JAWK_JAR=%~dp0..\jawk-standalone.jar"
 
+rem Pass the launcher's own invocation name so the CLI's help names the
+rem command the user actually typed instead of "java -jar ...".
+set "JAWK_PROGRAM_NAME=%~n0"
+
 if not exist "%JAWK_JAR%" (
     echo ERROR: %JAWK_JAR% not found; re-run the installer: 1>&2
     echo   irm https://jawk.io/get.ps1 ^| iex 1>&2

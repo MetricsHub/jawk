@@ -331,6 +331,8 @@
 				<configuration>
 					<archive>
 						<manifest>
+							<!-- Implementation-Version backs the CLI's -V version report -->
+							<addDefaultImplementationEntries>true</addDefaultImplementationEntries>
 							<packageName>${project.groupId}</packageName>
 							<mainClass>io.jawk.Cli</mainClass>
 						</manifest>

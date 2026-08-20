@@ -85,6 +85,30 @@ jobs:
           out="$(printf 'hello world\n' | "${HOME}/.local/bin/jawk" '{ print $2 }')"
           [ "${out}" = "world" ] || { echo "ERROR: expected 'world' but got '${out}'." >&2; exit 1; }
 
+      - name: Check the version and help output of the launcher
+        shell: bash
+        run: |
+          # The launcher exports JAWK_PROGRAM_NAME so the CLI names the jawk
+          # command in its help instead of "java -jar ...". Releases up to
+          # 7.0.01 predate --version and JAWK_PROGRAM_NAME: skip only those,
+          # so a --version regression in a later release fails this job.
+          latest="${{ steps.release.outputs.version }}"
+          if [ "$(printf '%s\n' 7.0.01 "${latest}" | sort -V | tail -n 1)" = "7.0.01" ]; then
+            echo "Release ${latest} predates --version; skipping the version and help assertions."
+            exit 0
+          fi
+          out="$("${HOME}/.local/bin/jawk" --version)"
+          printf '%s\n' "${out}"
+          printf '%s\n' "${out}" | head -n 1 | grep -Eq '^jawk [0-9]' \
+            || { echo "ERROR: --version does not report 'jawk <version>'." >&2; exit 1; }
+          help="$("${HOME}/.local/bin/jawk" -h)"
+          printf '%s\n' "${help}" | grep -q '^jawk ' \
+            || { echo "ERROR: the help output does not name the jawk launcher." >&2; exit 1; }
+          if printf '%s\n' "${help}" | grep -Fq 'java -jar'; then
+            echo "ERROR: the help of the installed launcher mentions 'java -jar'." >&2
+            exit 1
+          fi
+
       - name: Load a custom extension through JAWK_CLASSPATH
         shell: bash
         run: |
@@ -191,6 +215,40 @@ jobs:
           $out = & $shim 'BEGIN { print 6 * 7 }'
           if ($LASTEXITCODE -ne 0) { throw "jawk.cmd exited with $LASTEXITCODE." }
           if ("$out" -ne '42') { throw "Expected '42' but got '$out'." }
+
+      - name: Check the version and help output of the shim
+        run: |
+          # The shim sets JAWK_PROGRAM_NAME so the CLI names the jawk command
+          # in its help instead of "java -jar ...". Releases up to 7.0.01
+          # predate --version and JAWK_PROGRAM_NAME: skip only those, read
+          # from the installed jar's pom.properties, so a --version
+          # regression in a later release fails this job.
+          $jarPath = Join-Path $env:LOCALAPPDATA 'Jawk\jawk-standalone.jar'
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($jarPath)
+          try {
+            $entry = $zip.GetEntry('META-INF/maven/io.jawk/jawk/pom.properties')
+            $reader = New-Object System.IO.StreamReader($entry.Open())
+            try { $props = $reader.ReadToEnd() } finally { $reader.Dispose() }
+          } finally {
+            $zip.Dispose()
+          }
+          $installed = (($props -split '\r?\n' | Where-Object { $_ -match '^version=' }) -replace '^version=', '').Trim()
+          if (-not $installed) { throw 'Could not read the installed Jawk version from pom.properties.' }
+          if ([version]$installed -le [version]'7.0.01') {
+            Write-Host "Release $installed predates --version; skipping the version and help assertions."
+            exit 0
+          }
+          $shim = Join-Path $env:LOCALAPPDATA 'Jawk\bin\jawk.cmd'
+          $out = & $shim --version | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 0) { throw "jawk.cmd --version exited with $LASTEXITCODE." }
+          Write-Host ($out -join "`n")
+          if ("$($out | Select-Object -First 1)" -notmatch '^jawk [0-9]') { throw "--version does not report 'jawk <version>'." }
+          $help = & $shim -h | ForEach-Object { "$_" }
+          if ($LASTEXITCODE -ne 0) { throw "jawk.cmd -h exited with $LASTEXITCODE." }
+          if (-not ($help | Where-Object { $_ -match '^jawk ' })) { throw 'The help output does not name the jawk launcher.' }
+          if (($help -join "`n") -match 'java -jar') { throw "The help of the installed shim mentions 'java -jar'." }
+          exit 0
 
       - name: Load a custom extension through JAWK_CLASSPATH
         run: |

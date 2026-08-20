@@ -151,6 +151,11 @@ cat > "${LAUNCHER_PATH}" <<LAUNCHER
 
 JAWK_JAR=${JAR_PATH_SQ}
 
+# Pass the launcher's own invocation name so the CLI's help names the
+# command the user actually typed instead of "java -jar ...".
+JAWK_PROGRAM_NAME="\${0##*/}"
+export JAWK_PROGRAM_NAME
+
 if [ ! -f "\${JAWK_JAR}" ]; then
 	echo "ERROR: \${JAWK_JAR} not found; re-run the installer:" >&2
 	echo "  curl -fsSL https://jawk.io/get | sh" >&2
