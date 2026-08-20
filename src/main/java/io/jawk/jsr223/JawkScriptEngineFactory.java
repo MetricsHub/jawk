@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineFactory;
+import io.jawk.util.JawkVersion;
 
 /** ScriptEngineFactory for Jawk. */
 public class JawkScriptEngineFactory implements ScriptEngineFactory {
@@ -45,9 +46,18 @@ public class JawkScriptEngineFactory implements ScriptEngineFactory {
 		return "Jawk";
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * <p>
+	 * The version of the Jawk that is running, the same one {@code jawk -V}
+	 * prints, resolved from the jar metadata by
+	 * {@link JawkVersion#getVersion()}. It is {@code unknown} when Jawk runs
+	 * from a plain class directory, which carries no version at all.
+	 * </p>
+	 */
 	@Override
 	public String getEngineVersion() {
-		return "3.3.06-SNAPSHOT";
+		return JawkVersion.getVersion();
 	}
 
 	@Override
@@ -70,9 +80,18 @@ public class JawkScriptEngineFactory implements ScriptEngineFactory {
 		return "awk";
 	}
 
+	/**
+	 * {@inheritDoc}
+	 * <p>
+	 * {@code POSIX}: the language Jawk implements is POSIX awk, which is
+	 * specified by revision rather than by a version number of its own. Jawk's
+	 * own version, which does move from release to release, is
+	 * {@link #getEngineVersion()}.
+	 * </p>
+	 */
 	@Override
 	public String getLanguageVersion() {
-		return "1";
+		return "POSIX";
 	}
 
 	@Override

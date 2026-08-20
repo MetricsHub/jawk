@@ -47,6 +47,8 @@ import org.junit.Test;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 import io.jawk.frontend.ast.ParserException;
+import io.jawk.jsr223.JawkScriptEngineFactory;
+import io.jawk.util.JawkVersion;
 
 public class CliOptionTest {
 
@@ -482,6 +484,17 @@ public class CliOptionTest {
 		assertTrue(lines[0].matches("jawk \\S+"));
 		assertTrue(lines[1].startsWith("Java " + System.getProperty("java.version")));
 		assertTrue(lines[1].contains(System.getProperty("java.vm.name")));
+	}
+
+	@Test
+	public void versionOptionAndScriptEngineFactoryReportTheSameVersion() throws Exception {
+		// One source of truth for the version, so the CLI report and the JSR 223
+		// report cannot drift apart again (issues #598 and #599)
+		String output = runReportingMode(Collections.<String, String>emptyMap(), "--version");
+		String reported = output.split("\\R")[0].substring("jawk ".length());
+
+		assertEquals(JawkVersion.getVersion(), reported);
+		assertEquals(reported, new JawkScriptEngineFactory().getEngineVersion());
 	}
 
 	@Test

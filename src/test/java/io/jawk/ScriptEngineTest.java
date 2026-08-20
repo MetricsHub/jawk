@@ -23,6 +23,7 @@ package io.jawk;
  */
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.io.ByteArrayInputStream;
@@ -32,8 +33,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import javax.script.Bindings;
 import javax.script.ScriptEngine;
+import javax.script.ScriptEngineFactory;
 import javax.script.ScriptEngineManager;
 import org.junit.Test;
+import io.jawk.util.JawkVersion;
 
 public class ScriptEngineTest {
 
@@ -72,5 +75,41 @@ public class ScriptEngineTest {
 		engine.eval("BEGIN { print values[1] }", bindings);
 
 		assertEquals("bbb\n", result.toString());
+	}
+
+	@Test
+	public void factoryReportsTheRunningJawkVersion() {
+		ScriptEngineFactory factory = factory();
+
+		// Issues #598 and #599: the factory used to answer with a literal
+		// frozen at the 3.x line, so every host was told it ran a Jawk that
+		// had not shipped in eleven releases
+		assertNotEquals("3.3.06-SNAPSHOT", factory.getEngineVersion());
+		assertEquals(JawkVersion.getVersion(), factory.getEngineVersion());
+		assertEquals(
+				factory.getEngineVersion(),
+				factory.getParameter(ScriptEngine.ENGINE_VERSION));
+	}
+
+	@Test
+	public void factoryReportsPosixAsTheLanguageVersion() {
+		ScriptEngineFactory factory = factory();
+
+		assertEquals("awk", factory.getLanguageName());
+		assertEquals("POSIX", factory.getLanguageVersion());
+		assertEquals(
+				factory.getLanguageVersion(),
+				factory.getParameter(ScriptEngine.LANGUAGE_VERSION));
+	}
+
+	/**
+	 * Returns the factory of the Jawk engine, as a JSR 223 host reaches it.
+	 *
+	 * @return the discovered Jawk {@link ScriptEngineFactory}
+	 */
+	private static ScriptEngineFactory factory() {
+		ScriptEngine engine = new ScriptEngineManager().getEngineByName("jawk");
+		assertNotNull("Jawk ScriptEngine not found", engine);
+		return engine.getFactory();
 	}
 }
