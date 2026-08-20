@@ -28,8 +28,8 @@ import static org.junit.Assert.assertSame;
 import java.util.Map;
 import org.junit.Test;
 import io.jawk.ext.ExtensionFunction;
+import io.jawk.ext.GawkExtension;
 import io.jawk.ext.JawkExtension;
-import io.jawk.ext.StdinExtension;
 
 /**
  * Tests discovery of available {@link io.jawk.ext.JawkExtension}s.
@@ -39,15 +39,15 @@ public class AvailableExtensionsTest {
 	@Test
 	public void testListAvailableExtensions() {
 		Map<String, JawkExtension> ext = Awk.listAvailableExtensions();
-		assertSame(StdinExtension.class, ext.get("stdin").getClass());
+		assertSame(GawkExtension.class, ext.get("GawkExtension").getClass());
 	}
 
 	@Test
 	public void testExtensionNames() {
 		Map<String, JawkExtension> ext = Awk.listAvailableExtensions();
-		assertSame(StdinExtension.class, ext.get(StdinExtension.class.getSimpleName()).getClass());
-		assertSame(StdinExtension.class, ext.get(StdinExtension.class.getName()).getClass());
-		assertSame(StdinExtension.class, ext.get("Stdin Support").getClass());
+		assertSame(GawkExtension.class, ext.get(GawkExtension.class.getSimpleName()).getClass());
+		assertSame(GawkExtension.class, ext.get(GawkExtension.class.getName()).getClass());
+		assertSame(GawkExtension.class, ext.get("GNU Awk Compatibility").getClass());
 	}
 
 	@Test
@@ -63,16 +63,16 @@ public class AvailableExtensionsTest {
 	public void testExtensionKeywords() {
 		Map<String, ExtensionFunction> keywordMap = Awk
 				.createExtensionFunctionMap(
-						StdinExtension.INSTANCE);
-		assertSame(StdinExtension.class, keywordMap.get("StdinHasInput").getDeclaringType());
+						new GawkExtension());
+		assertSame(GawkExtension.class, keywordMap.get("typeof").getDeclaringType());
 
-		JawkExtension customStdin = new StdinExtension();
-		Map<String, JawkExtension> instanceMap = Awk.createExtensionInstanceMap(customStdin);
-		assertSame(customStdin, instanceMap.get(StdinExtension.class.getName()));
+		JawkExtension customGawk = new GawkExtension();
+		Map<String, JawkExtension> instanceMap = Awk.createExtensionInstanceMap(customGawk);
+		assertSame(customGawk, instanceMap.get(GawkExtension.class.getName()));
 	}
 
 	@Test(expected = IllegalArgumentException.class)
 	public void testDuplicateExtensionInstancesAreRejected() {
-		Awk.createExtensionInstanceMap(new StdinExtension(), new StdinExtension());
+		Awk.createExtensionInstanceMap(new GawkExtension(), new GawkExtension());
 	}
 }

@@ -20,6 +20,14 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- The broken `stdin` extension has been removed, along with the `BlockObject` and
+  `BlockManager` extension API it relied on. Its `StdinHasInput()` and `StdinBlock()`
+  functions never reported a pending end of input, hanging every read loop that guarded
+  its `StdinGetline()` calls, and no other AWK implementation provides these functions:
+  scripts read standard input through the regular input loop, `getline`, or the
+  `/dev/stdin` special filename instead. Previously `-l stdin` loaded the extension;
+  it is now rejected with `Unknown extension 'stdin'`
+  ([#592](https://github.com/jawkio/jawk/issues/592)).
 - New `-V` / `--version` option: prints the Jawk version and the Java runtime that executes
   it, then exits with status 0. Like `-h`, it must be used by itself, and once the program
   text has been supplied it still flows to the AWK program through `ARGV`. Previously

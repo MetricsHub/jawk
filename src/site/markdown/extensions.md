@@ -36,11 +36,11 @@ Note that `--list-ext` must be used by itself and only shows what is already reg
 Load an extension with any supported identifier:
 
 ```shell-session
-$ jawk -l stdin -f script.awk
+$ jawk -l GawkExtension -f script.awk
 ```
 
 ```shell-session
-$ jawk -l io.jawk.ext.StdinExtension -f script.awk
+$ jawk -l io.jawk.ext.GawkExtension -f script.awk
 ```
 
 If the extension class is not already registered, the CLI can still resolve it by fully qualified class name as long as the class is available on the JVM classpath. With the `jawk` launcher installed by the [one-command installer](install.html), add extension jars to the classpath by setting `JAWK_CLASSPATH`:
@@ -56,7 +56,7 @@ When running the standalone jar with `java` directly, remember that `java -jar` 
 Pass extension instances directly to `Awk`:
 
 ```java
-Awk awk = new Awk(StdinExtension.INSTANCE, new MyExtension());
+Awk awk = new Awk(new GawkExtension(), new MyExtension());
 ```
 
 That keeps extension availability explicit and local to the embedding code.
@@ -109,25 +109,6 @@ The registry exposes the extension through identifiers such as:
 - `GawkExtension`
 - `io.jawk.ext.GawkExtension`
 - `GNU Awk Compatibility`
-
-### Stdin Support
-
-The built-in registry also includes the stdin extension, which is exposed through identifiers such as:
-
-- `stdin`
-- `StdinExtension`
-- `io.jawk.ext.StdinExtension`
-
-It provides three functions for scripts that consume standard input themselves: `StdinHasInput()`
-reports whether a line can be read without waiting, `StdinGetline()` reads the next line and blocks
-until one arrives or input ends, and `StdinBlock()` returns a block object that waits for standard
-input to become readable.
-
-> [!WARNING]
-> End of input is only observable through `StdinGetline()`, which returns `0` there. Both
-> `StdinHasInput()` and `StdinBlock()` currently report a pending end of input as "nothing to read"
-> ([#592](https://github.com/jawkio/jawk/issues/592)), so a loop that reads only when they say so
-> never terminates.
 
 ## Sandbox Interaction
 

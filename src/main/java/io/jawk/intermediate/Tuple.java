@@ -916,16 +916,14 @@ public abstract class Tuple implements Serializable {
 	 * Tuple for extension function invocations.
 	 */
 	public static final class ExtensionTuple extends Tuple {
-		private static final long serialVersionUID = 1L;
+		private static final long serialVersionUID = 2L;
 		private final ExtensionFunction function;
 		private final long argCount;
-		private final boolean initial;
 
-		ExtensionTuple(ExtensionFunction function, long argCount, boolean initial) {
+		ExtensionTuple(ExtensionFunction function, long argCount) {
 			super(Opcode.EXTENSION);
 			this.function = function;
 			this.argCount = argCount;
-			this.initial = initial;
 		}
 
 		/**
@@ -946,24 +944,13 @@ public abstract class Tuple implements Serializable {
 			return argCount;
 		}
 
-		/**
-		 * Indicates whether this tuple starts an extension call sequence.
-		 *
-		 * @return {@code true} for the initial extension call tuple
-		 */
-		public boolean isInitial() {
-			return initial;
-		}
-
 		@Override
 		public String toString() {
 			return getOpcode().name()
 					+ ", "
 					+ function.getKeyword()
 					+ ", "
-					+ argCount
-					+ ", "
-					+ initial;
+					+ argCount;
 		}
 	}
 

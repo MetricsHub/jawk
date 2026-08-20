@@ -150,7 +150,7 @@ $ jawk --list-ext
 Then load one explicitly:
 
 ```shell-session
-$ jawk -l stdin -f script.awk
+$ jawk -l GawkExtension -f script.awk
 ```
 
 Jawk accepts the registered extension name, the simple class name, or the fully qualified class name; an extension class that is not registered yet resolves by its fully qualified class name only. Additional extension classes can be placed on the JVM classpath before launching Jawk: set `JAWK_CLASSPATH` when using the `jawk` launcher, or use `java -cp` with the `io.jawk.Cli` main class when running the standalone jar (see [Using Extensions](extensions.html)).
@@ -158,7 +158,7 @@ Jawk accepts the registered extension name, the simple class name, or the fully 
 When no `-l` option is given, Jawk enables the built-in [GNU Awk compatibility extension](extensions.html#gawk), which provides `asort()`, `typeof()`, and the other gawk builtins. Passing `-l` replaces that default set, so add `-l GawkExtension` when the script still needs the gawk functions:
 
 ```shell-session
-$ jawk -l GawkExtension -l stdin -f script.awk
+$ jawk -l GawkExtension -l com.company.my.SampleExtension -f script.awk
 ```
 
 ## Enable Sandbox Mode

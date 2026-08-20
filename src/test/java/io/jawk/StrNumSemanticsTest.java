@@ -25,10 +25,12 @@ package io.jawk;
 import static io.jawk.AwkTestSupport.awkTest;
 import static io.jawk.AwkTestSupport.cliTest;
 
-import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Locale;
-import io.jawk.ext.StdinExtension;
+import io.jawk.ext.AbstractExtension;
+import io.jawk.ext.JawkExtension;
+import io.jawk.ext.annotations.JawkFunction;
 import io.jawk.util.AwkSettings;
 import org.junit.Test;
 
@@ -269,13 +271,53 @@ public class StrNumSemanticsTest {
 				.runAndAssert();
 	}
 
-	@Test
-	public void testStdinExtensionInputUsesStrNumAttribute() throws Exception {
-		StdinExtension stdin = new StdinExtension(new ByteArrayInputStream("9\n0\n".getBytes(StandardCharsets.UTF_8)));
+	/**
+	 * Test extension that feeds preset records into the runtime through
+	 * {@code JRT.setInputLine()}, the pathway extensions use to publish input.
+	 */
+	public static class LineFeedExtension extends AbstractExtension implements JawkExtension {
 
-		awkTest("stdin extension records are input-derived")
-				.withExtensions(stdin)
-				.script("BEGIN { StdinGetline(); print($0 < 10); StdinGetline(); print($0 ? \"true\" : \"false\") }")
+		private final Deque<String> lines = new ArrayDeque<>();
+
+		/**
+		 * Creates the extension with the records to feed, in order.
+		 *
+		 * @param lines records returned by successive {@code FeedLine()} calls
+		 */
+		public LineFeedExtension(String... lines) {
+			for (String line : lines) {
+				this.lines.add(line);
+			}
+		}
+
+		/** Returns the logical name of the test extension. */
+		@Override
+		public String getExtensionName() {
+			return "LineFeed";
+		}
+
+		/**
+		 * Publishes the next preset record as the current input line.
+		 *
+		 * @return 1 when a record was published, 0 when none remain
+		 */
+		@JawkFunction("FeedLine")
+		public int feedLine() {
+			String line = lines.poll();
+			if (line == null) {
+				return 0;
+			}
+			getJrt().setInputLine(getJrt().toInputScalar(line));
+			getJrt().jrtParseFields();
+			return 1;
+		}
+	}
+
+	@Test
+	public void testExtensionInputUsesStrNumAttribute() throws Exception {
+		awkTest("extension-published records are input-derived")
+				.withExtensions(new LineFeedExtension("9", "0"))
+				.script("BEGIN { FeedLine(); print($0 < 10); FeedLine(); print($0 ? \"true\" : \"false\") }")
 				.expectLines("1", "false")
 				.runAndAssert();
 	}
