@@ -20,6 +20,10 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+_No user-visible behavior changes recorded yet._
+
+## [v7.1.00](https://github.com/jawkio/jawk/releases/tag/v7.1.00) (2026-08-20)
+
 - The broken `stdin` extension has been removed, along with the `BlockObject` and
   `BlockManager` extension API it relied on. Its `StdinHasInput()` and `StdinBlock()`
   functions never reported a pending end of input, hanging every read loop that guarded
