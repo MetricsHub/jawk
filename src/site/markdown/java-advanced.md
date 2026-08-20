@@ -127,6 +127,26 @@ The `input` binding may be either:
 
 If no explicit input binding is present, the script engine falls back to `System.in`.
 
+### Engine Metadata
+
+The factory reports what Jawk actually is, which is what a host logs or version-gates on:
+
+```java
+ScriptEngineFactory factory = engine.getFactory();
+
+factory.getEngineName();      // "Jawk"
+factory.getEngineVersion();   // e.g. "7.2.00", the version "jawk -V" prints
+factory.getLanguageName();    // "awk"
+factory.getLanguageVersion(); // "POSIX"
+```
+
+`getEngineVersion()`, and `getParameter(ScriptEngine.ENGINE_VERSION)` with it, resolves the
+version from the jar metadata, the same way the `-V` CLI option does. A Jawk loaded from a plain
+class directory (an IDE run, a test classpath) carries no version at all and reports `unknown`.
+
+Embedders that do not go through JSR 223 read the same value from
+[`JawkVersion.getVersion()`](apidocs/io/jawk/util/JawkVersion.html).
+
 ## Thread Safety
 
 Jawk's classes are designed for single-threaded use within each instance. The key rules:

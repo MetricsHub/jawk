@@ -20,7 +20,23 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
-_No user-visible behavior changes recorded yet._
+- The JSR 223 `ScriptEngineFactory` now reports the version of the Jawk that is running, the
+  same one `jawk -V` prints, resolved from the jar metadata (`unknown` when Jawk runs from a
+  plain class directory). Previously `getEngineVersion()`, and
+  `getParameter(ScriptEngine.ENGINE_VERSION)` with it, returned the hard-coded string
+  `3.3.06-SNAPSHOT`, frozen at the 3.x line and eleven releases behind, so hosts that logged
+  or version-gated on it saw a Jawk that had long stopped shipping
+  ([#598](https://github.com/jawkio/jawk/issues/598),
+  [#599](https://github.com/jawkio/jawk/issues/599)).
+- The JSR 223 `ScriptEngineFactory` now reports `POSIX` as the language version, naming the
+  specification Jawk implements. Previously `getLanguageVersion()`, and
+  `getParameter(ScriptEngine.LANGUAGE_VERSION)` with it, returned `1`, which corresponds to no
+  AWK specification. Hosts that match on the literal `1` must match on `POSIX` instead
+  ([#598](https://github.com/jawkio/jawk/issues/598),
+  [#599](https://github.com/jawkio/jawk/issues/599)).
+- New `JawkVersion` class in `io.jawk.util`: `JawkVersion.getVersion()` returns the version of
+  the running Jawk, the single source the `-V` report and the JSR 223 engine version both read
+  ([#598](https://github.com/jawkio/jawk/issues/598)).
 
 ## [v7.1.00](https://github.com/jawkio/jawk/releases/tag/v7.1.00) (2026-08-20)
 

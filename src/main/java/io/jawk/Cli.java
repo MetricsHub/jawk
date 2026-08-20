@@ -42,7 +42,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import io.jawk.ext.ExtensionRegistry;
@@ -52,6 +51,7 @@ import io.jawk.jrt.AwkRuntimeException;
 import io.jawk.jrt.OutputStreamAwkSink;
 import io.jawk.jrt.StreamInputSource;
 import io.jawk.util.AwkSettings;
+import io.jawk.util.JawkVersion;
 import io.jawk.util.ScriptFileSource;
 import io.jawk.util.ScriptSource;
 
@@ -758,55 +758,12 @@ public final class Cli {
 	 * @param dest stream to write version information to
 	 */
 	private static void version(PrintStream dest) {
-		dest.println("jawk " + resolveVersion());
+		dest.println("jawk " + JawkVersion.getVersion());
 		dest
 				.println(
 						"Java " + System.getProperty("java.version")
 								+ " (" + System.getProperty("java.vendor")
 								+ " " + System.getProperty("java.vm.name") + ")");
-	}
-
-	/**
-	 * Resolves the Jawk version from the jar metadata.
-	 * <p>
-	 * The manifest's {@code Implementation-Version} entry is the primary
-	 * source; the Maven {@code pom.properties} resource is the fallback for
-	 * jars built without that entry. Both are absent when Jawk runs from a
-	 * plain class directory (IDE runs, unit tests), where the version is
-	 * reported as {@code unknown}.
-	 *
-	 * @return the version string, or {@code unknown} when no metadata is
-	 *         available
-	 */
-	private static String resolveVersion() {
-		Package myPackage = Cli.class.getPackage();
-		String version = myPackage != null ? myPackage.getImplementationVersion() : null;
-		if (version == null) {
-			version = readVersionFromPomProperties();
-		}
-		return version != null ? version : "unknown";
-	}
-
-	/**
-	 * Reads the Jawk version from the Maven {@code pom.properties} resource
-	 * packaged in the jar.
-	 *
-	 * @return the version string, or {@code null} when the resource is absent
-	 *         or unreadable
-	 */
-	private static String readVersionFromPomProperties() {
-		try (InputStream stream = Cli.class.getResourceAsStream("/META-INF/maven/io.jawk/jawk/pom.properties")) {
-			if (stream == null) {
-				return null;
-			}
-			Properties properties = new Properties();
-			properties.load(stream);
-			return properties.getProperty("version");
-		} catch (IOException ex) {
-			// The version is informational: failing to read the metadata must
-			// not prevent the CLI from answering --version at all.
-			return null;
-		}
 	}
 
 	/**
