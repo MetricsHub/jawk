@@ -20,6 +20,17 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+- A number compared against a string is now converted with the AWK number-to-string rule: a
+  value exactly equal to an integer renders as that integer, anything else through `CONVFMT`.
+  Previously the comparison used Java's `Object.toString()`, so `291` was compared as `"291.0"`
+  and `104152956928` as `"1.04152956928E11"`, and a computed integer stopped comparing equal to
+  its own digits. `x = "2" * 3; x == "6"` and `x ~ /^[0-9]+$/` were false and are now true; this
+  affects `~`, `!~`, `==`, `!=`, `<`, `<=`, `>` and `>=` whenever one operand is a number and the
+  other a string. Comparisons also honour a `CONVFMT` assigned by the script, which they did not
+  before. Arithmetic on numeric literals only, and every other conversion of the same value —
+  `print`, concatenation, `length()`, `sprintf`, `substr()`, `index()`, `match()`, `gsub()`,
+  `split()` and array subscripts — were already correct and are unchanged
+  ([#603](https://github.com/jawkio/jawk/issues/603)).
 - The JSR 223 `ScriptEngineFactory` now reports the version of the Jawk that is running, the
   same one `jawk -V` prints, resolved from the jar metadata (`unknown` when Jawk runs from a
   plain class directory). Previously `getEngineVersion()`, and
