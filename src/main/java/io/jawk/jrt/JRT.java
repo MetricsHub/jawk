@@ -684,6 +684,21 @@ public class JRT {
 	}
 
 	/**
+	 * Compares two objects with this runtime's {@code IGNORECASE}, {@code CONVFMT} and locale.
+	 * <p>
+	 * Prefer this over the static {@code compare2} overloads whenever a runtime is available: it is
+	 * the only form that honours a {@code CONVFMT} assigned by the script.
+	 *
+	 * @param o1 The 1st object.
+	 * @param o2 the 2nd object.
+	 * @param mode the comparison mode, as in {@link #compare2(Object, Object, int)}
+	 * @return a boolean
+	 */
+	public boolean compare(Object o1, Object o2, int mode) {
+		return compare2(o1, o2, mode, isIgnoreCase(), this.convfmt, this.locale);
+	}
+
+	/**
 	 * Convert a String, Integer, or Double to Double.
 	 *
 	 * @param o Object to convert.
@@ -1082,6 +1097,41 @@ public class JRT {
 	 * @return a boolean
 	 */
 	public static boolean compare2(Object o1, Object o2, int mode, boolean ignoreCase) {
+		// The default CONVFMT is the only one available here. It is also the only correct choice for
+		// the caller this form exists for, AwkTuples' constant folding, which runs at compile time
+		// when no runtime and therefore no script-assigned CONVFMT exists yet. Anything holding a
+		// runtime must call compare(Object, Object, int) instead.
+		return compare2(o1, o2, mode, ignoreCase, null, Locale.US);
+	}
+
+	/**
+	 * Shared implementation, taking every property the comparison depends on explicitly.
+	 * <p>
+	 * A number compared against a string is a string comparison in AWK, and the number must be
+	 * converted with the AWK number-to-string rule: a value exactly equal to an integer renders as
+	 * that integer, anything else through {@code CONVFMT}. Using {@link Object#toString()} here would
+	 * render {@code 291} as {@code "291.0"} and {@code 1.04152956928E11} as {@code "1.04152956928E11"},
+	 * so a computed integer would stop comparing equal to its own digits.
+	 * <p>
+	 * Deliberately not public: {@link #compare(Object, Object, int)} is the form to use, and it reads
+	 * these properties off the runtime. The static entry points remain only for the callers that have
+	 * no runtime to read them from.
+	 *
+	 * @param o1 The 1st object.
+	 * @param o2 the 2nd object.
+	 * @param mode the comparison mode, as in {@link #compare2(Object, Object, int)}
+	 * @param ignoreCase whether string comparisons ignore case
+	 * @param convfmt the {@code CONVFMT} to apply, or {@code null} for the default
+	 * @param locale the locale used to format numbers
+	 * @return a boolean
+	 */
+	private static boolean compare2(
+			Object o1,
+			Object o2,
+			int mode,
+			boolean ignoreCase,
+			String convfmt,
+			Locale locale) {
 		if (o1 instanceof Number && o2 instanceof Number) {
 			if (isExactIntegral(o1) && isExactIntegral(o2)) {
 				// Compare exact 64-bit integers without the precision loss a
@@ -1095,18 +1145,15 @@ public class JRT {
 			return compareNumbers(((Number) o1).doubleValue(), ((Number) o2).doubleValue(), mode);
 		}
 
-		String o1String = o1 == null ? "" : o1.toString();
-		String o2String = o2 == null ? "" : o2.toString();
-
 		if (o1 instanceof UninitializedObject) {
-			if (isBlankOrZero(o2, o2String)) {
+			if (isBlankOrZero(o2, convfmt, locale)) {
 				return mode == 0;
 			} else {
 				return mode < 0;
 			}
 		}
 		if (o2 instanceof UninitializedObject) {
-			if (isBlankOrZero(o1, o1String)) {
+			if (isBlankOrZero(o1, convfmt, locale)) {
 				return mode == 0;
 			} else {
 				return mode > 0;
@@ -1116,6 +1163,12 @@ public class JRT {
 		if (isNumericComparisonOperand(o1) && isNumericComparisonOperand(o2)) {
 			return compareNumbers(getDoubleForComparison(o1), getDoubleForComparison(o2), mode);
 		}
+
+		// Only a genuine string comparison converts, and only here. CONVFMT must not be evaluated for a
+		// comparison that turns out to be numeric: besides the discarded string, a format such as
+		// "%f%f" would otherwise fail on a comparison that has no string operand at all.
+		String o1String = AwkPrintf.toAwkString(o1, convfmt, locale);
+		String o2String = AwkPrintf.toAwkString(o2, convfmt, locale);
 
 		if (mode == 0) {
 			return ignoreCase ? o1String.equalsIgnoreCase(o2String) : o1String.equals(o2String);
@@ -1146,7 +1199,18 @@ public class JRT {
 		return 0;
 	}
 
-	private static boolean isBlankOrZero(Object value, String stringValue) {
+	/**
+	 * Whether the value counts as blank or zero when compared against an uninitialized value.
+	 * <p>
+	 * The string form is produced only for a value that is neither uninitialized nor numeric, so a
+	 * numeric operand never evaluates {@code CONVFMT} here.
+	 *
+	 * @param value the value to test
+	 * @param convfmt the {@code CONVFMT} to apply, or {@code null} for the default
+	 * @param locale the locale used to format numbers
+	 * @return whether the value is blank or zero
+	 */
+	private static boolean isBlankOrZero(Object value, String convfmt, Locale locale) {
 		if (value instanceof UninitializedObject) {
 			return true;
 		}
@@ -1156,6 +1220,7 @@ public class JRT {
 		if (value instanceof StrNum && ((StrNum) value).isNumber()) {
 			return ((StrNum) value).doubleValue() == 0.0D;
 		}
+		String stringValue = AwkPrintf.toAwkString(value, convfmt, locale);
 		return "".equals(stringValue) || "0".equals(stringValue);
 	}
 

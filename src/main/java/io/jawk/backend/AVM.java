@@ -1791,7 +1791,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					push(JRT.compare2(o1, o2, 0, jrt.isIgnoreCase()) ? ONE : ZERO);
+					push(jrt.compare(o1, o2, 0) ? ONE : ZERO);
 					position.next();
 					break;
 				}
@@ -1800,7 +1800,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					push(JRT.compare2(o1, o2, -1, jrt.isIgnoreCase()) ? ONE : ZERO);
+					push(jrt.compare(o1, o2, -1) ? ONE : ZERO);
 					position.next();
 					break;
 				}
@@ -1809,7 +1809,7 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = item1
 					Object o2 = pop();
 					Object o1 = pop();
-					push(JRT.compare2(o1, o2, 1, jrt.isIgnoreCase()) ? ONE : ZERO);
+					push(jrt.compare(o1, o2, 1) ? ONE : ZERO);
 					position.next();
 					break;
 				}
@@ -1818,7 +1818,9 @@ public class AVM implements VariableManager, Closeable {
 					// stack[1] = text
 					Object o2 = pop();
 					Object o1 = pop();
-					push(jrt.matches(o1.toString(), o2) ? 1 : 0);
+					// The text operand must be converted with the AWK number-to-string rule, not with
+					// Object.toString(): a Double would otherwise be matched as "291.0" instead of "291".
+					push(jrt.matches(jrt.toAwkString(o1), o2) ? 1 : 0);
 					position.next();
 					break;
 				}
