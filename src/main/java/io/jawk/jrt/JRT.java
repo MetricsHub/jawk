@@ -1140,18 +1140,15 @@ public class JRT {
 			return compareNumbers(((Number) o1).doubleValue(), ((Number) o2).doubleValue(), mode);
 		}
 
-		String o1String = AwkPrintf.toAwkString(o1, convfmt, locale);
-		String o2String = AwkPrintf.toAwkString(o2, convfmt, locale);
-
 		if (o1 instanceof UninitializedObject) {
-			if (isBlankOrZero(o2, o2String)) {
+			if (isBlankOrZero(o2, convfmt, locale)) {
 				return mode == 0;
 			} else {
 				return mode < 0;
 			}
 		}
 		if (o2 instanceof UninitializedObject) {
-			if (isBlankOrZero(o1, o1String)) {
+			if (isBlankOrZero(o1, convfmt, locale)) {
 				return mode == 0;
 			} else {
 				return mode > 0;
@@ -1161,6 +1158,12 @@ public class JRT {
 		if (isNumericComparisonOperand(o1) && isNumericComparisonOperand(o2)) {
 			return compareNumbers(getDoubleForComparison(o1), getDoubleForComparison(o2), mode);
 		}
+
+		// Only a genuine string comparison converts, and only here. CONVFMT must not be evaluated for a
+		// comparison that turns out to be numeric: besides the discarded string, a format such as
+		// "%f%f" would otherwise fail on a comparison that has no string operand at all.
+		String o1String = AwkPrintf.toAwkString(o1, convfmt, locale);
+		String o2String = AwkPrintf.toAwkString(o2, convfmt, locale);
 
 		if (mode == 0) {
 			return ignoreCase ? o1String.equalsIgnoreCase(o2String) : o1String.equals(o2String);
@@ -1191,7 +1194,18 @@ public class JRT {
 		return 0;
 	}
 
-	private static boolean isBlankOrZero(Object value, String stringValue) {
+	/**
+	 * Whether the value counts as blank or zero when compared against an uninitialized value.
+	 * <p>
+	 * The string form is produced only for a value that is neither uninitialized nor numeric, so a
+	 * numeric operand never evaluates {@code CONVFMT} here.
+	 *
+	 * @param value the value to test
+	 * @param convfmt the {@code CONVFMT} to apply, or {@code null} for the default
+	 * @param locale the locale used to format numbers
+	 * @return whether the value is blank or zero
+	 */
+	private static boolean isBlankOrZero(Object value, String convfmt, Locale locale) {
 		if (value instanceof UninitializedObject) {
 			return true;
 		}
@@ -1201,6 +1215,7 @@ public class JRT {
 		if (value instanceof StrNum && ((StrNum) value).isNumber()) {
 			return ((StrNum) value).doubleValue() == 0.0D;
 		}
+		String stringValue = AwkPrintf.toAwkString(value, convfmt, locale);
 		return "".equals(stringValue) || "0".equals(stringValue);
 	}
 

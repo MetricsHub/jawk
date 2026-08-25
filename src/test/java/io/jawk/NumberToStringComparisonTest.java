@@ -93,6 +93,30 @@ public class NumberToStringComparisonTest {
 				.runAndAssert();
 	}
 
+	/**
+	 * A comparison that resolves numerically must not convert its operands at all, so an invalid or
+	 * very wide {@code CONVFMT} cannot affect it: there is no string in such a comparison to format.
+	 */
+	@Test
+	public void testNumericComparisonDoesNotEvaluateConvfmt() throws Exception {
+		AwkTestSupport
+				.awkTest("A number compared with a numeric field must ignore CONVFMT entirely")
+				.script("{ CONVFMT = \"%f%f\"; x = 7 / 2; print (x == $1) }")
+				.stdin("3.5\n")
+				.expectLines("1")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("Two numbers must compare without evaluating CONVFMT")
+				.script("BEGIN { CONVFMT = \"%f%f\"; print (7 / 2 == 3.5) (1 < 2) }")
+				.expectLines("11")
+				.runAndAssert();
+		AwkTestSupport
+				.awkTest("An uninitialized value compared with a number must ignore CONVFMT")
+				.script("BEGIN { CONVFMT = \"%f%f\"; x = 7 / 2; print (unset == 0) (unset < x) }")
+				.expectLines("11")
+				.runAndAssert();
+	}
+
 	@Test
 	public void testNonIntegralValuesStillUseConvfmt() throws Exception {
 		AwkTestSupport
