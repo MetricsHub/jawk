@@ -684,6 +684,21 @@ public class JRT {
 	}
 
 	/**
+	 * Compares two objects with this runtime's {@code IGNORECASE}, {@code CONVFMT} and locale.
+	 * <p>
+	 * Prefer this over the static {@code compare2} overloads whenever a runtime is available: it is
+	 * the only form that honours a {@code CONVFMT} assigned by the script.
+	 *
+	 * @param o1 The 1st object.
+	 * @param o2 the 2nd object.
+	 * @param mode the comparison mode, as in {@link #compare2(Object, Object, int)}
+	 * @return a boolean
+	 */
+	public boolean compare(Object o1, Object o2, int mode) {
+		return compare2(o1, o2, mode, isIgnoreCase(), this.convfmt, this.locale);
+	}
+
+	/**
 	 * Convert a String, Integer, or Double to Double.
 	 *
 	 * @param o Object to convert.
@@ -1082,6 +1097,36 @@ public class JRT {
 	 * @return a boolean
 	 */
 	public static boolean compare2(Object o1, Object o2, int mode, boolean ignoreCase) {
+		// No runtime in reach, so the default CONVFMT applies. Callers holding a JRT should use
+		// compare(Object, Object, int) instead, so that a script-assigned CONVFMT is honoured.
+		return compare2(o1, o2, mode, ignoreCase, null, Locale.US);
+	}
+
+	/**
+	 * Compares two objects like {@link #compare2(Object, Object, int)}, using the supplied
+	 * {@code CONVFMT} and locale when a numeric operand has to be converted to a string.
+	 * <p>
+	 * A number compared against a string is a string comparison in AWK, and the number must be
+	 * converted with the AWK number-to-string rule: a value exactly equal to an integer renders as
+	 * that integer, anything else through {@code CONVFMT}. Using {@link Object#toString()} here would
+	 * render {@code 291} as {@code "291.0"} and {@code 1.04152956928E11} as {@code "1.04152956928E11"},
+	 * so a computed integer would stop comparing equal to its own digits.
+	 *
+	 * @param o1 The 1st object.
+	 * @param o2 the 2nd object.
+	 * @param mode the comparison mode, as in {@link #compare2(Object, Object, int)}
+	 * @param ignoreCase whether string comparisons ignore case
+	 * @param convfmt the {@code CONVFMT} to apply, or {@code null} for the default
+	 * @param locale the locale used to format numbers
+	 * @return a boolean
+	 */
+	public static boolean compare2(
+			Object o1,
+			Object o2,
+			int mode,
+			boolean ignoreCase,
+			String convfmt,
+			Locale locale) {
 		if (o1 instanceof Number && o2 instanceof Number) {
 			if (isExactIntegral(o1) && isExactIntegral(o2)) {
 				// Compare exact 64-bit integers without the precision loss a
@@ -1095,8 +1140,8 @@ public class JRT {
 			return compareNumbers(((Number) o1).doubleValue(), ((Number) o2).doubleValue(), mode);
 		}
 
-		String o1String = o1 == null ? "" : o1.toString();
-		String o2String = o2 == null ? "" : o2.toString();
+		String o1String = AwkPrintf.toAwkString(o1, convfmt, locale);
+		String o2String = AwkPrintf.toAwkString(o2, convfmt, locale);
 
 		if (o1 instanceof UninitializedObject) {
 			if (isBlankOrZero(o2, o2String)) {
