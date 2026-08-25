@@ -1097,20 +1097,25 @@ public class JRT {
 	 * @return a boolean
 	 */
 	public static boolean compare2(Object o1, Object o2, int mode, boolean ignoreCase) {
-		// No runtime in reach, so the default CONVFMT applies. Callers holding a JRT should use
-		// compare(Object, Object, int) instead, so that a script-assigned CONVFMT is honoured.
+		// The default CONVFMT is the only one available here. It is also the only correct choice for
+		// the caller this form exists for, AwkTuples' constant folding, which runs at compile time
+		// when no runtime and therefore no script-assigned CONVFMT exists yet. Anything holding a
+		// runtime must call compare(Object, Object, int) instead.
 		return compare2(o1, o2, mode, ignoreCase, null, Locale.US);
 	}
 
 	/**
-	 * Compares two objects like {@link #compare2(Object, Object, int)}, using the supplied
-	 * {@code CONVFMT} and locale when a numeric operand has to be converted to a string.
+	 * Shared implementation, taking every property the comparison depends on explicitly.
 	 * <p>
 	 * A number compared against a string is a string comparison in AWK, and the number must be
 	 * converted with the AWK number-to-string rule: a value exactly equal to an integer renders as
 	 * that integer, anything else through {@code CONVFMT}. Using {@link Object#toString()} here would
 	 * render {@code 291} as {@code "291.0"} and {@code 1.04152956928E11} as {@code "1.04152956928E11"},
 	 * so a computed integer would stop comparing equal to its own digits.
+	 * <p>
+	 * Deliberately not public: {@link #compare(Object, Object, int)} is the form to use, and it reads
+	 * these properties off the runtime. The static entry points remain only for the callers that have
+	 * no runtime to read them from.
 	 *
 	 * @param o1 The 1st object.
 	 * @param o2 the 2nd object.
@@ -1120,7 +1125,7 @@ public class JRT {
 	 * @param locale the locale used to format numbers
 	 * @return a boolean
 	 */
-	public static boolean compare2(
+	private static boolean compare2(
 			Object o1,
 			Object o2,
 			int mode,
