@@ -20,6 +20,10 @@ released version automatically via .github/scripts/stamp-behavior-changes.sh.
 
 ## Unreleased
 
+_No user-visible behavior changes recorded yet._
+
+## [v7.1.01](https://github.com/jawkio/jawk/releases/tag/v7.1.01) (2026-08-25)
+
 - A number compared against a string is now converted with the AWK number-to-string rule: a
   value exactly equal to an integer renders as that integer, anything else through `CONVFMT`.
   Previously the comparison used Java's `Object.toString()`, so `291` was compared as `"291.0"`
